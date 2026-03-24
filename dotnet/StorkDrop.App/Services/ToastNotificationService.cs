@@ -1,5 +1,5 @@
 using System.Diagnostics;
-using StorkDrop.Core.Interfaces;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.App.Services;
 

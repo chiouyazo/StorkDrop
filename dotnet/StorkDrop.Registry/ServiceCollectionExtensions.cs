@@ -1,7 +1,8 @@
 using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
-using StorkDrop.Core.Interfaces;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.Registry;
 

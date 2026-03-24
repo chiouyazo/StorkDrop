@@ -2,7 +2,8 @@ using System.IO;
 using System.Windows;
 using Microsoft.Win32;
 using StorkDrop.App.Localization;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Installer;
 
 namespace StorkDrop.App.Views;

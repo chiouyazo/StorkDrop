@@ -3,8 +3,9 @@ using System.Runtime.Loader;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 

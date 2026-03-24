@@ -5,8 +5,9 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -328,8 +329,7 @@ public partial class MarketplaceViewModel : ObservableObject
                 );
                 bool isInstalled = installed is not null;
                 bool hasUpdate =
-                    isInstalled
-                    && Core.Services.VersionComparer.IsNewer(manifest.Version, installed!.Version);
+                    isInstalled && VersionComparer.IsNewer(manifest.Version, installed!.Version);
 
                 ProductCardViewModel card = new ProductCardViewModel
                 {

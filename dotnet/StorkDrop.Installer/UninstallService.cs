@@ -1,6 +1,6 @@
 using System.Text.Json;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.Installer;
 

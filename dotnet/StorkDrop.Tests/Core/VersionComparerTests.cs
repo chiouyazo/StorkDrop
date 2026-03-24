@@ -1,4 +1,5 @@
 using FluentAssertions;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Core.Services;
 using Xunit;
 

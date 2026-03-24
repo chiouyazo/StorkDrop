@@ -1,4 +1,5 @@
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Core.Services;
 

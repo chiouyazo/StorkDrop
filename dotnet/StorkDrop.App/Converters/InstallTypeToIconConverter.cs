@@ -1,6 +1,6 @@
 using System.Globalization;
 using System.Windows.Data;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.Converters;
 

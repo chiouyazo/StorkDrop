@@ -1,7 +1,8 @@
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Core.Services;
 
 namespace StorkDrop.App.Services;

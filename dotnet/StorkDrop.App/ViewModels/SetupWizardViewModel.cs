@@ -4,8 +4,8 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using StorkDrop.App.Localization;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.ViewModels;
 
