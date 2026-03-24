@@ -1,0 +1,111 @@
+<Window
+  x:Class="StorkDrop.App.Views.SetupWizard.SetupWizardWindow"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:local="clr-namespace:StorkDrop.App.Views.SetupWizard"
+  Title="StorkDrop - Setup"
+  Icon="/Assets/stork.ico"
+  Width="700"
+  Height="550"
+  WindowStartupLocation="CenterScreen"
+  ResizeMode="NoResize"
+  Background="{DynamicResource BackgroundBrush}"
+>
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Step Content -->
+    <ContentControl Grid.Row="0" Margin="32,24">
+      <ContentControl.Style>
+        <Style TargetType="ContentControl">
+          <Style.Triggers>
+            <DataTrigger Binding="{Binding CurrentStep}" Value="0">
+              <Setter Property="Content">
+                <Setter.Value>
+                  <local:WelcomeStep />
+                </Setter.Value>
+              </Setter>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding CurrentStep}" Value="1">
+              <Setter Property="Content">
+                <Setter.Value>
+                  <local:ConnectionStep />
+                </Setter.Value>
+              </Setter>
+            </DataTrigger>
+            <DataTrigger Binding="{Binding CurrentStep}" Value="2">
+              <Setter Property="Content">
+                <Setter.Value>
+                  <local:SummaryStep />
+                </Setter.Value>
+              </Setter>
+            </DataTrigger>
+          </Style.Triggers>
+        </Style>
+      </ContentControl.Style>
+    </ContentControl>
+
+    <!-- Navigation Buttons -->
+    <Border
+      Grid.Row="1"
+      Background="{DynamicResource SurfaceBrush}"
+      BorderBrush="{DynamicResource BorderBrush}"
+      BorderThickness="0,1,0,0"
+      Padding="32,16"
+    >
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Step indicator -->
+        <TextBlock Grid.Column="0" VerticalAlignment="Center" Style="{DynamicResource CaptionText}">
+          <TextBlock.Text>
+            <MultiBinding StringFormat="Step {0} of {1}">
+              <Binding Path="CurrentStep" Converter="{x:Null}" FallbackValue="1" />
+              <Binding Path="TotalSteps" />
+            </MultiBinding>
+          </TextBlock.Text>
+        </TextBlock>
+
+        <Button
+          Grid.Column="2"
+          Content="{DynamicResource Button_Back}"
+          Style="{DynamicResource OutlinedButton}"
+          Command="{Binding GoBackCommand}"
+          IsEnabled="{Binding CanGoBack}"
+          Margin="0,0,12,0"
+          MinWidth="100"
+        />
+
+        <Button
+          x:Name="NextButton"
+          Grid.Column="3"
+          Style="{DynamicResource FilledAccentButton}"
+          MinWidth="100"
+        >
+          <Button.Content>
+            <TextBlock>
+              <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                  <Setter Property="Text" Value="{DynamicResource Button_Next}" />
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding CanFinish}" Value="True">
+                      <Setter Property="Text" Value="{DynamicResource Button_Finish}" />
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </TextBlock.Style>
+            </TextBlock>
+          </Button.Content>
+        </Button>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

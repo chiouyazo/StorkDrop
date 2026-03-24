@@ -1,0 +1,194 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using StorkDrop.Core.Interfaces;
+using StorkDrop.Core.Models;
+
+namespace StorkDrop.Installer;
+
+public sealed class ProductRepository : IProductRepository, IDisposable
+{
+    private readonly string _filePath;
+    private readonly SemaphoreSlim _lock = new(1, 1);
+    private List<InstalledProduct> _products = [];
+
+    private static readonly JsonSerializerOptions JsonOptions = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new JsonStringEnumConverter() },
+    };
+
+    public ProductRepository()
+        : this(
+            Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "StorkDrop",
+                "Stork",
+                "Config",
+                "installed-products.json"
+            )
+        ) { }
+
+    public ProductRepository(string filePath)
+    {
+        _filePath = filePath;
+        string? directory = Path.GetDirectoryName(_filePath);
+        if (directory is not null)
+            Directory.CreateDirectory(directory);
+    }
+
+    public async Task InitializeAsync(CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            if (File.Exists(_filePath))
+            {
+                string json = await File.ReadAllTextAsync(_filePath, cancellationToken)
+                    .ConfigureAwait(false);
+                List<InstalledProduct>? deserialized = JsonSerializer.Deserialize<
+                    List<InstalledProduct>
+                >(json, JsonOptions);
+                _products = deserialized ?? [];
+
+                ValidateNoDuplicateProductIds(_products);
+            }
+            else
+            {
+                _products = [];
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<InstalledProduct>> GetAllAsync(
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return _products.ToList();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task<InstalledProduct?> GetByIdAsync(
+        string productId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            return _products.FirstOrDefault(p => p.ProductId == productId);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task AddAsync(
+        InstalledProduct product,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _products.Add(product);
+            await SaveAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task UpdateAsync(
+        InstalledProduct product,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            int index = _products.FindIndex(p => p.ProductId == product.ProductId);
+            if (index >= 0)
+            {
+                _products[index] = product;
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task RemoveAsync(string productId, CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            int removed = _products.RemoveAll(p => p.ProductId == productId);
+            if (removed > 0)
+            {
+                await SaveAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    private async Task SaveAsync(CancellationToken cancellationToken)
+    {
+        string json = JsonSerializer.Serialize(_products, JsonOptions);
+        string tempPath = _filePath + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, _filePath, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup of temp file
+            }
+        }
+    }
+
+    private static void ValidateNoDuplicateProductIds(List<InstalledProduct> products)
+    {
+        HashSet<string> seen = [];
+        foreach (InstalledProduct product in products)
+        {
+            if (!seen.Add(product.ProductId))
+            {
+                throw new InvalidOperationException(
+                    $"Doppelte ProductId in installierter Produktliste: {product.ProductId}"
+                );
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _lock.Dispose();
+    }
+}
