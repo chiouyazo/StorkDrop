@@ -1,8 +1,11 @@
 [Setup]
 AppName=StorkDrop
 AppVersion={#AppVersion}
+AppVerName=StorkDrop {#AppVersion}
 AppPublisher=StorkDrop
 AppPublisherURL=https://github.com/chiouyazo/StorkDrop
+AppSupportURL=https://github.com/chiouyazo/StorkDrop/issues
+AppUpdatesURL=https://github.com/chiouyazo/StorkDrop/releases
 DefaultDirName={autopf}\StorkDrop
 DefaultGroupName=StorkDrop
 OutputBaseFilename=StorkDrop-{#AppVersion}-Setup

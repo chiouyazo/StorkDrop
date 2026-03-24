@@ -58,6 +58,22 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           --output publish/
 
+      - name: Sign application exe
+        shell: pwsh
+        env:
+          SIGN_CERT_PFX: ${{ secrets.SIGN_CERT_PFX }}
+          SIGN_CERT_PASSWORD: ${{ secrets.SIGN_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGN_CERT_PFX)) { Write-Host "No signing certificate configured, skipping"; exit 0 }
+          $pfxBytes = [Convert]::FromBase64String($env:SIGN_CERT_PFX)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+          try {
+            & signtool sign /f $pfxPath /p $env:SIGN_CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 publish\StorkDrop.App.exe
+          } finally {
+            Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+
       - name: Pack NuGet
         run: >
           dotnet pack dotnet/StorkDrop.Contracts/StorkDrop.Contracts.csproj
@@ -68,6 +84,43 @@ jobs:
 
       - name: Build installer
         run: iscc /DAppVersion=${{ steps.version.outputs.version }} installer\setup.iss
+
+      - name: Sign installer
+        shell: pwsh
+        env:
+          SIGN_CERT_PFX: ${{ secrets.SIGN_CERT_PFX }}
+          SIGN_CERT_PASSWORD: ${{ secrets.SIGN_CERT_PASSWORD }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGN_CERT_PFX)) { Write-Host "No signing certificate configured, skipping"; exit 0 }
+          $pfxBytes = [Convert]::FromBase64String($env:SIGN_CERT_PFX)
+          $pfxPath = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, $pfxBytes)
+          try {
+            & signtool sign /f $pfxPath /p $env:SIGN_CERT_PASSWORD /tr http://timestamp.digicert.com /td sha256 /fd sha256 installer\Output\*.exe
+          } finally {
+            Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: Package standalone zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish\StorkDrop.App.exe -DestinationPath publish\StorkDrop-${{ steps.version.outputs.version }}-win-x64.zip
+
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          $files = @(
+            "publish\StorkDrop.App.exe",
+            "publish\StorkDrop-${{ steps.version.outputs.version }}-win-x64.zip",
+            (Get-Item "installer\Output\*.exe").FullName
+          ) | Where-Object { $_ -and (Test-Path $_) }
+          $checksums = $files | ForEach-Object {
+            $hash = (Get-FileHash $_ -Algorithm SHA256).Hash.ToLower()
+            "$hash  $(Split-Path $_ -Leaf)"
+          }
+          $checksums | Out-File -FilePath publish\SHA256SUMS.txt -Encoding utf8
+          Write-Host "Checksums:"
+          $checksums | ForEach-Object { Write-Host $_ }
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -117,7 +170,9 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/publish/StorkDrop.App.exe
+            artifacts/publish/StorkDrop-*-win-x64.zip
             artifacts/publish/*.nupkg
+            artifacts/publish/SHA256SUMS.txt
             artifacts/installer/Output/*.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
