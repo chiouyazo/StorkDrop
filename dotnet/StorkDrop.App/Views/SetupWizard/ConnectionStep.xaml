@@ -1,0 +1,22 @@
+<UserControl
+    x:Class="StorkDrop.App.Views.SetupWizard.ConnectionStep"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:shared="clr-namespace:StorkDrop.App.Views.Shared"
+>
+    <StackPanel MaxWidth="480">
+        <TextBlock
+            Text="{DynamicResource Setup_Connection_Title}"
+            Style="{DynamicResource HeadingMedium}"
+            Margin="0,0,0,4"
+        />
+        <TextBlock
+            Text="{DynamicResource Setup_Connection_Subtitle}"
+            Style="{DynamicResource CaptionText}"
+            Foreground="{DynamicResource OnSurfaceVariantBrush}"
+            Margin="0,0,0,20"
+        />
+
+        <shared:FeedConfigControl DataContext="{Binding}" />
+    </StackPanel>
+</UserControl>

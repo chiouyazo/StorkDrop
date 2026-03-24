@@ -1,0 +1,25 @@
+{
+  "productId": "acme-dashboard",
+  "title": "Acme Dashboard",
+  "version": "2.1.0",
+  "releaseDate": "2026-03-24",
+  "installType": "Suite",
+  "description": "Web-based monitoring dashboard with reporting, API, and admin panel.",
+  "releaseNotes": "# Acme Dashboard 2.1.0\n\n- New reporting engine\n- Dark mode support\n- Performance improvements",
+  "recommendedInstallPath": "C:\\Program Files\\Acme\\Dashboard",
+  "publisher": "Acme Corp",
+  "downloadSizeBytes": 85000000,
+  "requirements": ["Windows 10+", "SQL Server 2019+", ".NET 8 Runtime"],
+  "shortcuts": [
+    { "exeName": "AcmeDashboard.exe", "displayName": "Acme Dashboard" },
+    { "exeName": "AcmeAdmin.exe", "displayName": "Acme Admin Panel" }
+  ],
+  "shortcutFolder": "Acme Corp",
+  "plugins": [
+    { "assembly": "ExampleProduct.dll", "typeName": "ExampleProduct.Installer" }
+  ],
+  "cleanup": {
+    "registryKeys": [],
+    "dataLocations": ["%APPDATA%\\Acme\\Dashboard"]
+  }
+}

@@ -1,0 +1,319 @@
+using System.Text.Json;
+using StorkDrop.Core.Interfaces;
+using StorkDrop.Core.Models;
+
+namespace StorkDrop.Installer;
+
+/// <summary>
+/// Handles product uninstallation including file manifest-based cleanup and plugin hooks.
+/// </summary>
+public sealed class UninstallService
+{
+    private const int MaxRetries = 3;
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
+
+    private readonly IProductRepository _productRepository;
+    private readonly IActivityLog _activityLog;
+    private readonly IFileLockDetector _fileLockDetector;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="UninstallService"/> class.
+    /// </summary>
+    /// <param name="productRepository">The repository for installed products.</param>
+    /// <param name="activityLog">The activity log service.</param>
+    /// <param name="fileLockDetector">The file lock detector.</param>
+    public UninstallService(
+        IProductRepository productRepository,
+        IActivityLog activityLog,
+        IFileLockDetector fileLockDetector
+    )
+    {
+        _productRepository = productRepository;
+        _activityLog = activityLog;
+        _fileLockDetector = fileLockDetector;
+    }
+
+    /// <summary>
+    /// Uninstalls the specified product, removing tracked files and cleaning up empty directories.
+    /// </summary>
+    /// <param name="product">The installed product to uninstall.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>A task representing the asynchronous operation.</returns>
+    public async Task UninstallAsync(
+        InstalledProduct product,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Check for file locks (only .exe and .dll — these are the files that actually get locked
+        // by running processes; checking all files causes false positives from transient OS handles)
+        if (Directory.Exists(product.InstalledPath))
+        {
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(product.InstalledPath, "*", SearchOption.AllDirectories);
+            }
+            catch (DirectoryNotFoundException)
+            {
+                files = Array.Empty<string>();
+            }
+
+            foreach (string file in files)
+            {
+                string ext = Path.GetExtension(file);
+                if (!ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                    && !ext.Equals(".dll", StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                if (_fileLockDetector.IsFileLocked(file))
+                {
+                    IReadOnlyList<string> lockingProcesses = _fileLockDetector.GetLockingProcesses(
+                        file
+                    );
+                    string processNames = lockingProcesses.Count > 0
+                        ? string.Join(", ", lockingProcesses)
+                        : string.Empty;
+                    throw new FileLockedException(Path.GetFileName(file), processNames);
+                }
+            }
+        }
+
+        // Delete installed files using file manifest if available
+        if (Directory.Exists(product.InstalledPath))
+        {
+            List<string>? trackedFiles = await LoadFileManifestAsync(
+                product.ProductId,
+                cancellationToken
+            );
+
+            if (trackedFiles is not null && trackedFiles.Count > 0)
+            {
+                // Delete only tracked files
+                foreach (string relativePath in trackedFiles)
+                {
+                    string fullPath = Path.Combine(product.InstalledPath, relativePath);
+                    if (File.Exists(fullPath))
+                    {
+                        await DeleteFileWithRetryAsync(fullPath, cancellationToken);
+                    }
+                }
+
+                // Clean up empty directories
+                CleanupEmptyDirectories(product.InstalledPath);
+            }
+            else
+            {
+                // Fallback: delete entire directory if no manifest exists
+                await DeleteDirectoryWithRetryAsync(product.InstalledPath, cancellationToken);
+            }
+
+            // Delete the file manifest itself
+            DeleteFileManifest(product.ProductId);
+        }
+
+        // Remove Start Menu shortcuts
+        RemoveShortcuts(product.Title);
+
+        // Remove from repository
+        await _productRepository.RemoveAsync(product.ProductId, cancellationToken);
+
+        // Log the activity
+        ActivityLogEntry entry = new ActivityLogEntry(
+            Id: Guid.NewGuid().ToString(),
+            Timestamp: DateTime.UtcNow,
+            Action: "Uninstall",
+            ProductId: product.ProductId,
+            Details: $"Uninstalled {product.Title} v{product.Version} from {product.InstalledPath}",
+            Success: true
+        );
+        await _activityLog.LogAsync(entry, cancellationToken);
+    }
+
+    private static async Task<List<string>?> LoadFileManifestAsync(
+        string productId,
+        CancellationToken cancellationToken
+    )
+    {
+        string configDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "StorkDrop",
+            "Config"
+        );
+        string manifestPath = Path.Combine(configDir, $"{productId}.files.json");
+
+        if (!File.Exists(manifestPath))
+            return null;
+
+        try
+        {
+            string json = await File.ReadAllTextAsync(manifestPath, cancellationToken);
+            return JsonSerializer.Deserialize<List<string>>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void DeleteFileManifest(string productId)
+    {
+        try
+        {
+            string configDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                "StorkDrop",
+                "Config"
+            );
+            string manifestPath = Path.Combine(configDir, $"{productId}.files.json");
+            if (File.Exists(manifestPath))
+                File.Delete(manifestPath);
+        }
+        catch
+        {
+            // Best-effort cleanup
+        }
+    }
+
+    private static void CleanupEmptyDirectories(string rootPath)
+    {
+        if (!Directory.Exists(rootPath))
+            return;
+
+        try
+        {
+            foreach (
+                string dir in Directory
+                    .GetDirectories(rootPath, "*", SearchOption.AllDirectories)
+                    .OrderByDescending(d => d.Length)
+            )
+            {
+                try
+                {
+                    if (
+                        Directory.Exists(dir)
+                        && Directory.GetFiles(dir).Length == 0
+                        && Directory.GetDirectories(dir).Length == 0
+                    )
+                    {
+                        Directory.Delete(dir);
+                    }
+                }
+                catch
+                {
+                    // Best-effort cleanup
+                }
+            }
+
+            // Try to remove root if empty
+            if (
+                Directory.Exists(rootPath)
+                && Directory.GetFiles(rootPath).Length == 0
+                && Directory.GetDirectories(rootPath).Length == 0
+            )
+            {
+                Directory.Delete(rootPath);
+            }
+        }
+        catch
+        {
+            // Best-effort cleanup
+        }
+    }
+
+    private static void RemoveShortcuts(string productTitle)
+    {
+        // Search in multiple possible shortcut folders
+        string programsFolder = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+            "Programs"
+        );
+
+        if (!Directory.Exists(programsFolder))
+            return;
+
+        try
+        {
+            // Search all subdirectories for matching shortcuts
+            foreach (string subDir in Directory.GetDirectories(programsFolder))
+            {
+                try
+                {
+                    foreach (string lnk in Directory.GetFiles(subDir, "*.lnk"))
+                    {
+                        if (
+                            Path.GetFileNameWithoutExtension(lnk)
+                                .Contains(productTitle, StringComparison.OrdinalIgnoreCase)
+                        )
+                        {
+                            File.Delete(lnk);
+                        }
+                    }
+
+                    // Remove folder if empty
+                    if (
+                        Directory.Exists(subDir)
+                        && Directory.GetFiles(subDir).Length == 0
+                        && Directory.GetDirectories(subDir).Length == 0
+                    )
+                    {
+                        Directory.Delete(subDir);
+                    }
+                }
+                catch
+                {
+                    // Best-effort per folder
+                }
+            }
+        }
+        catch
+        {
+            // Non-critical
+        }
+    }
+
+    private static async Task DeleteFileWithRetryAsync(
+        string filePath,
+        CancellationToken cancellationToken
+    )
+    {
+        for (int attempt = 1; attempt <= MaxRetries; attempt++)
+        {
+            try
+            {
+                File.Delete(filePath);
+                return;
+            }
+            catch (IOException) when (attempt < MaxRetries)
+            {
+                await Task.Delay(RetryDelay, cancellationToken);
+            }
+            catch (UnauthorizedAccessException) when (attempt < MaxRetries)
+            {
+                await Task.Delay(RetryDelay, cancellationToken);
+            }
+        }
+    }
+
+    private static async Task DeleteDirectoryWithRetryAsync(
+        string path,
+        CancellationToken cancellationToken
+    )
+    {
+        for (int attempt = 1; attempt <= MaxRetries; attempt++)
+        {
+            try
+            {
+                Directory.Delete(path, recursive: true);
+                return;
+            }
+            catch (IOException) when (attempt < MaxRetries)
+            {
+                await Task.Delay(RetryDelay, cancellationToken);
+            }
+            catch (UnauthorizedAccessException) when (attempt < MaxRetries)
+            {
+                await Task.Delay(RetryDelay, cancellationToken);
+            }
+        }
+    }
+}

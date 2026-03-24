@@ -1,0 +1,65 @@
+<UserControl
+    x:Class="StorkDrop.App.Views.SetupWizard.WelcomeStep"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+>
+    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+        <Image
+            Source="/Assets/stork_icon_256.png"
+            Height="128"
+            HorizontalAlignment="Center"
+            Margin="0,0,0,4"
+        />
+        <TextBlock
+            Text="StorkDrop"
+            FontSize="22"
+            FontWeight="Light"
+            Foreground="#666666"
+            HorizontalAlignment="Center"
+            Margin="0,2,0,0"
+        />
+
+        <Border
+            Height="1"
+            Width="80"
+            Background="{DynamicResource BorderBrush}"
+            Margin="0,20,0,24"
+        />
+
+        <TextBlock
+            Text="{DynamicResource Setup_Welcome_Title}"
+            Style="{DynamicResource HeadingLarge}"
+            HorizontalAlignment="Center"
+            Margin="0,0,0,12"
+        />
+
+        <TextBlock
+            Text="{DynamicResource Setup_Welcome_Subtitle}"
+            Style="{DynamicResource BodyText}"
+            HorizontalAlignment="Center"
+            Foreground="{DynamicResource OnSurfaceVariantBrush}"
+            Margin="0,0,0,32"
+        />
+
+        <TextBlock
+            TextWrapping="Wrap"
+            TextAlignment="Center"
+            MaxWidth="500"
+            Style="{DynamicResource BodyText}"
+            Foreground="{DynamicResource OnSurfaceVariantBrush}"
+        >
+      This wizard will guide you through the initial setup. You will configure
+      your feed connection to start downloading and installing products.
+    </TextBlock>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
+            <TextBlock
+                Text="Language:"
+                Style="{DynamicResource BodyText}"
+                VerticalAlignment="Center"
+                Margin="0,0,8,0"
+            />
+            <ComboBox x:Name="LanguageSelector" Width="100" SelectionChanged="OnLanguageChanged" />
+        </StackPanel>
+    </StackPanel>
+</UserControl>

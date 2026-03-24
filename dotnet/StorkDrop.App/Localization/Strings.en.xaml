@@ -1,0 +1,219 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:system="clr-namespace:System;assembly=System.Runtime">
+
+    <!-- Navigation -->
+    <system:String x:Key="Nav_Marketplace">Marketplace</system:String>
+    <system:String x:Key="Nav_Installed">Installed</system:String>
+    <system:String x:Key="Nav_Updates">Updates</system:String>
+    <system:String x:Key="Nav_ActivityLog">Activity Log</system:String>
+    <system:String x:Key="Nav_Plugins">Plugins</system:String>
+    <system:String x:Key="Nav_Settings">Settings</system:String>
+
+    <!-- Buttons -->
+    <system:String x:Key="Button_Save">Save Settings</system:String>
+    <system:String x:Key="Button_TestConnection">Test Connection</system:String>
+    <system:String x:Key="Button_Back">Back</system:String>
+    <system:String x:Key="Button_Next">Next</system:String>
+    <system:String x:Key="Button_Finish">Finish</system:String>
+    <system:String x:Key="Button_Export">Export</system:String>
+    <system:String x:Key="Button_Import">Import</system:String>
+    <system:String x:Key="Button_AddFeed">Add Feed</system:String>
+    <system:String x:Key="Button_ClearLog">Clear Log</system:String>
+
+    <!-- Setup wizard -->
+    <system:String x:Key="Setup_Welcome_Title">Welcome</system:String>
+    <system:String x:Key="Setup_Welcome_Subtitle">Your tool for product installation and management.</system:String>
+    <system:String x:Key="Setup_Connection_Title">Feed Connection</system:String>
+    <system:String x:Key="Setup_Connection_Subtitle">Configure connection to your product feed.</system:String>
+    <system:String x:Key="Setup_Summary_Title">Setup Summary</system:String>
+    <system:String x:Key="Setup_Summary_Subtitle">Review your configuration before finishing.</system:String>
+
+    <!-- Status messages -->
+    <system:String x:Key="Status_Connecting">Connecting...</system:String>
+    <system:String x:Key="Status_Connected">Connected</system:String>
+    <system:String x:Key="Status_Disconnected">Not connected</system:String>
+    <system:String x:Key="Status_Timeout">Connection timed out</system:String>
+    <system:String x:Key="Status_TestSuccess">Connection successful!</system:String>
+    <system:String x:Key="Status_Downloading">Downloading {0} v{1}...</system:String>
+    <system:String x:Key="Status_DownloadComplete">Download complete.</system:String>
+    <system:String x:Key="Status_Extracting">Extracting files...</system:String>
+    <system:String x:Key="Status_ExtractionComplete">Extraction complete.</system:String>
+    <system:String x:Key="Status_CopyingFiles">Copying files...</system:String>
+    <system:String x:Key="Status_FilesCopied">Files copied.</system:String>
+    <system:String x:Key="Status_Verifying">Verifying installation...</system:String>
+    <system:String x:Key="Status_VerificationComplete">Verification complete.</system:String>
+
+    <!-- Settings -->
+    <system:String x:Key="Settings_Title">Settings</system:String>
+    <system:String x:Key="Settings_Hint">You can always change these settings later.</system:String>
+    <system:String x:Key="Language_Label">Language</system:String>
+    <system:String x:Key="Settings_LogLevel">Log Level</system:String>
+
+    <!-- Install -->
+    <system:String x:Key="Install_Title">Installation</system:String>
+    <system:String x:Key="Install_Button">Install</system:String>
+    <system:String x:Key="Install_AsAdmin">Install as Administrator</system:String>
+    <system:String x:Key="Install_AdminHint">This directory requires administrator privileges.</system:String>
+    <system:String x:Key="Install_Cancel">Cancel</system:String>
+    <system:String x:Key="Install_Directory">Install directory</system:String>
+    <system:String x:Key="Install_Installing">Installing...</system:String>
+    <system:String x:Key="Install_Installed">Installed</system:String>
+    <system:String x:Key="Install_Update">Update</system:String>
+
+    <!-- Marketplace -->
+    <system:String x:Key="Marketplace_Search">Search...</system:String>
+    <system:String x:Key="Marketplace_Loading">Loading products...</system:String>
+    <system:String x:Key="Marketplace_NoProducts">No products available.</system:String>
+
+    <!-- Installed -->
+    <system:String x:Key="Installed_Title">Installed Products</system:String>
+    <system:String x:Key="Installed_NoProducts">No products installed yet.</system:String>
+    <system:String x:Key="Installed_Uninstall">Uninstall</system:String>
+
+    <!-- Updates -->
+    <system:String x:Key="Updates_Title">Updates</system:String>
+    <system:String x:Key="Updates_UpdateAll">Update All</system:String>
+
+    <!-- Activity log -->
+    <system:String x:Key="ActivityLog_Title">Activity Log</system:String>
+
+    <!-- Plugins -->
+    <system:String x:Key="Plugins_Title">Plugins</system:String>
+    <system:String x:Key="Plugins_NoPlugins">No plugins loaded.</system:String>
+
+    <!-- Settings fields -->
+    <system:String x:Key="Settings_AutoStart">Start with Windows</system:String>
+    <system:String x:Key="Settings_AutoUpdate">Automatically check for updates</system:String>
+    <system:String x:Key="Settings_CheckInterval">Check interval (hours)</system:String>
+    <system:String x:Key="Settings_Proxy">Proxy Settings</system:String>
+    <system:String x:Key="Settings_ProxyHost">Proxy Host</system:String>
+    <system:String x:Key="Settings_ProxyPort">Proxy Port</system:String>
+    <system:String x:Key="Settings_Advanced">Advanced</system:String>
+    <system:String x:Key="Settings_Feeds">Feeds</system:String>
+    <system:String x:Key="Settings_FeedName">Name</system:String>
+    <system:String x:Key="Settings_FeedUrl">URL</system:String>
+    <system:String x:Key="Settings_FeedRepo">Repository</system:String>
+    <system:String x:Key="Settings_FeedUser">Username</system:String>
+    <system:String x:Key="Settings_FeedPass">Password</system:String>
+    <system:String x:Key="Feed_Remove">Remove</system:String>
+    <system:String x:Key="Dialog_Browse">Browse...</system:String>
+    <system:String x:Key="Refresh">Refresh</system:String>
+
+    <!-- Error messages -->
+    <system:String x:Key="Error_ManifestNotFound">Manifest for {0} not found.</system:String>
+    <system:String x:Key="Error_InstallFailed">Installation of {0} failed</system:String>
+    <system:String x:Key="Error_InstallFailed_Generic">Installation failed</system:String>
+    <system:String x:Key="Error_InstallCancelled">Installation cancelled by user.</system:String>
+    <system:String x:Key="Error_AdminDenied">Installation cancelled: administrator rights were denied.</system:String>
+    <system:String x:Key="Error_ExtractionFailed">Extraction failed</system:String>
+    <system:String x:Key="Error_CopyFailed">File copy failed</system:String>
+    <system:String x:Key="Error_VerificationFailed">Verification failed: no files in target directory.</system:String>
+    <system:String x:Key="Error_PreInstallFailed">Pre-install check failed.</system:String>
+    <system:String x:Key="Error_PreUninstallFailed">Pre-uninstall check failed.</system:String>
+    <system:String x:Key="Error_PluginLoadFailed">Plugin {0} could not be instantiated.</system:String>
+    <system:String x:Key="Error_FileInUse">'{0}' is in use by: {1}</system:String>
+    <system:String x:Key="Error_UninstallFailed">Uninstall failed</system:String>
+    <system:String x:Key="Error_UninstallFileLocked">Cannot uninstall: file '{0}' is locked by: {1}</system:String>
+    <system:String x:Key="Error_LoadProductsFailed">Products could not be loaded</system:String>
+    <system:String x:Key="Error_ServerConnectionFailed">Server connection failed</system:String>
+    <system:String x:Key="Error_UpdateFailed">Update failed</system:String>
+    <system:String x:Key="Error_UpdateProductFailed">Update of {0} failed</system:String>
+    <system:String x:Key="Error_LoadSettingsFailed">Error loading settings</system:String>
+    <system:String x:Key="Error_SaveFailed">Save failed</system:String>
+    <system:String x:Key="Error_ExportFailed">Export failed</system:String>
+    <system:String x:Key="Error_ImportFailed">Import failed</system:String>
+    <system:String x:Key="Error_ConnectionFailed">Connection failed</system:String>
+    <system:String x:Key="Error_ConnectionError">Connection error</system:String>
+    <system:String x:Key="Error_ValidationFailed">Validation error</system:String>
+    <system:String x:Key="Error_LoadLogFailed">Error loading log</system:String>
+
+    <!-- Validation messages -->
+    <system:String x:Key="Validation_FieldRequired">This field is required.</system:String>
+    <system:String x:Key="Validation_InvalidNumber">Please enter a valid number.</system:String>
+    <system:String x:Key="Validation_Minimum">Minimum</system:String>
+    <system:String x:Key="Validation_Maximum">Maximum</system:String>
+    <system:String x:Key="Validation_InvalidBoolean">Please enter a valid boolean value.</system:String>
+
+    <!-- Confirmation dialogs -->
+    <system:String x:Key="Confirm_Uninstall">Are you sure you want to uninstall {0}?</system:String>
+
+    <!-- Info messages -->
+    <system:String x:Key="Info_UninstallSuccess">{0} has been uninstalled.</system:String>
+    <system:String x:Key="Info_InstallSuccess">{0} has been installed successfully.</system:String>
+
+    <!-- File operations -->
+    <system:String x:Key="Error_SourcePathEmpty">Source path must not be empty.</system:String>
+    <system:String x:Key="Error_TargetPathEmpty">Target path must not be empty.</system:String>
+    <system:String x:Key="Error_SourceFilePathEmpty">Source file path must not be empty.</system:String>
+    <system:String x:Key="Error_TargetFilePathEmpty">Target file path must not be empty.</system:String>
+    <system:String x:Key="Error_TargetFileExists">Target file already exists: {0}</system:String>
+
+    <!-- Encryption -->
+    <system:String x:Key="Error_DecryptionFailed_InvalidBase64">Decryption failed: the encrypted text is not a valid Base64 string.</system:String>
+    <system:String x:Key="Error_DecryptionFailed_WrongUser">Decryption failed: the data could not be decrypted. It may have been encrypted by a different user or computer.</system:String>
+    <system:String x:Key="Error_DecryptionFailed_TooShort">Decryption failed: the encrypted data is too short.</system:String>
+    <system:String x:Key="Error_DecryptionFailed_Generic">Decryption failed: the data could not be decrypted.</system:String>
+
+    <!-- Configuration -->
+    <system:String x:Key="Error_NoConfigToExport">No configuration to export.</system:String>
+    <system:String x:Key="Error_ImportFileNotFound">Import file not found.</system:String>
+    <system:String x:Key="Error_InvalidConfigFile">Invalid configuration file.</system:String>
+    <system:String x:Key="Error_ConfigRequiresFeed">Configuration invalid: at least one feed is required.</system:String>
+    <system:String x:Key="Error_DuplicateProductId">Duplicate ProductId in installed product list: {0}</system:String>
+
+    <!-- Product detail -->
+    <system:String x:Key="ProductDetail_Version">Version</system:String>
+    <system:String x:Key="ProductDetail_VersionHistory">Version History</system:String>
+    <system:String x:Key="ProductDetail_ReleaseNotes">Release Notes</system:String>
+    <system:String x:Key="ProductDetail_InstallPath">Install Path</system:String>
+    <system:String x:Key="ProductDetail_Browse">Browse</system:String>
+    <system:String x:Key="ProductDetail_Install">Install</system:String>
+
+    <!-- Marketplace filters -->
+    <system:String x:Key="Filter_AllFeeds">All Feeds</system:String>
+    <system:String x:Key="Filter_AllPublishers">All Publishers</system:String>
+    <system:String x:Key="Filter_AllTypes">All Types</system:String>
+    <system:String x:Key="Filter_Feed">Feed</system:String>
+    <system:String x:Key="Filter_Publisher">Publisher</system:String>
+    <system:String x:Key="Filter_Type">Type</system:String>
+
+    <!-- Tray -->
+    <system:String x:Key="Tray_FirstMinimize">StorkDrop is running in the background. You can change this in Settings.</system:String>
+    <system:String x:Key="Tray_Title">StorkDrop</system:String>
+    <system:String x:Key="Tray_Open">Open</system:String>
+    <system:String x:Key="Tray_Exit">Exit</system:String>
+
+    <!-- Plugin tabs -->
+    <system:String x:Key="Nav_PluginTabs">Plugins</system:String>
+
+    <!-- Plugin status -->
+    <system:String x:Key="PluginStatus_AllLoaded">{0}/{1} Plugins</system:String>
+    <system:String x:Key="PluginStatus_SomeFailed">{0}/{1} Plugins</system:String>
+
+    <!-- Install dialog -->
+    <system:String x:Key="InstallDialog_DownloadSize">Download size</system:String>
+    <system:String x:Key="InstallDialog_DiskSpace">Available disk space</system:String>
+    <system:String x:Key="InstallDialog_Steps">Steps: Download &#x2192; Extract &#x2192; Copy files &#x2192; Create shortcuts</system:String>
+    <system:String x:Key="InstallDialog_Shortcuts">{0} shortcut(s) will be created</system:String>
+    <system:String x:Key="InstallDialog_NoShortcuts">No shortcuts will be created</system:String>
+
+    <!-- Feed suggestions -->
+    <system:String x:Key="Settings_RecommendedFeeds">Recommended feeds from plugins</system:String>
+
+    <!-- Shortcut folder -->
+    <system:String x:Key="Shortcut_Folder">Shortcut Folder</system:String>
+
+    <!-- Uninstall -->
+    <system:String x:Key="Uninstall_AsAdmin">Uninstall as Administrator</system:String>
+    <system:String x:Key="Uninstall_AdminHint">This product is installed in a protected directory and requires administrator privileges to uninstall.</system:String>
+    <system:String x:Key="Error_AdminDenied_Uninstall">Uninstall cancelled: administrator rights were denied.</system:String>
+    <system:String x:Key="Error_ElevatedUninstallFailed">Elevated uninstall failed. Please try again.</system:String>
+
+    <!-- Dialog titles -->
+    <system:String x:Key="Dialog_Title_Error">Error</system:String>
+    <system:String x:Key="Dialog_Title_Confirm">Confirm</system:String>
+    <system:String x:Key="Dialog_Title_Information">Information</system:String>
+
+</ResourceDictionary>

@@ -1,0 +1,151 @@
+<UserControl
+    x:Class="StorkDrop.App.Views.Installed.InstalledView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="OnLoaded"
+>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid Margin="0,0,0,16">
+            <TextBlock
+                Text="{DynamicResource Installed_Title}"
+                Style="{DynamicResource HeadingLarge}"
+                VerticalAlignment="Center"
+            />
+            <Button
+                Content="&#xE72C;"
+                FontFamily="Segoe MDL2 Assets"
+                FontSize="16"
+                Background="Transparent"
+                BorderThickness="0"
+                Foreground="#666666"
+                Cursor="Hand"
+                HorizontalAlignment="Right"
+                ToolTip="{DynamicResource Refresh}"
+                Padding="8"
+                Command="{Binding LoadCommand}"
+            />
+        </Grid>
+
+        <!-- Notification area -->
+        <Border
+            x:Name="NotificationBanner"
+            Grid.Row="1"
+            Background="#FFF3E0"
+            CornerRadius="6"
+            Padding="12,8"
+            Margin="0,0,0,12"
+            Visibility="Collapsed"
+        >
+            <TextBlock
+                x:Name="NotificationText"
+                FontSize="13"
+                Foreground="#E65100"
+                TextWrapping="Wrap"
+            />
+        </Border>
+
+        <ListView
+            Grid.Row="2"
+            ItemsSource="{Binding Products}"
+            BorderThickness="0"
+            Background="Transparent"
+            Visibility="{Binding HasProducts, Converter={StaticResource BoolToVisibilityConverter}}"
+        >
+            <ListView.ItemContainerStyle>
+                <Style TargetType="ListViewItem">
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListViewItem">
+                                <ContentPresenter />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListView.ItemContainerStyle>
+            <ListView.ItemTemplate>
+                <DataTemplate>
+                    <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,8" MinWidth="600">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel>
+                                <TextBlock
+                                    Text="{Binding Title}"
+                                    Style="{DynamicResource HeadingSmall}"
+                                    Margin="0,0,0,4"
+                                />
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                                >
+                                    <Run Text="Version:" />
+                                    <Run Text="{Binding Version, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                                >
+                                    <Run Text="Pfad:" />
+                                    <Run Text="{Binding InstalledPath, Mode=OneWay}" />
+                                </TextBlock>
+                                <TextBlock
+                                    FontSize="12"
+                                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                                >
+                                    <Run Text="Installiert:" />
+                                    <Run Text="{Binding InstalledDate, Mode=OneWay, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" />
+                                </TextBlock>
+                            </StackPanel>
+
+                            <Button
+                                Grid.Column="1"
+                                Content="{DynamicResource Installed_Uninstall}"
+                                Style="{DynamicResource OutlinedButton}"
+                                Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding}"
+                                VerticalAlignment="Center"
+                                Padding="12,6"
+                            />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+
+        <!-- Empty State -->
+        <StackPanel
+            Grid.Row="2"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Visibility="{Binding HasNoProducts, Converter={StaticResource BoolToVisibilityConverter}}"
+        >
+            <TextBlock
+                Text="&#xE74C;"
+                FontFamily="Segoe MDL2 Assets"
+                FontSize="48"
+                Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                HorizontalAlignment="Center"
+                Opacity="0.3"
+                Margin="0,0,0,12"
+            />
+            <TextBlock
+                Text="{DynamicResource Installed_NoProducts}"
+                Style="{DynamicResource BodyText}"
+                Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                HorizontalAlignment="Center"
+            />
+        </StackPanel>
+    </Grid>
+</UserControl>

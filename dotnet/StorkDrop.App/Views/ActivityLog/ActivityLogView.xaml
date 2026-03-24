@@ -1,0 +1,103 @@
+<UserControl
+    x:Class="StorkDrop.App.Views.ActivityLog.ActivityLogView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Loaded="OnLoaded"
+>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <Grid Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Orientation="Horizontal">
+                <TextBlock
+                    Text="{DynamicResource ActivityLog_Title}"
+                    Style="{DynamicResource HeadingLarge}"
+                    VerticalAlignment="Center"
+                />
+                <Button
+                    Content="&#xE72C;"
+                    FontFamily="Segoe MDL2 Assets"
+                    FontSize="16"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Foreground="#666666"
+                    Cursor="Hand"
+                    ToolTip="{DynamicResource Refresh}"
+                    Padding="8"
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                    Command="{Binding RefreshCommand}"
+                />
+            </StackPanel>
+
+            <Button
+                Grid.Column="1"
+                Content="{DynamicResource Button_ClearLog}"
+                Style="{DynamicResource OutlinedButton}"
+                Command="{Binding ClearLogCommand}"
+                Margin="0,0,8,0"
+                Padding="12,8"
+            />
+        </Grid>
+
+        <!-- Log DataGrid -->
+        <DataGrid
+            Grid.Row="1"
+            ItemsSource="{Binding Entries}"
+            AutoGenerateColumns="False"
+            IsReadOnly="True"
+            GridLinesVisibility="Horizontal"
+            HeadersVisibility="Column"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            Background="White"
+            RowBackground="White"
+            AlternatingRowBackground="{DynamicResource SurfaceBrush}"
+        >
+            <DataGrid.Columns>
+                <DataGridTextColumn
+                    Header="Timestamp"
+                    Binding="{Binding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}"
+                    Width="160"
+                />
+                <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="100" />
+                <DataGridTextColumn Header="Product" Binding="{Binding ProductId}" Width="150" />
+                <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
+                <DataGridTemplateColumn Header="Status" Width="80">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate>
+                            <Ellipse Width="12" Height="12" HorizontalAlignment="Center">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter
+                                            Property="Fill"
+                                            Value="{DynamicResource ErrorBrush}"
+                                        />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding Success}" Value="True">
+                                                <Setter
+                                                    Property="Fill"
+                                                    Value="{DynamicResource SuccessBrush}"
+                                                />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </Grid>
+</UserControl>

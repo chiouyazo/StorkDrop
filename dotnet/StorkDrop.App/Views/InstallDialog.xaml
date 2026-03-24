@@ -1,0 +1,138 @@
+<Window
+    x:Class="StorkDrop.App.Views.InstallDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="{DynamicResource Install_Title}"
+    Icon="/Assets/stork.ico"
+    Width="520"
+    Height="480"
+    WindowStartupLocation="CenterOwner"
+    ResizeMode="NoResize"
+    Background="White"
+>
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TitleText" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4" />
+        <TextBlock
+            Grid.Row="1"
+            x:Name="VersionText"
+            FontSize="12"
+            Foreground="#666666"
+            Margin="0,0,0,16"
+        />
+
+        <TextBlock
+            Grid.Row="2"
+            Text="{DynamicResource Install_Directory}"
+            FontSize="13"
+            Margin="0,0,0,4"
+        />
+        <Grid Grid.Row="3" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox x:Name="PathBox" Padding="8,6" FontSize="13" />
+            <Button
+                Grid.Column="1"
+                Content="{DynamicResource Dialog_Browse}"
+                Padding="12,6"
+                Margin="8,0,0,0"
+                Click="OnBrowseClick"
+            />
+        </Grid>
+
+        <!-- Install details section -->
+        <Border
+            Grid.Row="4"
+            Background="#F8F8F8"
+            CornerRadius="6"
+            Padding="12,10"
+            Margin="0,0,0,12"
+        >
+            <StackPanel>
+                <!-- Download size -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock
+                        Text="{DynamicResource InstallDialog_DownloadSize}"
+                        FontSize="12"
+                        Foreground="#666666"
+                        Margin="0,0,8,0"
+                    />
+                    <TextBlock
+                        x:Name="DownloadSizeText"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="#444444"
+                    />
+                </StackPanel>
+
+                <!-- Available disk space -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                    <TextBlock
+                        Text="{DynamicResource InstallDialog_DiskSpace}"
+                        FontSize="12"
+                        Foreground="#666666"
+                        Margin="0,0,8,0"
+                    />
+                    <TextBlock
+                        x:Name="DiskSpaceText"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="#444444"
+                    />
+                </StackPanel>
+
+                <!-- Steps -->
+                <TextBlock
+                    Text="{DynamicResource InstallDialog_Steps}"
+                    FontSize="12"
+                    Foreground="#666666"
+                    TextWrapping="Wrap"
+                    Margin="0,0,0,6"
+                />
+
+                <!-- Shortcut count -->
+                <TextBlock x:Name="ShortcutCountText" FontSize="12" Foreground="#666666" />
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="5" VerticalAlignment="Top">
+            <TextBlock
+                x:Name="AdminHint"
+                Foreground="#E65100"
+                FontSize="12"
+                TextWrapping="Wrap"
+                Visibility="Collapsed"
+            />
+        </StackPanel>
+
+        <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button
+                Content="{DynamicResource Install_Cancel}"
+                Padding="16,8"
+                Margin="0,0,8,0"
+                Click="OnCancelClick"
+            />
+            <Button
+                x:Name="InstallButton"
+                Content="Installieren"
+                Padding="16,8"
+                FontWeight="SemiBold"
+                Background="#C8102E"
+                Foreground="White"
+                BorderThickness="0"
+                Click="OnInstallClick"
+            />
+        </StackPanel>
+    </Grid>
+</Window>

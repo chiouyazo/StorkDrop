@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+        <Nullable>enable</Nullable>
+        <IsPackable>true</IsPackable>
+        <PackageId>StorkDrop.Contracts</PackageId>
+        <Version>1.1.0</Version>
+        <Authors>StorkDrop</Authors>
+        <Description>Contract interfaces for StorkDrop plugins. Reference this package to implement IStorkDropPlugin or IStorkPlugin.</Description>
+        <PackageTags>storkdrop;plugin;deployment</PackageTags>
+    </PropertyGroup>
+</Project>

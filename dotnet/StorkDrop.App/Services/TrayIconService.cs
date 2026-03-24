@@ -1,0 +1,74 @@
+using System.Drawing;
+using System.Windows;
+using System.Windows.Controls;
+using Hardcodet.Wpf.TaskbarNotification;
+using StorkDrop.App.Localization;
+
+namespace StorkDrop.App.Services;
+
+public sealed class TrayIconService : IDisposable
+{
+    private TaskbarIcon? _trayIcon;
+
+    public void Show(Action onOpen, Action onExit)
+    {
+        if (_trayIcon is not null)
+            return;
+
+        MenuItem openItem = new MenuItem { Header = LocalizationManager.GetString("Tray_Open") };
+        openItem.Click += (_, _) => onOpen();
+
+        MenuItem exitItem = new MenuItem { Header = LocalizationManager.GetString("Tray_Exit") };
+        exitItem.Click += (_, _) => onExit();
+
+        _trayIcon = new TaskbarIcon
+        {
+            ToolTipText = "StorkDrop",
+            ContextMenu = new ContextMenu { Items = { openItem, new Separator(), exitItem } },
+        };
+
+        // Single left click opens the window (Feature 4)
+        _trayIcon.TrayLeftMouseUp += (_, _) => onOpen();
+
+        // Keep double-click as well
+        _trayIcon.TrayMouseDoubleClick += (_, _) => onOpen();
+
+        try
+        {
+            using System.IO.Stream? stream = Application
+                .GetResourceStream(new Uri("/Assets/stork_icon_32.png", UriKind.Relative))
+                ?.Stream;
+            if (stream is not null)
+            {
+                Bitmap bitmap = new Bitmap(stream);
+                _trayIcon.Icon = System.Drawing.Icon.FromHandle(bitmap.GetHicon());
+            }
+        }
+        catch
+        {
+            // Use default icon if resource not found
+        }
+
+        _trayIcon.Visibility = Visibility.Visible;
+    }
+
+    public void Hide()
+    {
+        if (_trayIcon is null)
+            return;
+
+        _trayIcon.Visibility = Visibility.Collapsed;
+        _trayIcon.Dispose();
+        _trayIcon = null;
+    }
+
+    public void ShowBalloon(string title, string message)
+    {
+        _trayIcon?.ShowBalloonTip(title, message, BalloonIcon.Info);
+    }
+
+    public void Dispose()
+    {
+        Hide();
+    }
+}
