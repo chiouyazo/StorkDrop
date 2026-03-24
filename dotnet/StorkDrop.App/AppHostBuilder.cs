@@ -10,7 +10,7 @@ using StorkDrop.App.ViewModels;
 using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
 using StorkDrop.Contracts;
-using StorkDrop.Core.Interfaces;
+using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Installer;
 using StorkDrop.Registry;
 

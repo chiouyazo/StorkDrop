@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts;
-using StorkDrop.Core.Interfaces;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.App.ViewModels;
 

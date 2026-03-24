@@ -1,5 +1,5 @@
 using System.IO.Compression;
-using StorkDrop.Core.Interfaces;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.Installer;
 

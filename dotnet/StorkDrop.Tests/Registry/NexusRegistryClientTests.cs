@@ -5,7 +5,7 @@ using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using RichardSzalay.MockHttp;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
 using StorkDrop.Registry;
 using Xunit;
 

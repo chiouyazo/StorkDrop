@@ -1,6 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.Installer;
 

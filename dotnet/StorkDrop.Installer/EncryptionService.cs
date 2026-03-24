@@ -1,6 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
-using StorkDrop.Core.Interfaces;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.Installer;
 

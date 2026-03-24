@@ -1,6 +1,6 @@
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.ViewModels;
 

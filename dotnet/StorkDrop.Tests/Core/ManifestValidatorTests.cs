@@ -1,5 +1,5 @@
 using FluentAssertions;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Models;
 using StorkDrop.Core.Services;
 using Xunit;
 

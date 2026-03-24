@@ -7,8 +7,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 using StorkDrop.Registry;
 
 namespace StorkDrop.App;

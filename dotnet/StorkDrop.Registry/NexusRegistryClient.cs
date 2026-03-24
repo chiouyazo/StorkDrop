@@ -2,8 +2,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Registry;
 
@@ -201,7 +202,7 @@ public sealed class NexusRegistryClient(
             continuationToken = response.ContinuationToken;
         } while (continuationToken is not null);
 
-        versions.Sort(Core.Services.VersionComparer.Instance);
+        versions.Sort(VersionComparer.Instance);
         return versions;
     }
 

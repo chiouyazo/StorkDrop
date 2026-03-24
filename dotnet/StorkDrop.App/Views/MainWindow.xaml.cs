@@ -6,8 +6,8 @@ using Microsoft.Extensions.DependencyInjection;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.App.ViewModels;
-using StorkDrop.Core.Interfaces;
-using StorkDrop.Core.Models;
+using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.Views;
 
