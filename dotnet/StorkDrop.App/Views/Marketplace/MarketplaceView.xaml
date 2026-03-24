@@ -1,0 +1,214 @@
+<UserControl
+  x:Class="StorkDrop.App.Views.Marketplace.MarketplaceView"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:local="clr-namespace:StorkDrop.App.Views.Marketplace"
+  Loaded="OnLoaded"
+>
+  <Grid>
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <Grid Margin="0,0,0,12">
+      <TextBlock
+        Text="{DynamicResource Nav_Marketplace}"
+        Style="{DynamicResource HeadingLarge}"
+        VerticalAlignment="Center"
+      />
+      <Button
+        Content="&#xE72C;"
+        FontFamily="Segoe MDL2 Assets"
+        FontSize="16"
+        Background="Transparent"
+        BorderThickness="0"
+        Foreground="#666666"
+        Cursor="Hand"
+        HorizontalAlignment="Right"
+        ToolTip="{DynamicResource Refresh}"
+        Padding="8"
+        Command="{Binding LoadCommand}"
+      />
+    </Grid>
+
+    <!-- Search bar -->
+    <Border
+      Grid.Row="1"
+      BorderBrush="#E0E0E0"
+      BorderThickness="1"
+      CornerRadius="6"
+      Background="White"
+      Padding="2,0"
+      Margin="0,0,0,8"
+    >
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+        <TextBlock
+          Text="&#xE721;"
+          FontFamily="Segoe MDL2 Assets"
+          FontSize="14"
+          Foreground="#999999"
+          VerticalAlignment="Center"
+          Margin="10,0,0,0"
+          IsHitTestVisible="False"
+        />
+        <TextBox
+          x:Name="SearchBox"
+          Grid.Column="1"
+          Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+          Padding="6,6,8,6"
+          BorderThickness="0"
+          Background="Transparent"
+        />
+        <TextBlock
+          Grid.Column="1"
+          Text="{DynamicResource Marketplace_Search}"
+          FontSize="13"
+          Foreground="#AAAAAA"
+          Padding="8,7"
+          IsHitTestVisible="False"
+        >
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+      </Grid>
+    </Border>
+
+    <!-- Filter dropdowns row (full width) -->
+    <Grid Grid.Row="2" Margin="0,0,0,12">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" />
+        <ColumnDefinition Width="*" />
+      </Grid.ColumnDefinitions>
+
+      <!-- Feed filter -->
+      <Border
+        Grid.Column="0"
+        BorderBrush="#E0E0E0"
+        BorderThickness="1"
+        CornerRadius="6"
+        Background="White"
+        Margin="0,0,6,0"
+      >
+        <ComboBox
+          ItemsSource="{Binding AvailableFeedFilters}"
+          SelectedItem="{Binding SelectedFeedFilter}"
+          Padding="8,5"
+          FontSize="13"
+          Background="White"
+          BorderThickness="0"
+        />
+      </Border>
+
+      <!-- Publisher filter -->
+      <Border
+        Grid.Column="1"
+        BorderBrush="#E0E0E0"
+        BorderThickness="1"
+        CornerRadius="6"
+        Background="White"
+        Margin="6,0,6,0"
+      >
+        <ComboBox
+          ItemsSource="{Binding AvailablePublisherFilters}"
+          SelectedItem="{Binding SelectedPublisherFilter}"
+          Padding="8,5"
+          FontSize="13"
+          Background="White"
+          BorderThickness="0"
+        />
+      </Border>
+
+      <!-- Type filter -->
+      <Border
+        Grid.Column="2"
+        BorderBrush="#E0E0E0"
+        BorderThickness="1"
+        CornerRadius="6"
+        Background="White"
+        Margin="6,0,0,0"
+      >
+        <ComboBox
+          ItemsSource="{Binding AvailableFilters}"
+          SelectedItem="{Binding SelectedFilterName}"
+          Padding="8,5"
+          FontSize="13"
+          Background="White"
+          BorderThickness="0"
+        />
+      </Border>
+    </Grid>
+
+    <!-- Error banner -->
+    <Border
+      Grid.Row="3"
+      Background="#FFF3E0"
+      CornerRadius="6"
+      Padding="12,8"
+      Margin="0,0,0,8"
+      Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}"
+    >
+      <TextBlock
+        Text="{Binding ErrorMessage}"
+        FontSize="13"
+        Foreground="#E65100"
+        TextWrapping="Wrap"
+      />
+    </Border>
+
+    <!-- Product Grid -->
+    <ScrollViewer Grid.Row="4" VerticalScrollBarVisibility="Auto">
+      <ItemsControl ItemsSource="{Binding Products}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <local:ProductCard Margin="0,0,12,12" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <!-- Loading -->
+    <Border
+      Grid.RowSpan="5"
+      Background="#80FFFFFF"
+      Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
+    >
+      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+        <ProgressBar
+          IsIndeterminate="True"
+          Width="200"
+          Height="4"
+          Style="{DynamicResource StyledProgressBar}"
+        />
+        <TextBlock
+          Text="{DynamicResource Marketplace_Loading}"
+          FontSize="13"
+          Foreground="#666666"
+          HorizontalAlignment="Center"
+          Margin="0,12,0,0"
+        />
+      </StackPanel>
+    </Border>
+  </Grid>
+</UserControl>

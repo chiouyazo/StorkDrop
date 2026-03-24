@@ -1,0 +1,139 @@
+<UserControl
+  x:Class="StorkDrop.App.Views.Marketplace.ProductDetailView"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+>
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel MaxWidth="800">
+      <!-- Back button -->
+      <Button
+        Content="{DynamicResource Button_Back}"
+        Style="{DynamicResource OutlinedButton}"
+        Command="{Binding GoBackCommand}"
+        HorizontalAlignment="Left"
+        Padding="12,6"
+        Margin="0,0,0,16"
+      />
+
+      <!-- Header -->
+      <Grid Margin="0,0,0,24">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock
+          Text="{Binding Manifest.InstallType, Converter={StaticResource InstallTypeToIconConverter}}"
+          FontFamily="Segoe MDL2 Assets"
+          FontSize="48"
+          Foreground="{DynamicResource AccentRedBrush}"
+          VerticalAlignment="Top"
+          Margin="0,0,16,0"
+        />
+
+        <StackPanel Grid.Column="1">
+          <TextBlock
+            Text="{Binding Manifest.Title}"
+            Style="{DynamicResource HeadingLarge}"
+            Margin="0,0,0,4"
+          />
+          <TextBlock
+            Text="{Binding Manifest.Description}"
+            Style="{DynamicResource BodyText}"
+            TextWrapping="Wrap"
+            Foreground="{DynamicResource OnSurfaceVariantBrush}"
+          />
+          <TextBlock
+            Text="{Binding Manifest.Version, StringFormat='v{0}'}"
+            FontSize="13"
+            Foreground="#999999"
+            Margin="0,4,0,0"
+          />
+        </StackPanel>
+      </Grid>
+
+      <!-- Version History -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource ProductDetail_VersionHistory}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,8"
+          />
+          <ComboBox
+            ItemsSource="{Binding AvailableVersions}"
+            SelectedItem="{Binding SelectedVersion}"
+            Margin="0,0,0,8"
+          />
+        </StackPanel>
+      </Border>
+
+      <!-- Release Notes for selected version -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource ProductDetail_ReleaseNotes}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,8"
+          />
+          <TextBlock
+            Text="{Binding SelectedVersionReleaseNotes}"
+            Style="{DynamicResource BodyText}"
+            TextWrapping="Wrap"
+          />
+        </StackPanel>
+      </Border>
+
+      <!-- Install Path -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource ProductDetail_InstallPath}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,8"
+          />
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBox
+              Text="{Binding InstallPath, UpdateSourceTrigger=PropertyChanged}"
+              Style="{DynamicResource StyledTextBox}"
+            />
+            <Button
+              Grid.Column="1"
+              Content="{DynamicResource ProductDetail_Browse}"
+              Style="{DynamicResource OutlinedButton}"
+              Command="{Binding BrowseInstallPathCommand}"
+              Margin="8,0,0,0"
+            />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- Install Button -->
+      <Button
+        Content="{Binding InstallButtonText}"
+        Style="{DynamicResource FilledAccentButton}"
+        Command="{Binding InstallCommand}"
+        IsEnabled="{Binding CanInstallSelectedVersion}"
+        HorizontalAlignment="Left"
+        MinWidth="160"
+      />
+
+      <!-- Progress -->
+      <StackPanel
+        Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVisibilityConverter}}"
+        Margin="0,16,0,0"
+      >
+        <ProgressBar
+          Value="{Binding InstallProgress}"
+          Style="{DynamicResource StyledProgressBar}"
+          Margin="0,0,0,8"
+        />
+        <TextBlock Text="{Binding InstallStatusMessage}" Style="{DynamicResource CaptionText}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -1,0 +1,353 @@
+<UserControl
+  x:Class="StorkDrop.App.Views.Settings.SettingsView"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Loaded="OnLoaded"
+>
+  <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel MaxWidth="700">
+      <!-- Header -->
+      <Grid Margin="0,0,0,24">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+
+        <TextBlock Text="{DynamicResource Settings_Title}" Style="{DynamicResource HeadingLarge}" />
+
+        <Button
+          Grid.Column="1"
+          Content="{DynamicResource Button_Export}"
+          Style="{DynamicResource OutlinedButton}"
+          Command="{Binding ExportCommand}"
+          Margin="0,0,8,0"
+          Padding="12,8"
+        />
+
+        <Button
+          Grid.Column="2"
+          Content="{DynamicResource Button_Import}"
+          Style="{DynamicResource OutlinedButton}"
+          Command="{Binding ImportCommand}"
+          Padding="12,8"
+        />
+      </Grid>
+
+      <!-- Language -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource Language_Label}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,12"
+          />
+          <ComboBox
+            ItemsSource="{Binding AvailableLanguages}"
+            SelectedItem="{Binding SelectedLanguage}"
+            Width="120"
+            HorizontalAlignment="Left"
+          />
+        </StackPanel>
+      </Border>
+
+      <!-- Feeds -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+            <TextBlock
+              Text="{DynamicResource Settings_Feeds}"
+              Style="{DynamicResource HeadingSmall}"
+              VerticalAlignment="Center"
+            />
+            <Button
+              Content="{DynamicResource Button_AddFeed}"
+              Style="{DynamicResource OutlinedButton}"
+              Command="{Binding AddFeedCommand}"
+              Margin="12,0,0,0"
+              Padding="12,4"
+            />
+          </StackPanel>
+
+          <!-- Recommended feeds from plugins (Feature 9) -->
+          <Border
+            Background="#F0F7FF"
+            CornerRadius="6"
+            Padding="12,8"
+            Margin="0,0,0,12"
+            Visibility="{Binding ShowRecommendedFeeds, Converter={StaticResource BoolToVisibilityConverter}}"
+          >
+            <StackPanel>
+              <TextBlock
+                Text="{DynamicResource Settings_RecommendedFeeds}"
+                FontSize="13"
+                FontWeight="SemiBold"
+                Foreground="#1565C0"
+                Margin="0,0,0,8"
+              />
+              <ItemsControl ItemsSource="{Binding RecommendedFeeds}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Button
+                      Style="{DynamicResource OutlinedButton}"
+                      Command="{Binding DataContext.AddRecommendedFeedCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                      CommandParameter="{Binding}"
+                      Padding="8,4"
+                      Margin="0,0,0,4"
+                      HorizontalAlignment="Left"
+                    >
+                      <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding PluginName}" FontSize="12" Margin="0,0,8,0" />
+                        <TextBlock Text="{Binding Url}" FontSize="11" Foreground="#999999" />
+                      </StackPanel>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Border>
+
+          <ItemsControl ItemsSource="{Binding Feeds}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border
+                  BorderBrush="{DynamicResource BorderBrush}"
+                  BorderThickness="0,0,0,1"
+                  Margin="0,0,0,12"
+                  Padding="0,0,0,12"
+                >
+                  <StackPanel>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                      </Grid.ColumnDefinitions>
+
+                      <TextBlock
+                        Text="{DynamicResource Settings_FeedName}"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <Button
+                        Grid.Column="1"
+                        Content="{DynamicResource Feed_Remove}"
+                        Style="{DynamicResource OutlinedButton}"
+                        Command="{Binding DataContext.RemoveFeedCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                        CommandParameter="{Binding}"
+                        Padding="8,2"
+                        Margin="8,0,0,0"
+                        FontSize="11"
+                        HorizontalAlignment="Right"
+                      />
+                    </Grid>
+                    <TextBox
+                      Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedUrl}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBox
+                      Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedRepo}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBox
+                      Text="{Binding Repository, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedUser}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBox
+                      Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedPass}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBox
+                      Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
+                      Margin="0,0,0,8"
+                    />
+
+                    <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                      <Button
+                        Content="{DynamicResource Button_TestConnection}"
+                        Style="{DynamicResource OutlinedButton}"
+                        Command="{Binding DataContext.TestConnectionCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
+                        CommandParameter="{Binding}"
+                        Padding="12,6"
+                        Margin="0,0,12,0"
+                      />
+                      <TextBlock
+                        Text="{Binding ConnectionTestMessage}"
+                        VerticalAlignment="Center"
+                        FontSize="13"
+                      >
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding IsConnectionValid}" Value="True">
+                                <Setter
+                                  Property="Foreground"
+                                  Value="{DynamicResource SuccessBrush}"
+                                />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding IsConnectionValid}" Value="False">
+                                <Setter
+                                  Property="Foreground"
+                                  Value="{DynamicResource ErrorBrush}"
+                                />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Update Settings -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource Settings_AutoUpdate}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,12"
+          />
+
+          <CheckBox
+            Content="{DynamicResource Settings_AutoStart}"
+            IsChecked="{Binding AutoStart}"
+            Margin="0,0,0,8"
+          />
+
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <CheckBox
+              Content="{DynamicResource Settings_AutoUpdate}"
+              IsChecked="{Binding AutoCheckForUpdates}"
+            />
+            <Border
+              ToolTip="Stork checks for updates in the background and shows notifications."
+              Margin="8,0,0,0"
+              Width="18"
+              Height="18"
+              CornerRadius="9"
+              Background="#CCCCCC"
+              Cursor="Help"
+              VerticalAlignment="Center"
+            >
+              <TextBlock
+                Text="?"
+                FontSize="11"
+                FontWeight="Bold"
+                Foreground="White"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+              />
+            </Border>
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock
+              Text="{DynamicResource Settings_CheckInterval}"
+              Style="{DynamicResource BodyText}"
+              VerticalAlignment="Center"
+              Margin="0,0,8,0"
+            />
+            <TextBox
+              Text="{Binding CheckIntervalHours, UpdateSourceTrigger=PropertyChanged}"
+              Style="{DynamicResource StyledTextBox}"
+              Width="80"
+            />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Proxy Settings -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource Settings_Proxy}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,12"
+          />
+
+          <Grid>
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="120" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Margin="0,0,8,0">
+              <TextBlock
+                Text="{DynamicResource Settings_ProxyHost}"
+                Style="{DynamicResource CaptionText}"
+                Margin="0,0,0,4"
+              />
+              <TextBox
+                Text="{Binding ProxyHost, UpdateSourceTrigger=PropertyChanged}"
+                Style="{DynamicResource StyledTextBox}"
+              />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1">
+              <TextBlock
+                Text="{DynamicResource Settings_ProxyPort}"
+                Style="{DynamicResource CaptionText}"
+                Margin="0,0,0,4"
+              />
+              <TextBox
+                Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"
+                Style="{DynamicResource StyledTextBox}"
+              />
+            </StackPanel>
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- Error Message -->
+      <TextBlock
+        Text="{Binding ErrorMessage}"
+        Foreground="{DynamicResource ErrorBrush}"
+        Margin="0,0,0,8"
+        Visibility="{Binding ErrorMessage, Converter={StaticResource BoolToVisibilityConverter}}"
+      />
+
+      <!-- Save Button -->
+      <Button
+        Content="{DynamicResource Button_Save}"
+        Style="{DynamicResource FilledAccentButton}"
+        Command="{Binding SaveCommand}"
+        HorizontalAlignment="Left"
+        MinWidth="160"
+        Margin="0,0,0,24"
+      />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>
