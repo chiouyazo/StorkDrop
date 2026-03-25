@@ -21,4 +21,19 @@ public partial class UpdateItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string _releaseNotes = string.Empty;
+
+    [ObservableProperty]
+    private string _installedPath = string.Empty;
+
+    [ObservableProperty]
+    private bool _isUpdating;
+
+    [ObservableProperty]
+    private int _updatePercentage;
+
+    [ObservableProperty]
+    private string _updateStatusMessage = string.Empty;
+
+    [ObservableProperty]
+    private bool _showReleaseNotes;
 }

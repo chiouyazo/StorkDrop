@@ -35,7 +35,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\StorkDrop.Contracts\StorkDrop.Contracts.csproj" />
-    <ProjectReference Include="..\StorkDrop.Core\StorkDrop.Core.csproj" />
     <ProjectReference Include="..\StorkDrop.Registry\StorkDrop.Registry.csproj" />
     <ProjectReference Include="..\StorkDrop.Installer\StorkDrop.Installer.csproj" />
   </ItemGroup>
