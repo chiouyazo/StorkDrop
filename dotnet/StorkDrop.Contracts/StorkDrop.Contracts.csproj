@@ -4,7 +4,7 @@
     <Nullable>enable</Nullable>
     <IsPackable>true</IsPackable>
     <PackageId>StorkDrop.Contracts</PackageId>
-    <Version>2.0.0</Version>
+    <Version>0.0.0-local</Version>
     <Authors>StorkDrop</Authors>
     <Description>Contracts, models, and interfaces for StorkDrop. Reference this package to build plugins or custom StorkDrop apps.</Description>
     <PackageTags>storkdrop;plugin;deployment</PackageTags>
