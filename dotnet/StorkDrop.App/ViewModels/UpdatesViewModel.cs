@@ -5,25 +5,16 @@ using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
-using StorkDrop.Core.Services;
+using StorkDrop.Installer;
 
 namespace StorkDrop.App.ViewModels;
 
-/// <summary>
-/// View model for the updates view, displaying available updates and handling update operations.
-/// </summary>
 public partial class UpdatesViewModel : ObservableObject
 {
     private readonly IRegistryClient _registryClient;
     private readonly IProductRepository _productRepository;
     private readonly IInstallationEngine _installationEngine;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="UpdatesViewModel"/> class.
-    /// </summary>
-    /// <param name="registryClient">The registry client for fetching product information.</param>
-    /// <param name="productRepository">The repository for installed products.</param>
-    /// <param name="installationEngine">The engine for updating products.</param>
     public UpdatesViewModel(
         IRegistryClient registryClient,
         IProductRepository productRepository,
@@ -36,8 +27,7 @@ public partial class UpdatesViewModel : ObservableObject
     }
 
     [ObservableProperty]
-    private ObservableCollection<UpdateItemViewModel> _updates =
-        new ObservableCollection<UpdateItemViewModel>();
+    private ObservableCollection<UpdateItemViewModel> _updates = [];
 
     [ObservableProperty]
     private bool _isLoading;
@@ -50,10 +40,6 @@ public partial class UpdatesViewModel : ObservableObject
 
     private CancellationTokenSource? _cts;
 
-    /// <summary>
-    /// Loads the list of available updates.
-    /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand]
     public async Task LoadAsync()
     {
@@ -73,7 +59,7 @@ public partial class UpdatesViewModel : ObservableObject
                 cancellationToken
             );
 
-            List<UpdateItemViewModel> updateItems = new List<UpdateItemViewModel>();
+            List<UpdateItemViewModel> updateItems = [];
             foreach (InstalledProduct product in installed)
             {
                 ProductManifest? latest = available.FirstOrDefault(m =>
@@ -89,6 +75,7 @@ public partial class UpdatesViewModel : ObservableObject
                             CurrentVersion = product.Version,
                             AvailableVersion = latest.Version,
                             ReleaseNotes = latest.ReleaseNotes ?? string.Empty,
+                            InstalledPath = product.InstalledPath,
                         }
                     );
                 }
@@ -96,10 +83,7 @@ public partial class UpdatesViewModel : ObservableObject
 
             Updates = new ObservableCollection<UpdateItemViewModel>(updateItems);
         }
-        catch (OperationCanceledException)
-        {
-            // Expected when reloading
-        }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             ErrorMessage =
@@ -111,19 +95,13 @@ public partial class UpdatesViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Updates all available products.
-    /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand]
     private async Task UpdateAllAsync()
     {
         try
         {
             IsUpdatingAll = true;
-
-            List<UpdateItemViewModel> snapshot = new List<UpdateItemViewModel>(Updates);
-
+            List<UpdateItemViewModel> snapshot = [.. Updates];
             foreach (UpdateItemViewModel update in snapshot)
             {
                 await UpdateSingleAsync(update);
@@ -139,11 +117,6 @@ public partial class UpdatesViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Updates a single product.
-    /// </summary>
-    /// <param name="update">The update item to apply.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand]
     private async Task UpdateSingleAsync(UpdateItemViewModel update)
     {
@@ -161,22 +134,76 @@ public partial class UpdatesViewModel : ObservableObject
                 cancellationToken
             );
 
-            if (installed is not null && manifest is not null)
+            if (installed is null || manifest is null)
+                return;
+
+            // Check if UAC is needed
+            bool needsAdmin =
+                ElevationHelper.PathRequiresAdmin(installed.InstalledPath)
+                && !ElevationHelper.IsRunningAsAdmin();
+
+            if (needsAdmin)
             {
-                InstallOptions options = new InstallOptions(TargetPath: installed.InstalledPath);
-                Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
-                await _installationEngine.UpdateAsync(
-                    installed,
-                    manifest,
-                    options,
-                    progress,
+                update.IsUpdating = true;
+                update.UpdateStatusMessage = LocalizationManager.GetString("Install_Installing");
+
+                // For elevated updates: uninstall old, then install new (both elevated)
+                bool uninstalled = await Task.Run(
+                    () => ElevationHelper.RunElevatedUninstall(update.ProductId),
                     cancellationToken
                 );
+                if (!uninstalled)
+                {
+                    ErrorMessage = LocalizationManager.GetString("Error_AdminDenied_Uninstall");
+                    update.IsUpdating = false;
+                    return;
+                }
+
+                bool installOk = await Task.Run(
+                    () =>
+                        ElevationHelper.RunElevatedInstall(
+                            update.ProductId,
+                            manifest.Version,
+                            installed.InstalledPath
+                        ),
+                    cancellationToken
+                );
+                if (!installOk)
+                {
+                    ErrorMessage = LocalizationManager.GetString("Error_UpdateFailed");
+                    update.IsUpdating = false;
+                    return;
+                }
+
+                update.IsUpdating = false;
                 Updates.Remove(update);
+                return;
             }
+
+            // Non-elevated path: use UpdateAsync with progress
+            update.IsUpdating = true;
+            update.UpdatePercentage = 0;
+            InstallOptions options = new InstallOptions(TargetPath: installed.InstalledPath);
+            Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+            {
+                update.UpdatePercentage = p.Percentage;
+                update.UpdateStatusMessage = p.Message;
+            });
+
+            await _installationEngine.UpdateAsync(
+                installed,
+                manifest,
+                options,
+                progress,
+                cancellationToken
+            );
+
+            update.IsUpdating = false;
+            Updates.Remove(update);
         }
         catch (Exception ex)
         {
+            update.IsUpdating = false;
             ErrorMessage =
                 LocalizationManager
                     .GetString("Error_UpdateProductFailed")

@@ -10,6 +10,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
     private readonly string _filePath;
     private readonly SemaphoreSlim _lock = new(1, 1);
     private List<InstalledProduct> _products = [];
+    private bool _initialized;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -42,26 +43,58 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (File.Exists(_filePath))
-            {
-                string json = await File.ReadAllTextAsync(_filePath, cancellationToken)
-                    .ConfigureAwait(false);
-                List<InstalledProduct>? deserialized = JsonSerializer.Deserialize<
-                    List<InstalledProduct>
-                >(json, JsonOptions);
-                _products = deserialized ?? [];
-
-                ValidateNoDuplicateProductIds(_products);
-            }
-            else
-            {
-                _products = [];
-            }
+            await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
         {
             _lock.Release();
         }
+    }
+
+    /// <summary>
+    /// Reloads products from disk, discarding in-memory state.
+    /// Call this after an elevated process may have modified the file.
+    /// </summary>
+    public async Task ReloadAsync(CancellationToken cancellationToken = default)
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            _initialized = false;
+            await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
+    {
+        if (_initialized)
+            return;
+        await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task LoadFromDiskAsync(CancellationToken cancellationToken)
+    {
+        if (File.Exists(_filePath))
+        {
+            string json = await File.ReadAllTextAsync(_filePath, cancellationToken)
+                .ConfigureAwait(false);
+            List<InstalledProduct>? deserialized = JsonSerializer.Deserialize<
+                List<InstalledProduct>
+            >(json, JsonOptions);
+            _products = deserialized ?? [];
+
+            ValidateNoDuplicateProductIds(_products);
+        }
+        else
+        {
+            _products = [];
+        }
+
+        _initialized = true;
     }
 
     public async Task<IReadOnlyList<InstalledProduct>> GetAllAsync(
@@ -71,6 +104,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             return _products.ToList();
         }
         finally
@@ -87,6 +121,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             return _products.FirstOrDefault(p => p.ProductId == productId);
         }
         finally
@@ -103,6 +138,8 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            _products.RemoveAll(p => p.ProductId == product.ProductId);
             _products.Add(product);
             await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -120,6 +157,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             int index = _products.FindIndex(p => p.ProductId == product.ProductId);
             if (index >= 0)
             {
@@ -138,6 +176,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             int removed = _products.RemoveAll(p => p.ProductId == productId);
             if (removed > 0)
             {

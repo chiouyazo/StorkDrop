@@ -475,12 +475,19 @@ public sealed class InstallationEngine : IInstallationEngine
                 )
             )
             {
+                string ext = Path.GetExtension(file);
+                if (
+                    !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                    && !ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
+                )
+                    continue;
+
                 if (_fileLockDetector.IsFileLocked(file))
                 {
                     IReadOnlyList<string> processes = _fileLockDetector.GetLockingProcesses(file);
-                    throw new InvalidOperationException(
-                        $"'{Path.GetFileName(file)}' is in use by: {string.Join(", ", processes)}"
-                    );
+                    string processNames =
+                        processes.Count > 0 ? string.Join(", ", processes) : string.Empty;
+                    throw new FileLockedException(Path.GetFileName(file), processNames);
                 }
             }
         }

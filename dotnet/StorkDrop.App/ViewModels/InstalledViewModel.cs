@@ -129,9 +129,16 @@ public partial class InstalledViewModel : ObservableObject
                     return;
                 }
 
+                // Reload repository from disk (elevated process modified it)
+                await _productRepository.ReloadAsync();
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
                 OnPropertyChanged(nameof(HasNoProducts));
+                _dialogService.ShowInfo(
+                    LocalizationManager
+                        .GetString("Info_UninstallSuccess")
+                        .Replace("{0}", product.Title)
+                );
                 return;
             }
 

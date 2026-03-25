@@ -11,6 +11,12 @@ public partial class UpdatesView : UserControl
         InitializeComponent();
     }
 
+    private void OnToggleReleaseNotes(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: UpdateItemViewModel item })
+            item.ShowReleaseNotes = !item.ShowReleaseNotes;
+    }
+
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         try

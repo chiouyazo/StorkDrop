@@ -55,50 +55,137 @@
       BorderThickness="0"
       Background="Transparent"
     >
+      <ListView.ItemContainerStyle>
+        <Style TargetType="ListViewItem">
+          <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+          <Setter Property="Padding" Value="0" />
+          <Setter Property="Margin" Value="0" />
+          <Setter Property="Template">
+            <Setter.Value>
+              <ControlTemplate TargetType="ListViewItem">
+                <ContentPresenter />
+              </ControlTemplate>
+            </Setter.Value>
+          </Setter>
+        </Style>
+      </ListView.ItemContainerStyle>
       <ListView.ItemTemplate>
         <DataTemplate>
-          <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,8" MinWidth="600">
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="Auto" />
-              </Grid.ColumnDefinitions>
+          <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,8">
+            <StackPanel>
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
 
-              <StackPanel>
+                <StackPanel>
+                  <TextBlock
+                    Text="{Binding Title}"
+                    Style="{DynamicResource HeadingSmall}"
+                    Margin="0,0,0,4"
+                  />
+                  <TextBlock Style="{DynamicResource BodyText}">
+                    <Run Text="{Binding CurrentVersion, Mode=OneWay}" />
+                    <Run Text=" &#x2192; " />
+                    <Run
+                      Text="{Binding AvailableVersion, Mode=OneWay}"
+                      Foreground="{DynamicResource SuccessBrush}"
+                      FontWeight="SemiBold"
+                    />
+                  </TextBlock>
+                  <TextBlock
+                    Text="{Binding InstalledPath}"
+                    FontSize="11"
+                    Foreground="#999999"
+                    Margin="0,2,0,0"
+                  />
+                </StackPanel>
+
+                <!-- Release Notes toggle -->
+                <Button
+                  Grid.Column="1"
+                  Content="&#xE7BC;"
+                  FontFamily="Segoe MDL2 Assets"
+                  FontSize="14"
+                  Background="Transparent"
+                  BorderThickness="0"
+                  Foreground="#666666"
+                  Cursor="Hand"
+                  ToolTip="{DynamicResource ProductDetail_ReleaseNotes}"
+                  Padding="8"
+                  Margin="8,0,0,0"
+                  VerticalAlignment="Center"
+                  Click="OnToggleReleaseNotes"
+                />
+
+                <!-- Update button -->
+                <Button
+                  Grid.Column="2"
+                  Content="Update"
+                  Command="{Binding DataContext.UpdateSingleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"
+                  VerticalAlignment="Center"
+                  Padding="16,8"
+                  Margin="8,0,0,0"
+                >
+                  <Button.Style>
+                    <Style TargetType="Button" BasedOn="{StaticResource FilledAccentButton}">
+                      <Setter Property="Visibility" Value="Visible" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsUpdating}" Value="True">
+                          <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </Button.Style>
+                </Button>
+              </Grid>
+
+              <!-- Progress bar (visible when updating) -->
+              <StackPanel
+                Visibility="{Binding IsUpdating, Converter={StaticResource BoolToVisibilityConverter}}"
+                Margin="0,8,0,0"
+              >
                 <TextBlock
-                  Text="{Binding Title}"
-                  Style="{DynamicResource HeadingSmall}"
+                  Text="{Binding UpdateStatusMessage}"
+                  FontSize="11"
+                  Foreground="#999999"
                   Margin="0,0,0,4"
                 />
-                <TextBlock Style="{DynamicResource BodyText}">
-                  <Run Text="{Binding CurrentVersion, Mode=OneWay}" />
-                  <Run Text=" -> " />
-                  <Run
-                    Text="{Binding AvailableVersion, Mode=OneWay}"
-                    Foreground="{DynamicResource SuccessBrush}"
-                    FontWeight="SemiBold"
-                  />
-                </TextBlock>
-                <TextBlock
-                  Text="{Binding ReleaseNotes}"
-                  Style="{DynamicResource CaptionText}"
-                  TextWrapping="Wrap"
-                  MaxHeight="40"
-                  TextTrimming="CharacterEllipsis"
-                  Margin="0,4,0,0"
+                <ProgressBar
+                  Value="{Binding UpdatePercentage}"
+                  Maximum="100"
+                  Height="4"
+                  Style="{DynamicResource StyledProgressBar}"
                 />
               </StackPanel>
 
-              <Button
-                Grid.Column="1"
-                Content="Update"
-                Style="{DynamicResource FilledAccentButton}"
-                Command="{Binding DataContext.UpdateSingleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                CommandParameter="{Binding}"
-                VerticalAlignment="Center"
-                Padding="16,8"
-              />
-            </Grid>
+              <!-- Release Notes (expandable) -->
+              <Border
+                Background="#F8F8F8"
+                CornerRadius="4"
+                Padding="12,8"
+                Margin="0,8,0,0"
+                Visibility="{Binding ShowReleaseNotes, Converter={StaticResource BoolToVisibilityConverter}}"
+              >
+                <StackPanel>
+                  <TextBlock
+                    Text="{DynamicResource ProductDetail_ReleaseNotes}"
+                    FontSize="12"
+                    FontWeight="SemiBold"
+                    Foreground="#444444"
+                    Margin="0,0,0,4"
+                  />
+                  <TextBlock
+                    Text="{Binding ReleaseNotes}"
+                    Style="{DynamicResource BodyText}"
+                    TextWrapping="Wrap"
+                  />
+                </StackPanel>
+              </Border>
+            </StackPanel>
           </Border>
         </DataTemplate>
       </ListView.ItemTemplate>

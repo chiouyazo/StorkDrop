@@ -21,7 +21,7 @@
     />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\StorkDrop.Core\StorkDrop.Core.csproj" />
+    <ProjectReference Include="..\StorkDrop.Contracts\StorkDrop.Contracts.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="StorkDrop.Tests" />
