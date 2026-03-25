@@ -153,17 +153,23 @@
             HorizontalAlignment="Center"
             Margin="0,4,0,6"
           />
-          <ProgressBar
-            Value="{Binding InstallPercentage}"
-            Maximum="100"
-            Height="4"
-            Style="{DynamicResource StyledProgressBar}"
-          />
+          <ProgressBar Value="{Binding InstallPercentage}" Maximum="100" Height="4">
+            <ProgressBar.Style>
+              <Style TargetType="ProgressBar" BasedOn="{StaticResource StyledProgressBar}">
+                <Setter Property="IsIndeterminate" Value="False" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding InstallPercentage}" Value="0">
+                    <Setter Property="IsIndeterminate" Value="True" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </ProgressBar.Style>
+          </ProgressBar>
         </StackPanel>
 
         <!-- State 3: Installed, has update -> Update button -->
         <Button
-          Content="Update"
+          Content="{DynamicResource Install_Update}"
           HorizontalAlignment="Stretch"
           Command="{Binding DataContext.InstallProductCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
           CommandParameter="{Binding}"

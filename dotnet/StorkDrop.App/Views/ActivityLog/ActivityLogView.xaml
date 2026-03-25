@@ -66,14 +66,26 @@
     >
       <DataGrid.Columns>
         <DataGridTextColumn
-          Header="Timestamp"
+          Header="{DynamicResource ActivityLog_Timestamp}"
           Binding="{Binding Timestamp, StringFormat='{}{0:yyyy-MM-dd HH:mm:ss}'}"
           Width="160"
         />
-        <DataGridTextColumn Header="Action" Binding="{Binding Action}" Width="100" />
-        <DataGridTextColumn Header="Product" Binding="{Binding ProductId}" Width="150" />
-        <DataGridTextColumn Header="Details" Binding="{Binding Details}" Width="*" />
-        <DataGridTemplateColumn Header="Status" Width="80">
+        <DataGridTextColumn
+          Header="{DynamicResource ActivityLog_Action}"
+          Binding="{Binding Action}"
+          Width="100"
+        />
+        <DataGridTextColumn
+          Header="{DynamicResource ActivityLog_Product}"
+          Binding="{Binding ProductId}"
+          Width="150"
+        />
+        <DataGridTextColumn
+          Header="{DynamicResource ActivityLog_Details}"
+          Binding="{Binding Details}"
+          Width="*"
+        />
+        <DataGridTemplateColumn Header="{DynamicResource ActivityLog_Status}" Width="80">
           <DataGridTemplateColumn.CellTemplate>
             <DataTemplate>
               <Ellipse Width="12" Height="12" HorizontalAlignment="Center">

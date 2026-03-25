@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using StorkDrop.App.Localization;
 using StorkDrop.App.ViewModels;
 
 namespace StorkDrop.App.Views.Settings;
@@ -24,7 +25,10 @@ public partial class SettingsView : UserControl
         {
             if (DataContext is SettingsViewModel viewModel)
             {
-                viewModel.ErrorMessage = $"Fehler beim Laden: {ex.Message}";
+                viewModel.ErrorMessage = LocalizationManager.GetString(
+                    "Error_LoadFailed",
+                    ex.Message
+                );
             }
         }
     }

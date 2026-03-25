@@ -123,7 +123,7 @@
                 <!-- Update button -->
                 <Button
                   Grid.Column="2"
-                  Content="Update"
+                  Content="{DynamicResource Install_Update}"
                   Command="{Binding DataContext.UpdateSingleCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   CommandParameter="{Binding}"
                   VerticalAlignment="Center"
@@ -154,12 +154,18 @@
                   Foreground="#999999"
                   Margin="0,0,0,4"
                 />
-                <ProgressBar
-                  Value="{Binding UpdatePercentage}"
-                  Maximum="100"
-                  Height="4"
-                  Style="{DynamicResource StyledProgressBar}"
-                />
+                <ProgressBar Value="{Binding UpdatePercentage}" Maximum="100" Height="4">
+                  <ProgressBar.Style>
+                    <Style TargetType="ProgressBar" BasedOn="{StaticResource StyledProgressBar}">
+                      <Setter Property="IsIndeterminate" Value="False" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding UpdatePercentage}" Value="0">
+                          <Setter Property="IsIndeterminate" Value="True" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </ProgressBar.Style>
+                </ProgressBar>
               </StackPanel>
 
               <!-- Release Notes (expandable) -->
@@ -198,7 +204,7 @@
       Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibilityConverter}}"
     >
       <TextBlock
-        Text="Checking for updates..."
+        Text="{DynamicResource Updates_CheckingForUpdates}"
         Style="{DynamicResource HeadingSmall}"
         HorizontalAlignment="Center"
         VerticalAlignment="Center"

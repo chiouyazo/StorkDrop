@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using StorkDrop.App.Localization;
 using StorkDrop.App.ViewModels;
 
 namespace StorkDrop.App.Views.ActivityLog;
@@ -24,7 +25,10 @@ public partial class ActivityLogView : UserControl
         {
             if (DataContext is ActivityLogViewModel viewModel)
             {
-                viewModel.ErrorMessage = $"Fehler beim Laden: {ex.Message}";
+                viewModel.ErrorMessage = LocalizationManager.GetString(
+                    "Error_LoadFailed",
+                    ex.Message
+                );
             }
         }
     }
