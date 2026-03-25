@@ -110,13 +110,24 @@ public static class AppHostBuilder
 
     private static void LoadPlugins(IServiceCollection services, PluginLoadStatus status)
     {
-        string exeDirectory = AppContext.BaseDirectory;
-        string pluginsDirectory = Path.Combine(exeDirectory, "plugins");
+        List<string> pluginDirs = [Path.Combine(AppContext.BaseDirectory, "plugins")];
 
-        if (!Directory.Exists(pluginsDirectory))
-            return;
+        // Support --plugin-dir for development/debugging
+        string[] args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--plugin-dir" && Directory.Exists(args[i + 1]))
+                pluginDirs.Add(args[i + 1]);
+        }
 
-        string[] dllFiles = Directory.GetFiles(pluginsDirectory, "*.dll");
+        List<string> allDlls = [];
+        foreach (string dir in pluginDirs)
+        {
+            if (Directory.Exists(dir))
+                allDlls.AddRange(Directory.GetFiles(dir, "*.dll"));
+        }
+
+        string[] dllFiles = allDlls.ToArray();
         status.TotalPluginDlls = dllFiles.Length;
 
         foreach (string dllPath in dllFiles)

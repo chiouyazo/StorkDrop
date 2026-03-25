@@ -366,7 +366,7 @@
           Cursor="Hand"
           MouseLeftButtonDown="OnVersionClick"
         >
-          <Run Text="StorkDrop v1.0.0" />
+          <Run x:Name="VersionRun" Text="StorkDrop" />
           <TextBlock.Style>
             <Style TargetType="TextBlock">
               <Style.Triggers>

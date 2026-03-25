@@ -38,6 +38,13 @@ public partial class App : Application
             return;
         }
 
+        if (args.Length >= 4 && args[1] == "--update")
+        {
+            RunElevatedUpdate(args[2], args[3]);
+            Shutdown();
+            return;
+        }
+
         if (!SingleInstanceMutex.WaitOne(TimeSpan.Zero, true))
         {
             Shutdown();
@@ -170,6 +177,58 @@ public partial class App : Application
         catch (Exception ex)
         {
             Debug.WriteLine($"Elevated uninstall failed: {ex.Message}");
+            Environment.ExitCode = 1;
+        }
+        finally
+        {
+            try
+            {
+                _host?.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+                _host?.Dispose();
+            }
+            catch { }
+        }
+    }
+
+    private void RunElevatedUpdate(string productId, string targetPath)
+    {
+        SynchronizationContext.SetSynchronizationContext(null);
+
+        try
+        {
+            _host = AppHostBuilder.Build();
+            Services = _host.Services;
+            _host.Start();
+
+            LoadConfigIntoNexusOptions();
+
+            IRegistryClient registryClient = Services.GetRequiredService<IRegistryClient>();
+            IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
+            IProductRepository productRepository =
+                Services.GetRequiredService<IProductRepository>();
+
+            InstalledProduct? installed = productRepository
+                .GetByIdAsync(productId)
+                .GetAwaiter()
+                .GetResult();
+
+            ProductManifest? manifest = registryClient
+                .GetProductManifestAsync(productId)
+                .GetAwaiter()
+                .GetResult();
+
+            if (installed is not null && manifest is not null)
+            {
+                InstallOptions options = new(TargetPath: targetPath);
+                Progress<InstallProgress> progress = new(_ => { });
+                engine.UpdateAsync(installed, manifest, options, progress).GetAwaiter().GetResult();
+            }
+
+            Environment.ExitCode = 0;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Elevated update failed: {ex.Message}");
             Environment.ExitCode = 1;
         }
         finally
