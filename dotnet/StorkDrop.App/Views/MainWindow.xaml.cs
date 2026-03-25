@@ -28,7 +28,12 @@ public partial class MainWindow : Window
     {
         IConfigurationService configService =
             App.Services.GetRequiredService<IConfigurationService>();
-        AppConfiguration? config = configService.LoadAsync().GetAwaiter().GetResult();
+
+        // Must be synchronous — WPF checks e.Cancel immediately on return.
+        // Use ConfigureAwait(false) via Task.Run to avoid SyncContext deadlock.
+        AppConfiguration? config = Task.Run(async () => await configService.LoadAsync())
+            .GetAwaiter()
+            .GetResult();
 
         bool minimizeToTray = config?.AutoCheckForUpdates == true;
 
@@ -52,7 +57,6 @@ public partial class MainWindow : Window
                 }
             );
 
-            // Feature 4: First time minimizing to tray, show toast notification
             if (config is not null && !config.HasShownTrayToast)
             {
                 trayService.ShowBalloon(
@@ -60,12 +64,9 @@ public partial class MainWindow : Window
                     LocalizationManager.GetString("Tray_FirstMinimize")
                 );
 
-                // Save that we've shown the toast
-                AppConfiguration updatedConfig = config with
-                {
-                    HasShownTrayToast = true,
-                };
-                configService.SaveAsync(updatedConfig).GetAwaiter().GetResult();
+                AppConfiguration updatedConfig = config with { HasShownTrayToast = true };
+                // Fire-and-forget — closing shouldn't block on saving the toast flag
+                _ = configService.SaveAsync(updatedConfig);
             }
         }
         else

@@ -16,29 +16,19 @@ namespace StorkDrop.App.ViewModels;
 /// </summary>
 public partial class MarketplaceViewModel : ObservableObject
 {
-    private readonly IRegistryClient _registryClient;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
     private readonly IInstallationEngine _installationEngine;
-    private readonly IConfigurationService _configurationService;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="MarketplaceViewModel"/> class.
-    /// </summary>
-    /// <param name="registryClient">The registry client for fetching products.</param>
-    /// <param name="productRepository">The repository for installed products.</param>
-    /// <param name="installationEngine">The engine for installing products.</param>
-    /// <param name="configurationService">The configuration service.</param>
     public MarketplaceViewModel(
-        IRegistryClient registryClient,
+        IFeedRegistry feedRegistry,
         IProductRepository productRepository,
-        IInstallationEngine installationEngine,
-        IConfigurationService configurationService
+        IInstallationEngine installationEngine
     )
     {
-        _registryClient = registryClient;
+        _feedRegistry = feedRegistry;
         _productRepository = productRepository;
         _installationEngine = installationEngine;
-        _configurationService = configurationService;
     }
 
     [ObservableProperty]
@@ -77,19 +67,23 @@ public partial class MarketplaceViewModel : ObservableObject
     /// Gets a value indicating whether an error message is currently displayed.
     /// </summary>
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
+    public bool ShowFeedFilter => AvailableFeedFilters.Count > 1;
 
-    private IReadOnlyList<ProductManifest> _allProducts = Array.Empty<ProductManifest>();
+    private List<(ProductManifest Manifest, string FeedName, string FeedId)> _allProducts = [];
     private IReadOnlyList<InstalledProduct> _installedProducts = Array.Empty<InstalledProduct>();
     private CancellationTokenSource? _loadCts;
 
     /// <summary>
     /// Event raised when the user wants to navigate to a product detail view.
     /// </summary>
-    public event Action<string>? NavigateToProductDetail;
+    public event Action<string, string>? NavigateToProductDetail;
 
     partial void OnSearchTextChanged(string value) => ApplyFilters();
 
     partial void OnSelectedFilterNameChanged(string? value) => ApplyFilters();
+
+    partial void OnAvailableFeedFiltersChanged(ObservableCollection<string> value) =>
+        OnPropertyChanged(nameof(ShowFeedFilter));
 
     partial void OnSelectedFeedFilterChanged(string? value) => ApplyFilters();
 
@@ -104,7 +98,7 @@ public partial class MarketplaceViewModel : ObservableObject
     [RelayCommand]
     private void NavigateToDetail(ProductCardViewModel product)
     {
-        NavigateToProductDetail?.Invoke(product.ProductId);
+        NavigateToProductDetail?.Invoke(product.ProductId, product.FeedId);
     }
 
     /// <summary>
@@ -117,9 +111,8 @@ public partial class MarketplaceViewModel : ObservableObject
     {
         try
         {
-            ProductManifest? manifest = await _registryClient.GetProductManifestAsync(
-                product.ProductId
-            );
+            IRegistryClient feedClient = _feedRegistry.GetClient(product.FeedId);
+            ProductManifest? manifest = await feedClient.GetProductManifestAsync(product.ProductId);
             if (manifest is null)
             {
                 ErrorMessage = LocalizationManager
@@ -152,7 +145,10 @@ public partial class MarketplaceViewModel : ObservableObject
             product.InstallPercentage = 0;
             string targetPath = dialog.SelectedPath;
 
-            InstallOptions options = new InstallOptions(TargetPath: targetPath);
+            InstallOptions options = new InstallOptions(
+                TargetPath: targetPath,
+                FeedId: product.FeedId
+            );
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
                 product.InstallPercentage = p.Percentage;
@@ -211,57 +207,62 @@ public partial class MarketplaceViewModel : ObservableObject
             IsLoading = true;
             ErrorMessage = string.Empty;
 
-            _allProducts = await _registryClient.GetAllProductsAsync(cancellationToken);
             _installedProducts = await _productRepository.GetAllAsync(cancellationToken);
 
-            // Build type filters
-            ObservableCollection<string> typeFilters = new ObservableCollection<string>(
-                new List<string> { LocalizationManager.GetString("Filter_AllTypes") }
-            );
-            foreach (ProductManifest product in _allProducts)
-            {
-                string typeName = product.InstallType.ToString();
-                if (!typeFilters.Contains(typeName))
-                {
-                    typeFilters.Add(typeName);
-                }
-            }
+            // Load products from all configured feeds
+            _allProducts = [];
+            ObservableCollection<string> feedFilters = new([
+                LocalizationManager.GetString("Filter_AllFeeds"),
+            ]);
 
-            AvailableFilters = typeFilters;
-            SelectedFilterName = LocalizationManager.GetString("Filter_AllTypes");
-
-            // Build feed filters
-            AppConfiguration? config = await _configurationService.LoadAsync(cancellationToken);
-            ObservableCollection<string> feedFilters = new ObservableCollection<string>(
-                new List<string> { LocalizationManager.GetString("Filter_AllFeeds") }
-            );
-            if (config?.Feeds is not null)
+            foreach (FeedInfo feed in _feedRegistry.GetFeeds())
             {
-                foreach (FeedConfiguration feed in config.Feeds)
+                try
                 {
+                    IRegistryClient client = _feedRegistry.GetClient(feed.Id);
+                    IReadOnlyList<ProductManifest> products = await client.GetAllProductsAsync(
+                        cancellationToken
+                    );
+                    foreach (ProductManifest p in products)
+                        _allProducts.Add((p, feed.Name, feed.Id));
+
                     if (!feedFilters.Contains(feed.Name))
-                    {
                         feedFilters.Add(feed.Name);
-                    }
+                }
+                catch
+                {
+                    // Feed unavailable, skip
                 }
             }
 
             AvailableFeedFilters = feedFilters;
             SelectedFeedFilter = LocalizationManager.GetString("Filter_AllFeeds");
 
+            // Build type filters
+            ObservableCollection<string> typeFilters = new ObservableCollection<string>([
+                LocalizationManager.GetString("Filter_AllTypes"),
+            ]);
+            foreach ((ProductManifest product, _, _) in _allProducts)
+            {
+                string typeName = product.InstallType.ToString();
+                if (!typeFilters.Contains(typeName))
+                    typeFilters.Add(typeName);
+            }
+
+            AvailableFilters = typeFilters;
+            SelectedFilterName = LocalizationManager.GetString("Filter_AllTypes");
+
             // Build publisher filters
-            ObservableCollection<string> publisherFilters = new ObservableCollection<string>(
-                new List<string> { LocalizationManager.GetString("Filter_AllPublishers") }
-            );
-            foreach (ProductManifest product in _allProducts)
+            ObservableCollection<string> publisherFilters = new ObservableCollection<string>([
+                LocalizationManager.GetString("Filter_AllPublishers"),
+            ]);
+            foreach ((ProductManifest product, _, _) in _allProducts)
             {
                 if (
                     !string.IsNullOrEmpty(product.Publisher)
                     && !publisherFilters.Contains(product.Publisher)
                 )
-                {
                     publisherFilters.Add(product.Publisher);
-                }
             }
 
             AvailablePublisherFilters = publisherFilters;
@@ -286,16 +287,29 @@ public partial class MarketplaceViewModel : ObservableObject
 
     private void ApplyFilters()
     {
-        IEnumerable<ProductManifest> filtered = _allProducts;
+        IEnumerable<(ProductManifest Manifest, string FeedName, string FeedId)> filtered =
+            _allProducts;
 
         if (!string.IsNullOrWhiteSpace(SearchText))
         {
             string search = SearchText.ToLowerInvariant();
             filtered = filtered.Where(p =>
-                p.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || p.ProductId.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || (p.Description?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false)
+                p.Manifest.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || p.Manifest.ProductId.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || (
+                    p.Manifest.Description?.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    ?? false
+                )
             );
+        }
+
+        // Feed filter
+        if (
+            SelectedFeedFilter is not null
+            && SelectedFeedFilter != LocalizationManager.GetString("Filter_AllFeeds")
+        )
+        {
+            filtered = filtered.Where(p => p.FeedName == SelectedFeedFilter);
         }
 
         // Type filter
@@ -309,7 +323,7 @@ public partial class MarketplaceViewModel : ObservableObject
             )
         )
         {
-            filtered = filtered.Where(p => p.InstallType == filterType);
+            filtered = filtered.Where(p => p.Manifest.InstallType == filterType);
         }
 
         // Publisher filter
@@ -318,12 +332,13 @@ public partial class MarketplaceViewModel : ObservableObject
             && SelectedPublisherFilter != LocalizationManager.GetString("Filter_AllPublishers")
         )
         {
-            filtered = filtered.Where(p => p.Publisher == SelectedPublisherFilter);
+            filtered = filtered.Where(p => p.Manifest.Publisher == SelectedPublisherFilter);
         }
 
         Products = new ObservableCollection<ProductCardViewModel>(
-            filtered.Select(manifest =>
+            filtered.Select(entry =>
             {
+                ProductManifest manifest = entry.Manifest;
                 InstalledProduct? installed = _installedProducts.FirstOrDefault(i =>
                     i.ProductId == manifest.ProductId
                 );
@@ -343,6 +358,8 @@ public partial class MarketplaceViewModel : ObservableObject
                     InstalledVersion = isInstalled ? installed!.Version : string.Empty,
                     ImageUrl = manifest.ImageUrl,
                     Publisher = manifest.Publisher,
+                    FeedName = entry.FeedName,
+                    FeedId = entry.FeedId,
                 };
 
                 // Fire and forget image loading

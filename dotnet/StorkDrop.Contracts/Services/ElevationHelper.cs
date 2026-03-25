@@ -30,7 +30,12 @@ public static class ElevationHelper
             || normalizedPath.StartsWith(windows);
     }
 
-    public static bool RunElevatedInstall(string productId, string version, string targetPath)
+    public static bool RunElevatedInstall(
+        string productId,
+        string version,
+        string targetPath,
+        string feedId
+    )
     {
         try
         {
@@ -46,7 +51,7 @@ public static class ElevationHelper
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--install \"{productId}\" \"{targetPath}\"",
+                Arguments = $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\"",
             };
 
             Process? process = Process.Start(startInfo);
@@ -94,7 +99,7 @@ public static class ElevationHelper
         }
     }
 
-    public static bool RunElevatedUpdate(string productId, string targetPath)
+    public static bool RunElevatedUpdate(string productId, string targetPath, string feedId)
     {
         try
         {
@@ -110,7 +115,7 @@ public static class ElevationHelper
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--update \"{productId}\" \"{targetPath}\"",
+                Arguments = $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\"",
             };
 
             Process? process = Process.Start(startInfo);

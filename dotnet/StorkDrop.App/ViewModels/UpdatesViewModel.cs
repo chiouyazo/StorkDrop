@@ -11,17 +11,17 @@ namespace StorkDrop.App.ViewModels;
 
 public partial class UpdatesViewModel : ObservableObject
 {
-    private readonly IRegistryClient _registryClient;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
     private readonly IInstallationEngine _installationEngine;
 
     public UpdatesViewModel(
-        IRegistryClient registryClient,
+        IFeedRegistry feedRegistry,
         IProductRepository productRepository,
         IInstallationEngine installationEngine
     )
     {
-        _registryClient = registryClient;
+        _feedRegistry = feedRegistry;
         _productRepository = productRepository;
         _installationEngine = installationEngine;
     }
@@ -55,17 +55,29 @@ public partial class UpdatesViewModel : ObservableObject
             IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
                 cancellationToken
             );
-            IReadOnlyList<ProductManifest> available = await _registryClient.GetAllProductsAsync(
-                cancellationToken
-            );
+
+            Dictionary<string, (ProductManifest Manifest, string FeedId)> latestByProduct = new();
+            foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+            {
+                try
+                {
+                    IRegistryClient client = _feedRegistry.GetClient(feed.Id);
+                    IReadOnlyList<ProductManifest> available = await client.GetAllProductsAsync(
+                        cancellationToken
+                    );
+                    foreach (ProductManifest m in available)
+                        latestByProduct[m.ProductId] = (m, feed.Id);
+                }
+                catch { }
+            }
 
             List<UpdateItemViewModel> updateItems = [];
             foreach (InstalledProduct product in installed)
             {
-                ProductManifest? latest = available.FirstOrDefault(m =>
-                    m.ProductId == product.ProductId
-                );
-                if (latest is not null && VersionComparer.IsNewer(latest.Version, product.Version))
+                if (
+                    latestByProduct.TryGetValue(product.ProductId, out var latest)
+                    && VersionComparer.IsNewer(latest.Manifest.Version, product.Version)
+                )
                 {
                     updateItems.Add(
                         new UpdateItemViewModel
@@ -73,9 +85,10 @@ public partial class UpdatesViewModel : ObservableObject
                             ProductId = product.ProductId,
                             Title = product.Title,
                             CurrentVersion = product.Version,
-                            AvailableVersion = latest.Version,
-                            ReleaseNotes = latest.ReleaseNotes ?? string.Empty,
+                            AvailableVersion = latest.Manifest.Version,
+                            ReleaseNotes = latest.Manifest.ReleaseNotes ?? string.Empty,
                             InstalledPath = product.InstalledPath,
+                            FeedId = latest.FeedId,
                         }
                     );
                 }
@@ -129,7 +142,8 @@ public partial class UpdatesViewModel : ObservableObject
                 update.ProductId,
                 cancellationToken
             );
-            ProductManifest? manifest = await _registryClient.GetProductManifestAsync(
+            IRegistryClient client = _feedRegistry.GetClient(update.FeedId);
+            ProductManifest? manifest = await client.GetProductManifestAsync(
                 update.ProductId,
                 cancellationToken
             );
@@ -151,7 +165,8 @@ public partial class UpdatesViewModel : ObservableObject
                     () =>
                         ElevationHelper.RunElevatedUpdate(
                             update.ProductId,
-                            installed.InstalledPath
+                            installed.InstalledPath,
+                            update.FeedId
                         ),
                     cancellationToken
                 );
@@ -176,7 +191,10 @@ public partial class UpdatesViewModel : ObservableObject
             // Non-elevated path: use UpdateAsync with progress
             update.IsUpdating = true;
             update.UpdatePercentage = 0;
-            InstallOptions options = new InstallOptions(TargetPath: installed.InstalledPath);
+            InstallOptions options = new InstallOptions(
+                TargetPath: installed.InstalledPath,
+                FeedId: update.FeedId
+            );
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
                 update.UpdatePercentage = p.Percentage;

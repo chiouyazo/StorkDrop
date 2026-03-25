@@ -15,23 +15,19 @@ namespace StorkDrop.App.ViewModels;
 public partial class SetupWizardViewModel : ObservableObject
 {
     private readonly IConfigurationService _configurationService;
-    private readonly IRegistryClient _registryClient;
     private readonly IEncryptionService _encryptionService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SetupWizardViewModel"/> class.
     /// </summary>
     /// <param name="configurationService">The configuration service for saving settings.</param>
-    /// <param name="registryClient">The registry client for testing connections.</param>
     /// <param name="encryptionService">The encryption service for securing passwords.</param>
     public SetupWizardViewModel(
         IConfigurationService configurationService,
-        IRegistryClient registryClient,
         IEncryptionService encryptionService
     )
     {
         _configurationService = configurationService;
-        _registryClient = registryClient;
         _encryptionService = encryptionService;
     }
 

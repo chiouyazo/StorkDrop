@@ -4,12 +4,10 @@ using System.Threading;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Options;
 using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
-using StorkDrop.Registry;
 
 namespace StorkDrop.App;
 
@@ -20,27 +18,27 @@ public partial class App : Application
 
     public static IServiceProvider Services { get; private set; } = null!;
 
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         string[] args = Environment.GetCommandLineArgs();
 
-        if (args.Length >= 4 && args[1] == "--install")
+        if (args.Length >= 5 && args[1] == "--install")
         {
-            RunElevatedInstall(args[2], args[3]);
+            await RunElevatedInstallAsync(args[2], args[3], args[4]);
             Shutdown();
             return;
         }
 
         if (args.Length >= 3 && args[1] == "--uninstall")
         {
-            RunElevatedUninstall(args[2]);
+            await RunElevatedUninstallAsync(args[2]);
             Shutdown();
             return;
         }
 
-        if (args.Length >= 4 && args[1] == "--update")
+        if (args.Length >= 5 && args[1] == "--update")
         {
-            RunElevatedUpdate(args[2], args[3]);
+            await RunElevatedUpdateAsync(args[2], args[3], args[4]);
             Shutdown();
             return;
         }
@@ -69,6 +67,23 @@ public partial class App : Application
                 SynchronizationContext.SetSynchronizationContext(savedContext);
             }
 
+            IConfigurationService configService =
+                Services.GetRequiredService<IConfigurationService>();
+
+            if (!configService.ConfigurationExists())
+            {
+                SetupWizardWindow wizard = Services.GetRequiredService<SetupWizardWindow>();
+                bool? result = wizard.ShowDialog();
+                if (result != true)
+                {
+                    Shutdown();
+                    return;
+                }
+            }
+
+            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
+            await feedRegistry.ReloadAsync();
+
             // Wire up file handler config dialog callback
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
             engine.OnFileHandlerConfigNeeded = (fields, currentValues) =>
@@ -85,22 +100,6 @@ public partial class App : Application
                 return result;
             };
 
-            IConfigurationService configService =
-                Services.GetRequiredService<IConfigurationService>();
-
-            if (!configService.ConfigurationExists())
-            {
-                SetupWizardWindow wizard = Services.GetRequiredService<SetupWizardWindow>();
-                bool? result = wizard.ShowDialog();
-                if (result != true)
-                {
-                    Shutdown();
-                    return;
-                }
-            }
-
-            LoadConfigIntoNexusOptions();
-
             MainWindow mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
         }
@@ -116,32 +115,27 @@ public partial class App : Application
         }
     }
 
-    private void RunElevatedInstall(string productId, string targetPath)
+    private async Task RunElevatedInstallAsync(string productId, string targetPath, string feedId)
     {
-        // Run entirely without SynchronizationContext to prevent deadlocks
-        SynchronizationContext.SetSynchronizationContext(null);
-
         try
         {
             _host = AppHostBuilder.Build();
             Services = _host.Services;
             _host.Start();
 
-            LoadConfigIntoNexusOptions();
+            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
+            await feedRegistry.ReloadAsync();
+            IRegistryClient registryClient = feedRegistry.GetClient(feedId);
 
-            IRegistryClient registryClient = Services.GetRequiredService<IRegistryClient>();
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
 
-            ProductManifest? manifest = registryClient
-                .GetProductManifestAsync(productId)
-                .GetAwaiter()
-                .GetResult();
+            ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
 
             if (manifest is not null)
             {
-                InstallOptions options = new(TargetPath: targetPath);
+                InstallOptions options = new(TargetPath: targetPath, FeedId: feedId);
                 Progress<InstallProgress> progress = new(_ => { });
-                engine.InstallAsync(manifest, options, progress).GetAwaiter().GetResult();
+                await engine.InstallAsync(manifest, options, progress);
             }
 
             Environment.ExitCode = 0;
@@ -155,37 +149,34 @@ public partial class App : Application
         {
             try
             {
-                _host?.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+                if (_host is not null)
+                    await _host.StopAsync(TimeSpan.FromSeconds(3));
                 _host?.Dispose();
             }
             catch { }
         }
     }
 
-    private void RunElevatedUninstall(string productId)
+    private async Task RunElevatedUninstallAsync(string productId)
     {
-        SynchronizationContext.SetSynchronizationContext(null);
-
         try
         {
             _host = AppHostBuilder.Build();
             Services = _host.Services;
             _host.Start();
 
-            LoadConfigIntoNexusOptions();
+            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
+            await feedRegistry.ReloadAsync();
 
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
             IProductRepository productRepository =
                 Services.GetRequiredService<IProductRepository>();
 
-            InstalledProduct? installed = productRepository
-                .GetByIdAsync(productId)
-                .GetAwaiter()
-                .GetResult();
+            InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
 
             if (installed is not null)
             {
-                engine.UninstallAsync(installed).GetAwaiter().GetResult();
+                await engine.UninstallAsync(installed);
             }
 
             Environment.ExitCode = 0;
@@ -199,45 +190,39 @@ public partial class App : Application
         {
             try
             {
-                _host?.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+                if (_host is not null)
+                    await _host.StopAsync(TimeSpan.FromSeconds(3));
                 _host?.Dispose();
             }
             catch { }
         }
     }
 
-    private void RunElevatedUpdate(string productId, string targetPath)
+    private async Task RunElevatedUpdateAsync(string productId, string targetPath, string feedId)
     {
-        SynchronizationContext.SetSynchronizationContext(null);
-
         try
         {
             _host = AppHostBuilder.Build();
             Services = _host.Services;
             _host.Start();
 
-            LoadConfigIntoNexusOptions();
+            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
+            await feedRegistry.ReloadAsync();
+            IRegistryClient registryClient = feedRegistry.GetClient(feedId);
 
-            IRegistryClient registryClient = Services.GetRequiredService<IRegistryClient>();
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
             IProductRepository productRepository =
                 Services.GetRequiredService<IProductRepository>();
 
-            InstalledProduct? installed = productRepository
-                .GetByIdAsync(productId)
-                .GetAwaiter()
-                .GetResult();
+            InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
 
-            ProductManifest? manifest = registryClient
-                .GetProductManifestAsync(productId)
-                .GetAwaiter()
-                .GetResult();
+            ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
 
             if (installed is not null && manifest is not null)
             {
-                InstallOptions options = new(TargetPath: targetPath);
+                InstallOptions options = new(TargetPath: targetPath, FeedId: feedId);
                 Progress<InstallProgress> progress = new(_ => { });
-                engine.UpdateAsync(installed, manifest, options, progress).GetAwaiter().GetResult();
+                await engine.UpdateAsync(installed, manifest, options, progress);
             }
 
             Environment.ExitCode = 0;
@@ -251,69 +236,11 @@ public partial class App : Application
         {
             try
             {
-                _host?.StopAsync(TimeSpan.FromSeconds(3)).GetAwaiter().GetResult();
+                if (_host is not null)
+                    await _host.StopAsync(TimeSpan.FromSeconds(3));
                 _host?.Dispose();
             }
             catch { }
-        }
-    }
-
-    private static void LoadConfigIntoNexusOptions()
-    {
-        try
-        {
-            string configDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "StorkDrop",
-                "Config"
-            );
-            string configPath = Path.Combine(configDir, "config.json");
-            if (!File.Exists(configPath))
-                return;
-
-            string json = File.ReadAllText(configPath);
-            AppConfiguration? config =
-                System.Text.Json.JsonSerializer.Deserialize<AppConfiguration>(
-                    json,
-                    new System.Text.Json.JsonSerializerOptions
-                    {
-                        PropertyNameCaseInsensitive = true,
-                        Converters =
-                        {
-                            new System.Text.Json.Serialization.JsonStringEnumConverter(),
-                        },
-                    }
-                );
-
-            if (config?.Feeds is not { Length: > 0 })
-                return;
-
-            FeedConfiguration firstFeed = config.Feeds[0];
-            NexusOptions nexusOptions = Services.GetRequiredService<IOptions<NexusOptions>>().Value;
-            nexusOptions.BaseUrl = firstFeed.Url;
-            nexusOptions.Repository = firstFeed.Repository;
-
-            if (!string.IsNullOrEmpty(firstFeed.Username))
-            {
-                nexusOptions.Username = firstFeed.Username;
-                try
-                {
-                    if (!string.IsNullOrEmpty(firstFeed.EncryptedPassword))
-                    {
-                        IEncryptionService encryption =
-                            Services.GetRequiredService<IEncryptionService>();
-                        nexusOptions.Password = encryption.Decrypt(firstFeed.EncryptedPassword);
-                    }
-                }
-                catch
-                {
-                    nexusOptions.Password = string.Empty;
-                }
-            }
-        }
-        catch
-        {
-            // Config load failure - use defaults
         }
     }
 

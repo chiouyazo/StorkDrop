@@ -36,4 +36,7 @@ public partial class UpdateItemViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _showReleaseNotes;
+
+    [ObservableProperty]
+    private string _feedId = string.Empty;
 }

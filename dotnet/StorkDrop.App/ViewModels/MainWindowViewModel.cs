@@ -7,6 +7,7 @@ using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -16,7 +17,7 @@ namespace StorkDrop.App.ViewModels;
 public partial class MainWindowViewModel : ObservableObject
 {
     private readonly NavigationService _navigationService;
-    private readonly IRegistryClient _registryClient;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly MarketplaceViewModel _marketplaceViewModel;
     private readonly InstalledViewModel _installedViewModel;
     private readonly UpdatesViewModel _updatesViewModel;
@@ -32,7 +33,7 @@ public partial class MainWindowViewModel : ObservableObject
     /// </summary>
     public MainWindowViewModel(
         NavigationService navigationService,
-        IRegistryClient registryClient,
+        IFeedRegistry feedRegistry,
         MarketplaceViewModel marketplaceViewModel,
         InstalledViewModel installedViewModel,
         UpdatesViewModel updatesViewModel,
@@ -45,7 +46,7 @@ public partial class MainWindowViewModel : ObservableObject
     )
     {
         _navigationService = navigationService;
-        _registryClient = registryClient;
+        _feedRegistry = feedRegistry;
         _marketplaceViewModel = marketplaceViewModel;
         _installedViewModel = installedViewModel;
         _updatesViewModel = updatesViewModel;
@@ -229,9 +230,10 @@ public partial class MainWindowViewModel : ObservableObject
         NavigateTo("Plugins");
     }
 
-    private void OnNavigateToProductDetail(string productId)
+    private void OnNavigateToProductDetail(string productId, string feedId)
     {
         ProductDetailViewModel detailVm = App.Services.GetRequiredService<ProductDetailViewModel>();
+        detailVm.FeedId = feedId;
         detailVm.GoBackRequested += () => NavigateTo("Marketplace");
         detailVm.LoadCommand.Execute(productId);
         CurrentContent = detailVm;
@@ -260,7 +262,30 @@ public partial class MainWindowViewModel : ObservableObject
             using CancellationTokenSource cts = new CancellationTokenSource(
                 TimeSpan.FromSeconds(10)
             );
-            IsConnected = await _registryClient.TestConnectionAsync(cts.Token);
+
+            IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
+            if (feeds.Count == 0)
+            {
+                IsConnected = false;
+                StatusMessage = LocalizationManager.GetString("Status_Disconnected");
+                return;
+            }
+
+            bool anyConnected = false;
+            foreach (FeedInfo feed in feeds)
+            {
+                try
+                {
+                    if (await _feedRegistry.TestConnectionAsync(feed.Id, cts.Token))
+                    {
+                        anyConnected = true;
+                        break;
+                    }
+                }
+                catch { }
+            }
+
+            IsConnected = anyConnected;
             StatusMessage = IsConnected
                 ? LocalizationManager.GetString("Status_Connected")
                 : LocalizationManager.GetString("Status_Disconnected");

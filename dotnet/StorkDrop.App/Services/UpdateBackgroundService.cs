@@ -12,7 +12,7 @@ namespace StorkDrop.App.Services;
 /// </summary>
 public sealed class UpdateBackgroundService : BackgroundService
 {
-    private readonly IRegistryClient _registryClient;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
     private readonly IConfigurationService _configurationService;
     private readonly INotificationService _notificationService;
@@ -22,14 +22,14 @@ public sealed class UpdateBackgroundService : BackgroundService
     /// Initializes a new instance of the <see cref="UpdateBackgroundService"/> class.
     /// </summary>
     public UpdateBackgroundService(
-        IRegistryClient registryClient,
+        IFeedRegistry feedRegistry,
         IProductRepository productRepository,
         IConfigurationService configurationService,
         INotificationService notificationService,
         ILogger<UpdateBackgroundService> logger
     )
     {
-        _registryClient = registryClient;
+        _feedRegistry = feedRegistry;
         _productRepository = productRepository;
         _configurationService = configurationService;
         _notificationService = notificationService;
@@ -55,13 +55,31 @@ public sealed class UpdateBackgroundService : BackgroundService
                     IReadOnlyList<InstalledProduct> installed = await _productRepository
                         .GetAllAsync(stoppingToken)
                         .ConfigureAwait(false);
-                    IReadOnlyList<ProductManifest> available = await _registryClient
-                        .GetAllProductsAsync(stoppingToken)
-                        .ConfigureAwait(false);
+
+                    List<ProductManifest> allAvailable = [];
+                    foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+                    {
+                        try
+                        {
+                            IRegistryClient client = _feedRegistry.GetClient(feed.Id);
+                            IReadOnlyList<ProductManifest> available = await client
+                                .GetAllProductsAsync(stoppingToken)
+                                .ConfigureAwait(false);
+                            allAvailable.AddRange(available);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to check feed {FeedId} for updates",
+                                feed.Id
+                            );
+                        }
+                    }
 
                     foreach (InstalledProduct product in installed)
                     {
-                        ProductManifest? latest = available.FirstOrDefault(m =>
+                        ProductManifest? latest = allAvailable.FirstOrDefault(m =>
                             m.ProductId == product.ProductId
                         );
                         if (

@@ -8,6 +8,12 @@
 
 ---
 
+<p align="center">
+  <img src="docs/images/marketplace.png" alt="StorkDrop Marketplace" width="800" />
+  <br />
+  <em>The StorkDrop marketplace  - browse, install, and update products from multiple feeds</em>
+</p>
+
 ## What is StorkDrop?
 
 StorkDrop is a self-contained deployment client that installs, updates, and manages software from Nexus OSS registries. Products declare their install behavior in a JSON manifest - no custom installer needed.
@@ -345,27 +351,120 @@ On uninstall:
 - `ACME_HOME` is deleted
 - Only `C:\Program Files\Acme\Dashboard\bin` is removed from `PATH`, leaving all other entries intact
 
+## Multi-feed support
+
+StorkDrop can connect to multiple Nexus repositories simultaneously. Products from all feeds appear in a unified marketplace with a feed filter dropdown.
+
+### Configuration
+
+Add multiple feeds in Settings or during the setup wizard. Each feed has its own URL, repository name, and optional credentials:
+
+```json
+{
+  "feeds": [
+    { "id": "internal", "name": "Internal Feed", "url": "https://nexus.company.com", "repository": "releases" },
+    { "id": "vendor", "name": "Vendor Feed", "url": "https://feed.vendor.com:8443", "repository": "tools" }
+  ]
+}
+```
+
+### How it works
+
+- Each configured feed gets its own dedicated HTTP client with independent authentication
+- The marketplace loads products from all feeds in parallel, tagging each product with its source feed
+- Installing, updating, and uninstalling always uses the correct feed  - even through UAC elevation
+- The feed filter dropdown lets users browse products from a specific feed or all feeds at once
+- Installed products remember which feed they came from, so updates are checked against the right source
+
+### Adding a new feed type
+
+The current architecture is designed for extensibility. All feed interactions go through the `IRegistryClient` interface:
+
+```csharp
+public interface IRegistryClient
+{
+    Task<IReadOnlyList<ProductManifest>> GetAllProductsAsync(CancellationToken ct = default);
+    Task<ProductManifest?> GetProductManifestAsync(string productId, CancellationToken ct = default);
+    Task<IReadOnlyList<string>> GetAvailableVersionsAsync(string productId, CancellationToken ct = default);
+    Task<Stream> DownloadProductAsync(string productId, string version, CancellationToken ct = default);
+    Task<bool> TestConnectionAsync(CancellationToken ct = default);
+}
+```
+
+To add support for a different repository type (Azure Artifacts, GitHub Releases, S3, etc.):
+
+1. Implement `IRegistryClient` for your repository backend
+2. Extend `FeedRegistry` to create your client type based on a feed type field in `FeedConfiguration`
+3. That's it  - the marketplace, install engine, updates, and all other features work automatically
+
+No changes needed in the UI, plugin system, or installation engine.
+
+## Reliability and safety
+
+StorkDrop is designed for production servers where failed updates are not acceptable.
+
+### Update safety
+
+| Protection | How it works |
+|---|---|
+| **Backup before update** | Before updating, the current installation is backed up. If the update fails at any step, the backup is automatically restored. |
+| **File manifest tracking** | Every installed file is recorded in `{productId}.files.json`. Uninstall removes exactly what was installed  - nothing more, nothing less. |
+| **Atomic file writes** | Configuration and product registry files are written to a temp file first, then moved into place. A crash mid-write can't corrupt the data. |
+| **Retry with backoff** | File deletions during uninstall/update retry up to 3 times with 500ms delays, handling transient locks from antivirus or indexer. |
+| **Environment variable rollback** | Environment variable changes are tracked per-product. Uninstall precisely reverses only what was added  - for PATH-style variables, only the appended segment is removed. |
+
+### File-in-use handling
+
+When an update needs to replace a file that's currently running:
+
+1. The locked file is renamed to `DEL_{guid}_{filename}` in the same directory
+2. The new file is copied into place
+3. The renamed file is scheduled for deletion on next reboot via the Windows MoveFileEx API
+4. The application continues with the new version; the old file is cleaned up on restart
+
+### UAC elevation
+
+StorkDrop runs as a normal user by default. When installing to a protected directory (Program Files, Windows, etc.):
+
+1. The UI detects the protected path and shows a hint
+2. On install/update/uninstall, a separate elevated process is spawned via `runas`
+3. The elevated process performs only the privileged operation, then exits
+4. The main process reloads state from disk to pick up changes made by the elevated process
+5. The feed ID is passed to the elevated process so it downloads from the correct source
+
+### File lock detection
+
+Before uninstalling or updating, StorkDrop checks for locked `.exe` and `.dll` files:
+
+- Uses the Windows Restart Manager API to identify which process holds the lock
+- Only checks executable files (not configs, logs, etc.) to avoid false positives from the indexer
+- Opens files with `FileShare.ReadWrite | FileShare.Delete`  - the minimum check needed for deletion
+- Shows a clear error naming the locked file and the process holding it
+
+### Data protection
+
+- Feed passwords are encrypted with DPAPI (Windows Data Protection)  - they're tied to the current user and machine
+- Configuration files use atomic writes (temp + move) to prevent corruption
+- The product registry validates for duplicate entries on load
+
 ## NuGet package
 
 Reference in your plugin projects:
 
 ```xml
-<PackageReference Include="StorkDrop.Contracts" Version="1.1.0" />
+<PackageReference Include="StorkDrop.Contracts" />
 ```
-
-Targets `netstandard2.0` for maximum compatibility.
 
 ## Architecture
 
 ```
 StorkDrop.sln
 dotnet/
-  StorkDrop.Contracts/     Plugin interfaces (NuGet, netstandard2.0)
-  StorkDrop.Core/          Models, interfaces, services (net10.0)
-  StorkDrop.Registry/      Nexus client (net10.0)
+  StorkDrop.Contracts/     Models, interfaces, plugin contracts (NuGet, net10.0)
+  StorkDrop.Registry/      Nexus client, FeedRegistry (net10.0)
   StorkDrop.Installer/     Install engine (net10.0-windows)
   StorkDrop.App/           WPF application (net10.0-windows, win-x64)
-  StorkDrop.Tests/         Unit tests (net10.0)
+  StorkDrop.Tests/         Unit tests (net10.0-windows)
 ```
 
 ## Building

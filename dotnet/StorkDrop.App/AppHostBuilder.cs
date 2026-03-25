@@ -71,12 +71,7 @@ public static class AppHostBuilder
             {
                 services.AddInstaller();
 
-                // Register with defaults - App.xaml.cs updates options after async config load
-                services.AddNexusRegistry(options =>
-                {
-                    options.BaseUrl = "https://example.com";
-                    options.Repository = "releases";
-                });
+                services.AddFeedRegistry();
 
                 services.AddSingleton<NavigationService>();
                 services.AddSingleton<DialogService>();
