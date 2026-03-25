@@ -94,6 +94,38 @@ public static class ElevationHelper
         }
     }
 
+    public static bool RunElevatedUpdate(string productId, string targetPath)
+    {
+        try
+        {
+            string exePath =
+                Environment.ProcessPath
+                ?? Process.GetCurrentProcess().MainModule?.FileName
+                ?? string.Empty;
+            if (string.IsNullOrEmpty(exePath))
+                return false;
+
+            ProcessStartInfo startInfo = new()
+            {
+                FileName = exePath,
+                UseShellExecute = true,
+                Verb = "runas",
+                Arguments = $"--update \"{productId}\" \"{targetPath}\"",
+            };
+
+            Process? process = Process.Start(startInfo);
+            if (process is null)
+                return false;
+
+            process.WaitForExit(TimeSpan.FromMinutes(10));
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static bool RestartAsAdmin(string[]? args = null)
     {
         try

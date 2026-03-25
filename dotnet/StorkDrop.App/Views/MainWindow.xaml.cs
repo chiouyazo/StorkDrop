@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
 using Microsoft.Extensions.DependencyInjection;
@@ -18,6 +19,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         DataContext = viewModel;
         Loaded += (_, _) => viewModel.Initialize(ContentRegion);
+
+        string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
+        VersionRun.Text = $"StorkDrop v{version}";
     }
 
     protected override void OnClosing(CancelEventArgs e)

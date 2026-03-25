@@ -74,11 +74,13 @@ jobs:
             Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
           }
 
-      - name: Pack NuGet packages
-        run: |
-          dotnet pack dotnet/StorkDrop.Contracts/StorkDrop.Contracts.csproj --configuration Release --no-build --output publish/ -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack dotnet/StorkDrop.Installer/StorkDrop.Installer.csproj --configuration Release --no-build --output publish/ -p:Version=${{ steps.version.outputs.version }}
-          dotnet pack dotnet/StorkDrop.Registry/StorkDrop.Registry.csproj --configuration Release --no-build --output publish/ -p:Version=${{ steps.version.outputs.version }}
+      - name: Pack NuGet
+        run: >
+          dotnet pack dotnet/StorkDrop.Contracts/StorkDrop.Contracts.csproj
+          --configuration Release
+          --no-build
+          --output publish/
+          -p:Version=${{ steps.version.outputs.version }}
 
       - name: Build installer
         run: iscc /DAppVersion=${{ steps.version.outputs.version }} installer\setup.iss

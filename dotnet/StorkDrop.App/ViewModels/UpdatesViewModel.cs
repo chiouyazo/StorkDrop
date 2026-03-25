@@ -147,35 +147,28 @@ public partial class UpdatesViewModel : ObservableObject
                 update.IsUpdating = true;
                 update.UpdateStatusMessage = LocalizationManager.GetString("Install_Installing");
 
-                // For elevated updates: uninstall old, then install new (both elevated)
-                bool uninstalled = await Task.Run(
-                    () => ElevationHelper.RunElevatedUninstall(update.ProductId),
-                    cancellationToken
-                );
-                if (!uninstalled)
-                {
-                    ErrorMessage = LocalizationManager.GetString("Error_AdminDenied_Uninstall");
-                    update.IsUpdating = false;
-                    return;
-                }
-
-                bool installOk = await Task.Run(
+                bool success = await Task.Run(
                     () =>
-                        ElevationHelper.RunElevatedInstall(
+                        ElevationHelper.RunElevatedUpdate(
                             update.ProductId,
-                            manifest.Version,
                             installed.InstalledPath
                         ),
                     cancellationToken
                 );
-                if (!installOk)
+
+                // Reload repository from disk (elevated process modified it)
+                await _productRepository.ReloadAsync(cancellationToken);
+
+                update.IsUpdating = false;
+
+                if (!success)
                 {
-                    ErrorMessage = LocalizationManager.GetString("Error_UpdateFailed");
-                    update.IsUpdating = false;
+                    ErrorMessage = LocalizationManager
+                        .GetString("Error_UpdateProductFailed")
+                        .Replace("{0}", update.Title);
                     return;
                 }
 
-                update.IsUpdating = false;
                 Updates.Remove(update);
                 return;
             }
