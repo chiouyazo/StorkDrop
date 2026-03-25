@@ -3,11 +3,26 @@ using StorkDrop.Contracts.Models;
 namespace StorkDrop.Contracts.Interfaces;
 
 /// <summary>
+/// Callback that the UI layer provides to show config fields to the user and return their selections.
+/// Returns null if the user cancels.
+/// </summary>
+public delegate Dictionary<string, string>? FileHandlerConfigCallback(
+    IReadOnlyList<PluginConfigField> fields,
+    Dictionary<string, string> currentValues
+);
+
+/// <summary>
 /// Defines the contract for the installation engine that handles product installation,
 /// update, and uninstall operations.
 /// </summary>
 public interface IInstallationEngine
 {
+    /// <summary>
+    /// Set by the UI layer to provide a callback for showing file handler config dialogs.
+    /// When a file type handler needs user input, this callback is invoked on the UI thread.
+    /// </summary>
+    FileHandlerConfigCallback? OnFileHandlerConfigNeeded { get; set; }
+
     /// <summary>
     /// Gets the plugin configuration schema for the specified product manifest.
     /// </summary>

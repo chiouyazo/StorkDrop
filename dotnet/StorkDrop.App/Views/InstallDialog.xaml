@@ -119,7 +119,7 @@
       />
       <Button
         x:Name="InstallButton"
-        Content="Installieren"
+        Content="{DynamicResource Install_Button}"
         Padding="16,8"
         FontWeight="SemiBold"
         Background="#C8102E"

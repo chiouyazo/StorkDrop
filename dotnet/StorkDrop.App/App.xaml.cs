@@ -69,6 +69,22 @@ public partial class App : Application
                 SynchronizationContext.SetSynchronizationContext(savedContext);
             }
 
+            // Wire up file handler config dialog callback
+            IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
+            engine.OnFileHandlerConfigNeeded = (fields, currentValues) =>
+            {
+                Dictionary<string, string>? result = null;
+                Dispatcher.Invoke(() =>
+                {
+                    ViewModels.PluginConfigDialogViewModel vm = new(fields, currentValues);
+                    Views.PluginConfigDialog dialog = new() { DataContext = vm };
+                    dialog.Owner = MainWindow;
+                    if (dialog.ShowDialog() == true)
+                        result = vm.GetValues();
+                });
+                return result;
+            };
+
             IConfigurationService configService =
                 Services.GetRequiredService<IConfigurationService>();
 

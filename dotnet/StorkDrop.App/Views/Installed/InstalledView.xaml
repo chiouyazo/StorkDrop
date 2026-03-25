@@ -81,18 +81,45 @@
                   Style="{DynamicResource HeadingSmall}"
                   Margin="0,0,0,4"
                 />
-                <TextBlock FontSize="12" Foreground="{DynamicResource OnSurfaceVariantBrush}">
-                  <Run Text="Version:" />
-                  <Run Text="{Binding Version, Mode=OneWay}" />
-                </TextBlock>
-                <TextBlock FontSize="12" Foreground="{DynamicResource OnSurfaceVariantBrush}">
-                  <Run Text="Pfad:" />
-                  <Run Text="{Binding InstalledPath, Mode=OneWay}" />
-                </TextBlock>
-                <TextBlock FontSize="12" Foreground="{DynamicResource OnSurfaceVariantBrush}">
-                  <Run Text="Installiert:" />
-                  <Run Text="{Binding InstalledDate, Mode=OneWay, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}" />
-                </TextBlock>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock
+                    Text="{DynamicResource Installed_Version}"
+                    FontSize="12"
+                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                    Margin="0,0,4,0"
+                  />
+                  <TextBlock
+                    Text="{Binding Version}"
+                    FontSize="12"
+                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                  />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock
+                    Text="{DynamicResource Installed_Path}"
+                    FontSize="12"
+                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                    Margin="0,0,4,0"
+                  />
+                  <TextBlock
+                    Text="{Binding InstalledPath}"
+                    FontSize="12"
+                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                  />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock
+                    Text="{DynamicResource Installed_Date}"
+                    FontSize="12"
+                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                    Margin="0,0,4,0"
+                  />
+                  <TextBlock
+                    Text="{Binding InstalledDate, StringFormat='{}{0:yyyy-MM-dd HH:mm}'}"
+                    FontSize="12"
+                    Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                  />
+                </StackPanel>
               </StackPanel>
 
               <Button

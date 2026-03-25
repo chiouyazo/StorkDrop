@@ -25,6 +25,9 @@ public sealed class InstallationEngine : IInstallationEngine
     private readonly EnvironmentVariableService _envVarService;
     private readonly List<IFileTypeHandler> _fileTypeHandlers;
 
+    /// <inheritdoc />
+    public FileHandlerConfigCallback? OnFileHandlerConfigNeeded { get; set; }
+
     private static readonly JsonSerializerOptions FileManifestJsonOptions =
         new JsonSerializerOptions { WriteIndented = true };
 
@@ -282,6 +285,30 @@ public sealed class InstallationEngine : IInstallationEngine
                             matchingFiles.Count,
                             string.Join(", ", handler.HandledExtensions)
                         );
+
+                        // Ask handler if it needs user config for these files
+                        IReadOnlyList<PluginConfigField> handlerFields =
+                            handler.GetFileHandlerConfig(matchingFiles, fileHandlerContext);
+
+                        if (handlerFields.Count > 0 && OnFileHandlerConfigNeeded is not null)
+                        {
+                            Dictionary<string, string>? userValues = OnFileHandlerConfigNeeded(
+                                handlerFields,
+                                fileHandlerContext.ConfigValues
+                            );
+
+                            if (userValues is null)
+                            {
+                                _logger.LogInformation("User cancelled file handler config dialog");
+                                continue; // Skip this handler
+                            }
+
+                            // Merge user selections into context
+                            foreach (KeyValuePair<string, string> kv in userValues)
+                            {
+                                fileHandlerContext.ConfigValues[kv.Key] = kv.Value;
+                            }
+                        }
 
                         FileHandlerResult handlerResult = await handler.HandleFilesAsync(
                             matchingFiles,

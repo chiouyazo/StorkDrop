@@ -287,4 +287,50 @@
   <system:String x:Key="Dialog_Title_Error">Fehler</system:String>
   <system:String x:Key="Dialog_Title_Confirm">Best&#228;tigung</system:String>
   <system:String x:Key="Dialog_Title_Information">Information</system:String>
+
+  <!-- Setup wizard -->
+  <system:String x:Key="Setup_Language">Sprache:</system:String>
+  <system:String x:Key="Setup_StepFormat">Schritt {0} von {1}</system:String>
+  <system:String x:Key="Summary_Name">Name:</system:String>
+  <system:String x:Key="Summary_Url">URL:</system:String>
+  <system:String x:Key="Summary_Repository">Repository:</system:String>
+  <system:String x:Key="Summary_Username">Benutzername:</system:String>
+  <system:String x:Key="Summary_Options">Optionen</system:String>
+  <system:String x:Key="Summary_Host">Host</system:String>
+  <system:String x:Key="Summary_Port">Port</system:String>
+
+  <!-- Installed view -->
+  <system:String x:Key="Installed_Version">Version:</system:String>
+  <system:String x:Key="Installed_Path">Pfad:</system:String>
+  <system:String x:Key="Installed_Date">Installiert:</system:String>
+
+  <!-- Updates -->
+  <system:String x:Key="Updates_CheckingForUpdates">Suche nach Updates...</system:String>
+
+  <!-- Plugin config dialog -->
+  <system:String x:Key="PluginConfig_Title">Plugin-Konfiguration</system:String>
+  <system:String x:Key="PluginConfig_Cancel">Abbrechen</system:String>
+  <system:String x:Key="PluginConfig_Continue">Weiter</system:String>
+
+  <!-- Plugins view -->
+  <system:String x:Key="Plugins_NoPluginsHint"
+    >Keine Plugins geladen. Legen Sie Plugin-DLLs im plugins/-Verzeichnis neben der Anwendung ab.</system:String
+  >
+  <system:String x:Key="Plugins_PluginId">Plugin-ID:</system:String>
+  <system:String x:Key="Plugins_AssociatedFeeds">Zugeordnete Feeds:</system:String>
+
+  <!-- Activity log columns -->
+  <system:String x:Key="ActivityLog_Timestamp">Zeitstempel</system:String>
+  <system:String x:Key="ActivityLog_Action">Aktion</system:String>
+  <system:String x:Key="ActivityLog_Product">Produkt</system:String>
+  <system:String x:Key="ActivityLog_Details">Details</system:String>
+  <system:String x:Key="ActivityLog_Status">Status</system:String>
+
+  <!-- Settings tooltip -->
+  <system:String x:Key="Settings_AutoUpdateHint"
+    >StorkDrop pr&#252;ft im Hintergrund auf Updates und zeigt Benachrichtigungen an.</system:String
+  >
+
+  <!-- Loading error -->
+  <system:String x:Key="Error_LoadFailed">Fehler beim Laden: {0}</system:String>
 </ResourceDictionary>

@@ -19,6 +19,20 @@ public interface IFileTypeHandler
     IReadOnlyList<string> HandledExtensions { get; }
 
     /// <summary>
+    /// Called after extraction with the list of matching files. Returns config fields
+    /// that StorkDrop shows to the user before calling <see cref="HandleFilesAsync"/>.
+    /// Use this to let the user choose which files to deploy, which database to target, etc.
+    /// Return an empty list if no user input is needed.
+    /// </summary>
+    /// <param name="files">Full paths to the matching files found in the package.</param>
+    /// <param name="context">Install context with config values and paths.</param>
+    /// <returns>Config fields to show the user, or empty if no input needed.</returns>
+    IReadOnlyList<PluginConfigField> GetFileHandlerConfig(
+        IReadOnlyList<string> files,
+        PluginContext context
+    );
+
+    /// <summary>
     /// Called with all files matching <see cref="HandledExtensions"/> found in the package.
     /// The plugin can install them to databases, run them as scripts, register them, etc.
     /// </summary>

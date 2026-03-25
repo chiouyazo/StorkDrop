@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using StorkDrop.App.Localization;
 using StorkDrop.App.ViewModels;
 
 namespace StorkDrop.App.Views.Installed;
@@ -22,7 +23,7 @@ public partial class InstalledView : UserControl
         }
         catch (Exception ex)
         {
-            ShowNotification($"Fehler beim Laden: {ex.Message}");
+            ShowNotification(LocalizationManager.GetString("Error_LoadFailed", ex.Message));
         }
     }
 

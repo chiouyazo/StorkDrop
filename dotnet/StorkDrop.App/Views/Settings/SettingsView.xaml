@@ -253,7 +253,7 @@
               IsChecked="{Binding AutoCheckForUpdates}"
             />
             <Border
-              ToolTip="Stork checks for updates in the background and shows notifications."
+              ToolTip="{DynamicResource Settings_AutoUpdateHint}"
               Margin="8,0,0,0"
               Width="18"
               Height="18"

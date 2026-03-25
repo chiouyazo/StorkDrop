@@ -46,7 +46,11 @@
       <!-- Options -->
       <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
         <StackPanel>
-          <TextBlock Text="Options" Style="{DynamicResource HeadingSmall}" Margin="0,0,0,8" />
+          <TextBlock
+            Text="{DynamicResource Summary_Options}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,8"
+          />
 
           <CheckBox
             Content="{DynamicResource Settings_AutoStart}"
@@ -78,7 +82,11 @@
               </Grid.ColumnDefinitions>
 
               <StackPanel Margin="0,0,8,0">
-                <TextBlock Text="Host" Style="{DynamicResource CaptionText}" Margin="0,0,0,4" />
+                <TextBlock
+                  Text="{DynamicResource Summary_Host}"
+                  Style="{DynamicResource CaptionText}"
+                  Margin="0,0,0,4"
+                />
                 <TextBox
                   Text="{Binding ProxyHost, UpdateSourceTrigger=PropertyChanged}"
                   Padding="8,6"
@@ -87,7 +95,11 @@
               </StackPanel>
 
               <StackPanel Grid.Column="1">
-                <TextBlock Text="Port" Style="{DynamicResource CaptionText}" Margin="0,0,0,4" />
+                <TextBlock
+                  Text="{DynamicResource Summary_Port}"
+                  Style="{DynamicResource CaptionText}"
+                  Margin="0,0,0,4"
+                />
                 <TextBox
                   Text="{Binding ProxyPort, UpdateSourceTrigger=PropertyChanged}"
                   Padding="8,6"
