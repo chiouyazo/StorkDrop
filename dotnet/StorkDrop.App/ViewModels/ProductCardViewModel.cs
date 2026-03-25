@@ -57,6 +57,9 @@ public partial class ProductCardViewModel : ObservableObject
     [ObservableProperty]
     private string? _feedName;
 
+    [ObservableProperty]
+    private string _feedId = string.Empty;
+
     /// <summary>
     /// Loads the product image from the specified URL asynchronously.
     /// </summary>

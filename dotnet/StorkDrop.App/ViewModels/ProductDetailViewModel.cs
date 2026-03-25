@@ -13,7 +13,7 @@ namespace StorkDrop.App.ViewModels;
 /// </summary>
 public partial class ProductDetailViewModel : ObservableObject
 {
-    private readonly IRegistryClient _registryClient;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly IInstallationEngine _installationEngine;
     private readonly IProductRepository _productRepository;
     private readonly DialogService _dialogService;
@@ -21,22 +21,24 @@ public partial class ProductDetailViewModel : ObservableObject
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductDetailViewModel"/> class.
     /// </summary>
-    /// <param name="registryClient">The registry client for fetching product details.</param>
+    /// <param name="feedRegistry">The feed registry for fetching product details.</param>
     /// <param name="installationEngine">The engine for installing products.</param>
     /// <param name="productRepository">The repository for installed products.</param>
     /// <param name="dialogService">The dialog service for user interactions.</param>
     public ProductDetailViewModel(
-        IRegistryClient registryClient,
+        IFeedRegistry feedRegistry,
         IInstallationEngine installationEngine,
         IProductRepository productRepository,
         DialogService dialogService
     )
     {
-        _registryClient = registryClient;
+        _feedRegistry = feedRegistry;
         _installationEngine = installationEngine;
         _productRepository = productRepository;
         _dialogService = dialogService;
     }
+
+    public string FeedId { get; set; } = string.Empty;
 
     [ObservableProperty]
     private ProductManifest? _manifest;
@@ -120,11 +122,12 @@ public partial class ProductDetailViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAsync(string productId)
     {
-        Manifest = await _registryClient.GetProductManifestAsync(productId);
+        IRegistryClient client = _feedRegistry.GetClient(FeedId);
+        Manifest = await client.GetProductManifestAsync(productId);
         if (Manifest is null)
             return;
 
-        IReadOnlyList<string> versions = await _registryClient.GetAvailableVersionsAsync(productId);
+        IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync(productId);
         AvailableVersions = new ObservableCollection<string>(versions);
         SelectedVersion = Manifest.Version;
         InstallPath = Manifest.RecommendedInstallPath ?? string.Empty;
@@ -149,7 +152,8 @@ public partial class ProductDetailViewModel : ObservableObject
 
         try
         {
-            ProductManifest? versionManifest = await _registryClient.GetProductManifestAsync(
+            IRegistryClient client = _feedRegistry.GetClient(FeedId);
+            ProductManifest? versionManifest = await client.GetProductManifestAsync(
                 Manifest.ProductId,
                 version
             );
@@ -196,20 +200,18 @@ public partial class ProductDetailViewModel : ObservableObject
         try
         {
             IsInstalling = true;
-            InstallOptions options = new InstallOptions(TargetPath: InstallPath);
+            InstallOptions options = new InstallOptions(TargetPath: InstallPath, FeedId: FeedId);
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
                 InstallProgress = p.Percentage;
                 InstallStatusMessage = p.Message;
             });
 
+            IRegistryClient client = _feedRegistry.GetClient(FeedId);
             ProductManifest? versionManifest =
                 SelectedVersion == Manifest.Version
                     ? Manifest
-                    : await _registryClient.GetProductManifestAsync(
-                        Manifest.ProductId,
-                        SelectedVersion
-                    );
+                    : await client.GetProductManifestAsync(Manifest.ProductId, SelectedVersion);
 
             if (versionManifest is not null)
             {

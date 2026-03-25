@@ -97,7 +97,7 @@
         <ColumnDefinition Width="*" />
       </Grid.ColumnDefinitions>
 
-      <!-- Feed filter -->
+      <!-- Feed filter (hidden when only one option) -->
       <Border
         Grid.Column="0"
         BorderBrush="#E0E0E0"
@@ -105,6 +105,7 @@
         CornerRadius="6"
         Background="White"
         Margin="0,0,6,0"
+        Visibility="{Binding ShowFeedFilter, Converter={StaticResource BoolToVisibilityConverter}}"
       >
         <ComboBox
           ItemsSource="{Binding AvailableFeedFilters}"

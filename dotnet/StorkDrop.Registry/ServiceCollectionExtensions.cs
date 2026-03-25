@@ -37,4 +37,10 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    public static IServiceCollection AddFeedRegistry(this IServiceCollection services)
+    {
+        services.AddSingleton<IFeedRegistry, FeedRegistry>();
+        return services;
+    }
 }

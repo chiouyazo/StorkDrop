@@ -4,13 +4,11 @@ using System.Net.Http.Headers;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Microsoft.Extensions.DependencyInjection;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
-using StorkDrop.Registry;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -23,6 +21,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IEncryptionService _encryptionService;
     private readonly DialogService _dialogService;
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
+    private readonly IFeedRegistry _feedRegistry;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
@@ -31,17 +30,20 @@ public partial class SettingsViewModel : ObservableObject
     /// <param name="encryptionService">The encryption service for securing passwords.</param>
     /// <param name="dialogService">The dialog service for user interactions.</param>
     /// <param name="plugins">The loaded plugins to get recommended feeds from.</param>
+    /// <param name="feedRegistry">The feed registry for reloading feeds after save.</param>
     public SettingsViewModel(
         IConfigurationService configurationService,
         IEncryptionService encryptionService,
         DialogService dialogService,
-        IEnumerable<IStorkDropPlugin> plugins
+        IEnumerable<IStorkDropPlugin> plugins,
+        IFeedRegistry feedRegistry
     )
     {
         _configurationService = configurationService;
         _encryptionService = encryptionService;
         _dialogService = dialogService;
         _plugins = plugins;
+        _feedRegistry = feedRegistry;
 
         BuildRecommendedFeeds();
     }
@@ -280,20 +282,7 @@ public partial class SettingsViewModel : ObservableObject
 
             await _configurationService.SaveAsync(config);
 
-            // Reload NexusOptions so marketplace uses new credentials
-            if (feeds.Length > 0)
-            {
-                FeedConfiguration firstFeed = feeds[0];
-                NexusOptions nexusOptions = App
-                    .Services.GetRequiredService<Microsoft.Extensions.Options.IOptions<NexusOptions>>()
-                    .Value;
-                nexusOptions.BaseUrl = firstFeed.Url;
-                nexusOptions.Repository = firstFeed.Repository;
-                nexusOptions.Username = firstFeed.Username ?? string.Empty;
-                nexusOptions.Password = !string.IsNullOrEmpty(firstFeed.EncryptedPassword)
-                    ? _encryptionService.Decrypt(firstFeed.EncryptedPassword)
-                    : string.Empty;
-            }
+            await _feedRegistry.ReloadAsync();
 
             ErrorMessage = string.Empty;
         }

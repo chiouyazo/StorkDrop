@@ -14,7 +14,7 @@ namespace StorkDrop.Installer;
 /// </summary>
 public sealed class InstallationEngine : IInstallationEngine
 {
-    private readonly IRegistryClient _registryClient;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
     private readonly IBackupService _backupService;
     private readonly IFileLockDetector _fileLockDetector;
@@ -35,7 +35,7 @@ public sealed class InstallationEngine : IInstallationEngine
     /// Initializes a new instance of the <see cref="InstallationEngine"/> class.
     /// </summary>
     public InstallationEngine(
-        IRegistryClient registryClient,
+        IFeedRegistry feedRegistry,
         IProductRepository productRepository,
         IBackupService backupService,
         IFileLockDetector fileLockDetector,
@@ -47,7 +47,7 @@ public sealed class InstallationEngine : IInstallationEngine
         ILogger<InstallationEngine> logger
     )
     {
-        _registryClient = registryClient;
+        _feedRegistry = feedRegistry;
         _productRepository = productRepository;
         _backupService = backupService;
         _fileLockDetector = fileLockDetector;
@@ -57,6 +57,18 @@ public sealed class InstallationEngine : IInstallationEngine
         _fileTypeHandlers = plugins.OfType<IFileTypeHandler>().ToList();
         _envVarService = envVarService;
         _logger = logger;
+    }
+
+    private IRegistryClient GetClientForFeed(string? feedId)
+    {
+        if (string.IsNullOrEmpty(feedId))
+        {
+            IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
+            if (feeds.Count == 0)
+                throw new InvalidOperationException("No feeds configured.");
+            return _feedRegistry.GetClient(feeds[0].Id);
+        }
+        return _feedRegistry.GetClient(feedId);
     }
 
     /// <inheritdoc />
@@ -135,7 +147,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 bool elevated = ElevationHelper.RunElevatedInstall(
                     manifest.ProductId,
                     manifest.Version,
-                    options.TargetPath
+                    options.TargetPath,
+                    options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
                 );
                 if (!elevated)
                 {
@@ -185,7 +198,8 @@ public sealed class InstallationEngine : IInstallationEngine
                     $"Downloading {manifest.Title} v{manifest.Version}..."
                 )
             );
-            using Stream downloadStream = await _registryClient.DownloadProductAsync(
+            IRegistryClient registryClient = GetClientForFeed(options.FeedId);
+            using Stream downloadStream = await registryClient.DownloadProductAsync(
                 manifest.ProductId,
                 manifest.Version,
                 cancellationToken
@@ -869,7 +883,8 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            using Stream downloadStream = await _registryClient.DownloadProductAsync(
+            IRegistryClient registryClient = GetClientForFeed(null);
+            using Stream downloadStream = await registryClient.DownloadProductAsync(
                 manifest.ProductId,
                 manifest.Version,
                 cancellationToken

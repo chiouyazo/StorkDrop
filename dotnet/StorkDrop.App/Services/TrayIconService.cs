@@ -57,9 +57,21 @@ public sealed class TrayIconService : IDisposable
         if (_trayIcon is null)
             return;
 
-        _trayIcon.Visibility = Visibility.Collapsed;
-        _trayIcon.Dispose();
-        _trayIcon = null;
+        if (_trayIcon.Dispatcher.CheckAccess())
+        {
+            _trayIcon.Visibility = Visibility.Collapsed;
+            _trayIcon.Dispose();
+            _trayIcon = null;
+        }
+        else
+        {
+            _trayIcon.Dispatcher.Invoke(() =>
+            {
+                _trayIcon.Visibility = Visibility.Collapsed;
+                _trayIcon.Dispose();
+                _trayIcon = null;
+            });
+        }
     }
 
     public void ShowBalloon(string title, string message)
@@ -69,6 +81,13 @@ public sealed class TrayIconService : IDisposable
 
     public void Dispose()
     {
-        Hide();
+        try
+        {
+            Hide();
+        }
+        catch
+        {
+            // Dispatcher may already be shut down during app exit
+        }
     }
 }
