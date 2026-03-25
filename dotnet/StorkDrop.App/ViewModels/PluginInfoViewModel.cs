@@ -2,9 +2,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace StorkDrop.App.ViewModels;
 
-/// <summary>
-/// View model representing a single loaded plugin in the plugins list.
-/// </summary>
 public partial class PluginInfoViewModel : ObservableObject
 {
     [ObservableProperty]
@@ -15,4 +12,10 @@ public partial class PluginInfoViewModel : ObservableObject
 
     [ObservableProperty]
     private string _associatedFeeds = string.Empty;
+
+    [ObservableProperty]
+    private bool _isFailed;
+
+    [ObservableProperty]
+    private string _errorMessage = string.Empty;
 }

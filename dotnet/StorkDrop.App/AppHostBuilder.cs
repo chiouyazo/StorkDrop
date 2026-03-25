@@ -21,20 +21,16 @@ namespace StorkDrop.App;
 /// </summary>
 public sealed class PluginLoadStatus
 {
-    /// <summary>
-    /// Gets or sets the total number of plugin DLLs discovered.
-    /// </summary>
     public int TotalPluginDlls { get; set; }
-
-    /// <summary>
-    /// Gets or sets the number of plugins that loaded successfully.
-    /// </summary>
     public int LoadedCount { get; set; }
-
-    /// <summary>
-    /// Gets or sets the number of plugins that failed to load.
-    /// </summary>
     public int FailedCount { get; set; }
+    public List<PluginLoadError> Errors { get; } = [];
+}
+
+public sealed class PluginLoadError
+{
+    public string DllPath { get; init; } = string.Empty;
+    public string ErrorMessage { get; init; } = string.Empty;
 }
 
 /// <summary>
@@ -127,25 +123,51 @@ public static class AppHostBuilder
 
         foreach (string dllPath in dllFiles)
         {
+            string dllName = Path.GetFileName(dllPath);
+            Log.Information("Loading plugin DLL: {DllPath}", dllPath);
+
             try
             {
-                AssemblyLoadContext loadContext = new AssemblyLoadContext(
-                    Path.GetFileNameWithoutExtension(dllPath),
-                    isCollectible: false
-                );
+                PluginLoadContext loadContext = new(dllPath);
                 Assembly assembly = loadContext.LoadFromAssemblyPath(dllPath);
 
-                IEnumerable<Type> pluginTypes = assembly
-                    .GetTypes()
-                    .Where(t =>
-                        typeof(IStorkDropPlugin).IsAssignableFrom(t)
-                        && t is { IsInterface: false, IsAbstract: false }
+                Type[] allTypes;
+                try
+                {
+                    allTypes = assembly.GetTypes();
+                }
+                catch (ReflectionTypeLoadException ex)
+                {
+                    string loaderErrors = string.Join(
+                        "; ",
+                        ex.LoaderExceptions
+                            ?.Where(e => e is not null)
+                            .Select(e => e!.Message)
+                            ?? []
                     );
+                    string error = $"Could not load types: {loaderErrors}";
+                    Log.Error("Plugin {DllName} failed: {Error}", dllName, error);
+                    status.FailedCount++;
+                    status.Errors.Add(
+                        new PluginLoadError { DllPath = dllName, ErrorMessage = error }
+                    );
+                    continue;
+                }
+
+                IEnumerable<Type> pluginTypes = allTypes.Where(t =>
+                    typeof(IStorkDropPlugin).IsAssignableFrom(t)
+                    && t is { IsInterface: false, IsAbstract: false }
+                );
 
                 bool foundPlugin = false;
                 foreach (Type pluginType in pluginTypes)
                 {
                     services.AddSingleton(typeof(IStorkDropPlugin), pluginType);
+                    Log.Information(
+                        "Registered plugin {PluginType} from {DllName}",
+                        pluginType.FullName,
+                        dllName
+                    );
                     foundPlugin = true;
                 }
 
@@ -153,11 +175,59 @@ public static class AppHostBuilder
                 {
                     status.LoadedCount++;
                 }
+                else
+                {
+                    Log.Warning(
+                        "DLL {DllName} loaded but contains no IStorkDropPlugin implementations",
+                        dllName
+                    );
+                }
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Error(ex, "Plugin {DllName} failed to load", dllName);
                 status.FailedCount++;
+                status.Errors.Add(
+                    new PluginLoadError { DllPath = dllName, ErrorMessage = ex.Message }
+                );
             }
+        }
+    }
+
+    /// <summary>
+    /// Custom AssemblyLoadContext that resolves shared assemblies (like StorkDrop.Contracts)
+    /// from the host app instead of requiring an exact version match in the plugin directory.
+    /// </summary>
+    private sealed class PluginLoadContext : AssemblyLoadContext
+    {
+        private readonly AssemblyDependencyResolver _resolver;
+
+        public PluginLoadContext(string pluginPath)
+            : base(Path.GetFileNameWithoutExtension(pluginPath), isCollectible: false)
+        {
+            _resolver = new AssemblyDependencyResolver(pluginPath);
+        }
+
+        protected override Assembly? Load(AssemblyName assemblyName)
+        {
+            // For shared assemblies, use the host's version (avoids version mismatch)
+            Assembly? alreadyLoaded = Default
+                .Assemblies.FirstOrDefault(a =>
+                    string.Equals(
+                        a.GetName().Name,
+                        assemblyName.Name,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+            if (alreadyLoaded is not null)
+                return alreadyLoaded;
+
+            // Try to resolve from the plugin's own directory
+            string? resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
+            if (resolvedPath is not null)
+                return LoadFromAssemblyPath(resolvedPath);
+
+            return null;
         }
     }
 }

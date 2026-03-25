@@ -4,36 +4,52 @@ using StorkDrop.Contracts;
 
 namespace StorkDrop.App.ViewModels;
 
-/// <summary>
-/// View model for the plugins view, displaying loaded StorkDrop plugins.
-/// </summary>
 public partial class PluginsViewModel : ObservableObject
 {
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
+    private readonly PluginLoadStatus _loadStatus;
 
     [ObservableProperty]
-    private ObservableCollection<PluginInfoViewModel> _loadedPlugins =
-        new ObservableCollection<PluginInfoViewModel>();
+    private ObservableCollection<PluginInfoViewModel> _loadedPlugins = [];
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="PluginsViewModel"/> class.
-    /// </summary>
-    /// <param name="plugins">The collection of loaded StorkDrop plugins.</param>
-    public PluginsViewModel(IEnumerable<IStorkDropPlugin> plugins)
+    public PluginsViewModel(IEnumerable<IStorkDropPlugin> plugins, PluginLoadStatus loadStatus)
     {
         _plugins = plugins;
+        _loadStatus = loadStatus;
         LoadPlugins();
     }
 
     private void LoadPlugins()
     {
-        LoadedPlugins = new ObservableCollection<PluginInfoViewModel>(
-            _plugins.Select(p => new PluginInfoViewModel
-            {
-                DisplayName = p.DisplayName,
-                PluginId = p.PluginId,
-                AssociatedFeeds = string.Join(", ", p.AssociatedFeeds),
-            })
-        );
+        List<PluginInfoViewModel> items = [];
+
+        // Successfully loaded plugins
+        foreach (IStorkDropPlugin p in _plugins)
+        {
+            items.Add(
+                new PluginInfoViewModel
+                {
+                    DisplayName = p.DisplayName,
+                    PluginId = p.PluginId,
+                    AssociatedFeeds = string.Join(", ", p.AssociatedFeeds),
+                }
+            );
+        }
+
+        // Failed plugins
+        foreach (PluginLoadError error in _loadStatus.Errors)
+        {
+            items.Add(
+                new PluginInfoViewModel
+                {
+                    DisplayName = error.DllPath,
+                    PluginId = "Failed to load",
+                    IsFailed = true,
+                    ErrorMessage = error.ErrorMessage,
+                }
+            );
+        }
+
+        LoadedPlugins = new ObservableCollection<PluginInfoViewModel>(items);
     }
 }
