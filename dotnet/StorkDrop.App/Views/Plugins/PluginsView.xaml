@@ -18,21 +18,59 @@
     <ItemsControl Grid.Row="1" ItemsSource="{Binding LoadedPlugins}">
       <ItemsControl.ItemTemplate>
         <DataTemplate>
-          <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,12">
+          <Border Margin="0,0,0,12">
+            <Border.Style>
+              <Style TargetType="Border" BasedOn="{StaticResource CardBorder}">
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsFailed}" Value="True">
+                    <Setter Property="BorderBrush" Value="#D32F2F" />
+                    <Setter Property="Background" Value="#FFF3F3" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </Border.Style>
             <StackPanel>
-              <TextBlock
-                Text="{Binding DisplayName}"
-                Style="{DynamicResource HeadingSmall}"
-                Margin="0,0,0,4"
-              />
+              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <TextBlock
+                  Text="{Binding DisplayName}"
+                  Style="{DynamicResource HeadingSmall}"
+                />
+                <!-- Failed badge -->
+                <Border
+                  Background="#D32F2F"
+                  CornerRadius="3"
+                  Padding="6,2"
+                  Margin="8,0,0,0"
+                  VerticalAlignment="Center"
+                  Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibilityConverter}}"
+                >
+                  <TextBlock Text="Failed" FontSize="11" Foreground="White" />
+                </Border>
+              </StackPanel>
+
               <TextBlock Style="{DynamicResource BodyText}">
                 <Run Text="Plugin ID: " FontWeight="SemiBold" />
                 <Run Text="{Binding PluginId, Mode=OneWay}" />
               </TextBlock>
-              <TextBlock Style="{DynamicResource BodyText}">
+
+              <!-- Associated feeds (only for loaded plugins) -->
+              <TextBlock
+                Style="{DynamicResource BodyText}"
+                Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibilityConverter}, ConverterParameter=Inverse}"
+              >
                 <Run Text="Associated Feeds: " FontWeight="SemiBold" />
                 <Run Text="{Binding AssociatedFeeds, Mode=OneWay}" />
               </TextBlock>
+
+              <!-- Error message (only for failed plugins) -->
+              <TextBlock
+                Text="{Binding ErrorMessage}"
+                Foreground="#D32F2F"
+                FontSize="12"
+                TextWrapping="Wrap"
+                Margin="0,4,0,0"
+                Visibility="{Binding IsFailed, Converter={StaticResource BoolToVisibilityConverter}}"
+              />
             </StackPanel>
           </Border>
         </DataTemplate>
