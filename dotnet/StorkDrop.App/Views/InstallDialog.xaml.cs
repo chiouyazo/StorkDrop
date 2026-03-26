@@ -43,6 +43,14 @@ public partial class InstallDialog : Window
 
     private void UpdateAdminHint()
     {
+        // Skip admin check if path contains unresolved templates like {StepsPath}
+        if (PathBox.Text.Contains('{'))
+        {
+            AdminHint.Visibility = Visibility.Collapsed;
+            InstallButton.Content = LocalizationManager.GetString("Install_Button");
+            return;
+        }
+
         bool needsAdmin = ElevationHelper.PathRequiresAdmin(PathBox.Text);
         bool isAdmin = ElevationHelper.IsRunningAsAdmin();
 
