@@ -158,7 +158,13 @@ public sealed class InstallationEngine : IInstallationEngine
 
         try
         {
-            if (
+            if (options.TargetPath.Contains('{'))
+            {
+                _logger.LogInformation(
+                    "Target path contains template variables, deferring elevation check until after resolution"
+                );
+            }
+            else if (
                 ElevationHelper.PathRequiresAdmin(options.TargetPath)
                 && !ElevationHelper.IsRunningAsAdmin()
             )
@@ -362,6 +368,12 @@ public sealed class InstallationEngine : IInstallationEngine
             // Step: Handle custom file types (plugins claim files before copy)
             HashSet<string> handledFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             PluginContext? fileHandlerContext = null;
+
+            _logger.LogDebug(
+                "SkipFileHandlers={Skip}, FileTypeHandlers={Count}",
+                options.SkipFileHandlers,
+                _fileTypeHandlers.Count
+            );
 
             // When skipping file handlers (elevated process), still exclude their file extensions
             if (options.SkipFileHandlers && _fileTypeHandlers.Count > 0)
