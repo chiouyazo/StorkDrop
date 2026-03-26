@@ -142,24 +142,32 @@
               </CheckBox>
 
               <!-- Password -->
-              <PasswordBox
-                Tag="{Binding}"
-                PasswordChanged="PasswordBox_PasswordChanged"
-                Padding="8,8"
-                FontSize="13"
-              >
-                <PasswordBox.Style>
-                  <Style TargetType="PasswordBox">
+              <Border>
+                <Border.Style>
+                  <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed" />
-                    <Setter Property="MinHeight" Value="36" />
+                    <Setter Property="BorderBrush" Value="#E0E0E0" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="CornerRadius" Value="4" />
+                    <Setter Property="Background" Value="White" />
                     <Style.Triggers>
                       <DataTrigger Binding="{Binding FieldTypeName}" Value="Password">
                         <Setter Property="Visibility" Value="Visible" />
                       </DataTrigger>
                     </Style.Triggers>
                   </Style>
-                </PasswordBox.Style>
-              </PasswordBox>
+                </Border.Style>
+                <PasswordBox
+                  Padding="8,6"
+                  FontSize="13"
+                  MinHeight="36"
+                  VerticalContentAlignment="Center"
+                  BorderThickness="0"
+                  Background="Transparent"
+                  Tag="{Binding}"
+                  PasswordChanged="PasswordBox_PasswordChanged"
+                />
+              </Border>
 
               <!-- FilePath -->
               <Grid>

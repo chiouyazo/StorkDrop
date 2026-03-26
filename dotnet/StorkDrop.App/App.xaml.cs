@@ -46,6 +46,12 @@ public partial class App : Application
 
         if (!SingleInstanceMutex.WaitOne(TimeSpan.Zero, true))
         {
+            MessageBox.Show(
+                "StorkDrop is already running. Check the system tray.",
+                "StorkDrop",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            );
             Shutdown();
             return;
         }
@@ -103,7 +109,7 @@ public partial class App : Application
                 return result;
             };
 
-            // Install path resolution via plugins (e.g., {StepsPath} -> actual directory)
+            // Install path resolution via plugins (e.g., {ACMEPath} -> actual directory)
             IEnumerable<IStorkDropPlugin> allPlugins = Services.GetServices<IStorkDropPlugin>();
             List<StorkDrop.Contracts.IInstallPathResolver> pathResolvers = allPlugins
                 .OfType<StorkDrop.Contracts.IInstallPathResolver>()

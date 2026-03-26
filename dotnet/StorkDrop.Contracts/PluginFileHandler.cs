@@ -13,7 +13,7 @@ namespace StorkDrop.Contracts;
 public interface IFileTypeHandler
 {
     /// <summary>
-    /// File extensions this handler claims (e.g. ".sql", ".sid", ".config").
+    /// File extensions this handler claims (e.g. ".sql", ".config").
     /// StorkDrop will not deploy these files - the plugin handles them entirely.
     /// </summary>
     IReadOnlyList<string> HandledExtensions { get; }

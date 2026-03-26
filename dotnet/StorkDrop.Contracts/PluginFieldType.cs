@@ -28,4 +28,11 @@ public enum PluginFieldType
 
     /// <summary>A folder path browser.</summary>
     FolderPath,
+
+    /// <summary>
+    /// A repeatable group of sub-fields. Users can add/remove instances.
+    /// The sub-fields are defined in PluginConfigField.SubFields.
+    /// Values are stored as JSON array in the field's Value.
+    /// </summary>
+    Group,
 }

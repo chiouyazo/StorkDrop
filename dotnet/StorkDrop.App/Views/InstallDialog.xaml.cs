@@ -43,7 +43,7 @@ public partial class InstallDialog : Window
 
     private void UpdateAdminHint()
     {
-        // Skip admin check if path contains unresolved templates like {StepsPath}
+        // Skip admin check if path contains unresolved templates like {ACMEPath}
         if (PathBox.Text.Contains('{'))
         {
             AdminHint.Visibility = Visibility.Collapsed;
