@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using StorkDrop.App.Localization;
@@ -10,6 +12,20 @@ public partial class ActivityLogView : UserControl
     public ActivityLogView()
     {
         InitializeComponent();
+    }
+
+    private void OnViewLogs(object sender, RoutedEventArgs e)
+    {
+        string logDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+            "StorkDrop",
+            "Logs"
+        );
+
+        if (Directory.Exists(logDir))
+        {
+            Process.Start(new ProcessStartInfo(logDir) { UseShellExecute = true });
+        }
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)

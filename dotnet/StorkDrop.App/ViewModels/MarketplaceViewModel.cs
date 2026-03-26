@@ -5,9 +5,11 @@ using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
+using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
+using StorkDrop.Installer;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -18,17 +20,23 @@ public partial class MarketplaceViewModel : ObservableObject
 {
     private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
-    private readonly IInstallationEngine _installationEngine;
+    private readonly InstallationCoordinator _coordinator;
+    private readonly InstallationTracker _tracker;
+    private readonly INotificationService _notificationService;
 
     public MarketplaceViewModel(
         IFeedRegistry feedRegistry,
         IProductRepository productRepository,
-        IInstallationEngine installationEngine
+        InstallationCoordinator coordinator,
+        InstallationTracker tracker,
+        INotificationService notificationService
     )
     {
         _feedRegistry = feedRegistry;
         _productRepository = productRepository;
-        _installationEngine = installationEngine;
+        _tracker = tracker;
+        _coordinator = coordinator;
+        _notificationService = notificationService;
     }
 
     [ObservableProperty]
@@ -129,11 +137,16 @@ public partial class MarketplaceViewModel : ObservableObject
                     product.Title
                 );
 
+            bool hasFileTypeHandlers = App
+                .Services.GetServices<IStorkDropPlugin>()
+                .Any(p => p is IFileTypeHandler);
+
             Views.InstallDialog dialog = new Views.InstallDialog(
                 product.Title,
                 product.Version,
                 defaultPath,
-                manifest
+                manifest,
+                hasFileTypeHandlers
             );
             dialog.Owner = System.Windows.Application.Current.MainWindow;
             bool? result = dialog.ShowDialog();
@@ -145,6 +158,12 @@ public partial class MarketplaceViewModel : ObservableObject
             product.InstallPercentage = 0;
             string targetPath = dialog.SelectedPath;
 
+            TrackedInstallation tracked = _tracker.StartInstallation(
+                product.ProductId,
+                product.Title
+            );
+            tracked.AddLog($"Installing {product.Title} v{product.Version} to {targetPath}");
+
             InstallOptions options = new InstallOptions(
                 TargetPath: targetPath,
                 FeedId: product.FeedId
@@ -153,16 +172,23 @@ public partial class MarketplaceViewModel : ObservableObject
             {
                 product.InstallPercentage = p.Percentage;
                 product.InstallStatusMessage = p.Message;
+                tracked.Percentage = p.Percentage;
+                tracked.StatusMessage = p.Message;
+                if (!string.IsNullOrEmpty(p.Message))
+                    tracked.AddLog(p.Message);
             });
 
-            InstallResult installResult = await _installationEngine.InstallAsync(
+            InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
                 manifest,
                 options,
-                progress
+                progress,
+                tracked.Cts.Token
             );
 
             if (!installResult.Success)
             {
+                tracked.Complete(false, installResult.ErrorMessage);
+                _tracker.NotifyChanged();
                 ErrorMessage =
                     LocalizationManager
                         .GetString("Error_InstallFailed")
@@ -170,9 +196,27 @@ public partial class MarketplaceViewModel : ObservableObject
                     + ": "
                     + (installResult.ErrorMessage ?? string.Empty);
                 product.IsInstalling = false;
+                try
+                {
+                    _notificationService.ShowError(
+                        $"Installation of {product.Title} failed",
+                        "Click the installation indicator in the status bar to view details."
+                    );
+                }
+                catch { }
                 return;
             }
 
+            tracked.Complete(true);
+            _tracker.NotifyChanged();
+            try
+            {
+                _notificationService.ShowSuccess(
+                    $"{product.Title} installed successfully",
+                    $"Version {product.Version} has been installed."
+                );
+            }
+            catch { }
             product.IsInstalled = true;
             product.IsInstalling = false;
         }

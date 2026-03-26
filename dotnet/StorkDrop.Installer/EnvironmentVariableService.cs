@@ -11,6 +11,7 @@ public sealed class EnvironmentVariableService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    private static readonly SemaphoreSlim EnvVarLock = new(1, 1);
     private readonly ILogger<EnvironmentVariableService> _logger;
 
     public EnvironmentVariableService(ILogger<EnvironmentVariableService> logger)
@@ -22,6 +23,22 @@ public sealed class EnvironmentVariableService
     /// Applies all environment variable declarations from the manifest.
     /// </summary>
     public List<AppliedEnvironmentVariable> Apply(
+        EnvironmentVariableInfo[] declarations,
+        string installPath
+    )
+    {
+        EnvVarLock.Wait();
+        try
+        {
+            return ApplyInternal(declarations, installPath);
+        }
+        finally
+        {
+            EnvVarLock.Release();
+        }
+    }
+
+    private List<AppliedEnvironmentVariable> ApplyInternal(
         EnvironmentVariableInfo[] declarations,
         string installPath
     )
@@ -134,6 +151,19 @@ public sealed class EnvironmentVariableService
     /// Removes all environment variable changes that were applied during installation.
     /// </summary>
     public void Remove(List<AppliedEnvironmentVariable> appliedVars)
+    {
+        EnvVarLock.Wait();
+        try
+        {
+            RemoveInternal(appliedVars);
+        }
+        finally
+        {
+            EnvVarLock.Release();
+        }
+    }
+
+    private void RemoveInternal(List<AppliedEnvironmentVariable> appliedVars)
     {
         foreach (AppliedEnvironmentVariable applied in appliedVars)
         {

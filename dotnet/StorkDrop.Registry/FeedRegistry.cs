@@ -15,6 +15,7 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
     private readonly ILoggerFactory _loggerFactory;
+    private readonly ILogger<FeedRegistry> _logger;
     private readonly object _lock = new();
 
     private Dictionary<string, FeedEntry> _feeds = new();
@@ -30,6 +31,7 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         _configurationService = configurationService;
         _encryptionService = encryptionService;
         _loggerFactory = loggerFactory;
+        _logger = loggerFactory.CreateLogger<FeedRegistry>();
     }
 
     public IReadOnlyList<FeedInfo> GetFeeds()
@@ -42,10 +44,12 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
 
     public IRegistryClient GetClient(string feedId)
     {
+        _logger.LogDebug("GetClient requested for feed {FeedId}", feedId);
         lock (_lock)
         {
             if (_feeds.TryGetValue(feedId, out FeedEntry? entry))
                 return entry.Client;
+            _logger.LogError("Feed {FeedId} not found in registry", feedId);
             throw new KeyNotFoundException($"Feed '{feedId}' not found.");
         }
     }
@@ -55,18 +59,28 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         CancellationToken cancellationToken = default
     )
     {
-        return await GetClient(feedId).TestConnectionAsync(cancellationToken);
+        _logger.LogInformation("Testing connection for feed {FeedId}", feedId);
+        bool result = await GetClient(feedId).TestConnectionAsync(cancellationToken);
+        _logger.LogInformation(
+            "Connection test for feed {FeedId}: {Result}",
+            feedId,
+            result ? "success" : "failed"
+        );
+        return result;
     }
 
     public async Task ReloadAsync(CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Reloading feed registry");
         AppConfiguration? config = await _configurationService.LoadAsync(cancellationToken);
         FeedConfiguration[] feedConfigs = config?.Feeds ?? [];
+        _logger.LogInformation("Found {Count} feed configurations", feedConfigs.Length);
 
         Dictionary<string, FeedEntry> newFeeds = new();
 
         foreach (FeedConfiguration fc in feedConfigs)
         {
+            _logger.LogDebug("Loading feed {FeedName} ({FeedId}) at {Url}", fc.Name, fc.Id, fc.Url);
             string password = string.Empty;
             if (!string.IsNullOrEmpty(fc.EncryptedPassword))
             {
@@ -74,9 +88,14 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
                 {
                     password = _encryptionService.Decrypt(fc.EncryptedPassword);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Best-effort decryption
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to decrypt password for feed {FeedName} ({FeedId})",
+                        fc.Name,
+                        fc.Id
+                    );
                 }
             }
 
@@ -127,6 +146,8 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
 
         foreach (FeedEntry entry in oldFeeds.Values)
             entry.HttpClient.Dispose();
+
+        _logger.LogInformation("Feed registry reloaded with {Count} feeds", newFeeds.Count);
     }
 
     public void Dispose()

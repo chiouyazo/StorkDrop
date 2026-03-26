@@ -18,6 +18,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<DeferredFileOps>();
         services.AddSingleton<UninstallService>();
         services.AddSingleton<EnvironmentVariableService>();
+        services.AddSingleton<InstallationCoordinator>();
 
         return services;
     }

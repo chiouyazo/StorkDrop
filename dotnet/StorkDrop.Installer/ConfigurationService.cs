@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 
@@ -10,6 +11,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
     private readonly string _configDir;
     private readonly string _configFilePath;
     private readonly SemaphoreSlim _saveLock = new(1, 1);
+    private readonly ILogger<ConfigurationService> _logger;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -18,26 +20,32 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public ConfigurationService()
+    public ConfigurationService(ILogger<ConfigurationService> logger)
         : this(
             Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
                 "StorkDrop",
                 "Config"
-            )
+            ),
+            logger
         ) { }
 
-    public ConfigurationService(string configDir)
+    public ConfigurationService(string configDir, ILogger<ConfigurationService> logger)
     {
         _configDir = configDir;
         _configFilePath = Path.Combine(_configDir, "config.json");
+        _logger = logger;
         Directory.CreateDirectory(_configDir);
     }
 
     public async Task<AppConfiguration?> LoadAsync(CancellationToken cancellationToken = default)
     {
+        _logger.LogDebug("Loading configuration from {Path}", _configFilePath);
         if (!File.Exists(_configFilePath))
+        {
+            _logger.LogDebug("Configuration file not found at {Path}", _configFilePath);
             return null;
+        }
 
         string json = await File.ReadAllTextAsync(_configFilePath, cancellationToken)
             .ConfigureAwait(false);
@@ -48,6 +56,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
             ValidateConfiguration(config);
         }
 
+        _logger.LogInformation("Configuration loaded successfully from {Path}", _configFilePath);
         return config;
     }
 
@@ -56,6 +65,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
         CancellationToken cancellationToken = default
     )
     {
+        _logger.LogInformation("Saving configuration to {Path}", _configFilePath);
         await _saveLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         string tempPath = _configFilePath + ".tmp";
         try
@@ -92,16 +102,19 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
 
     public async Task ExportAsync(string filePath, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Exporting configuration to {Path}", filePath);
         if (!File.Exists(_configFilePath))
             throw new InvalidOperationException("No configuration to export.");
 
         string json = await File.ReadAllTextAsync(_configFilePath, cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(filePath, json, cancellationToken).ConfigureAwait(false);
+        _logger.LogInformation("Configuration exported successfully to {Path}", filePath);
     }
 
     public async Task ImportAsync(string filePath, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Importing configuration from {Path}", filePath);
         if (!File.Exists(filePath))
             throw new FileNotFoundException("Import file not found.", filePath);
 
@@ -128,6 +141,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
             }
 
             File.Move(tempPath, _configFilePath, overwrite: true);
+            _logger.LogInformation("Configuration imported successfully from {Path}", filePath);
         }
         finally
         {

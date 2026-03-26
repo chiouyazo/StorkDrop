@@ -77,6 +77,21 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
+    private void OnInstallationItemClick(object sender, MouseButtonEventArgs e)
+    {
+        if (
+            sender is FrameworkElement { DataContext: Services.TrackedInstallation install }
+            && DataContext is ViewModels.MainWindowViewModel vm
+        )
+        {
+            vm.SelectedInstallation = install;
+
+            // Show a log window
+            Views.InstallLogWindow logWindow = new(install) { Owner = this };
+            logWindow.Show();
+        }
+    }
+
     private void OnVersionClick(object sender, MouseButtonEventArgs e)
     {
         Process.Start(

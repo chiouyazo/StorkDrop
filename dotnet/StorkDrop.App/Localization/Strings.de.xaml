@@ -333,4 +333,12 @@
 
   <!-- Loading error -->
   <system:String x:Key="Error_LoadFailed">Fehler beim Laden: {0}</system:String>
+
+  <!-- Install dialog plugin hint -->
+  <system:String x:Key="InstallDialog_PluginHint"
+    >Ein Plugin ist mit diesem Produkt verbunden und fordert moeglicherweise zusaetzliche Konfiguration waehrend der Installation an.</system:String
+  >
+
+  <!-- Activity log -->
+  <system:String x:Key="ActivityLog_ViewLogs">Anwendungsprotokolle anzeigen</system:String>
 </ResourceDictionary>

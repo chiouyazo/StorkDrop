@@ -12,11 +12,27 @@ public delegate Dictionary<string, string>? FileHandlerConfigCallback(
 );
 
 /// <summary>
+/// Callback that plugins can set to resolve template variables in install paths.
+/// Receives the raw target path and the file handler context (if available).
+/// Returns the resolved path, or null to keep the original.
+/// </summary>
+public delegate string? InstallPathResolverCallback(
+    string targetPath,
+    PluginContext? fileHandlerContext
+);
+
+/// <summary>
 /// Defines the contract for the installation engine that handles product installation,
 /// update, and uninstall operations.
 /// </summary>
 public interface IInstallationEngine
 {
+    /// <summary>
+    /// Set by plugins to resolve template variables in install paths (e.g. {StepsPath}).
+    /// Called before files are copied, after file handler config dialog has run.
+    /// </summary>
+    InstallPathResolverCallback? OnResolveInstallPath { get; set; }
+
     /// <summary>
     /// Set by the UI layer to provide a callback for showing file handler config dialogs.
     /// When a file type handler needs user input, this callback is invoked on the UI thread.

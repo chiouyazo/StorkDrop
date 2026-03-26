@@ -89,19 +89,66 @@ public partial class PluginConfigDialog : Window
         }
     }
 
-    private void MultiSelect_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    private void MultiSelect_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+
+    private void MultiSelectCheckBox_Loaded(object sender, RoutedEventArgs e)
     {
-        if (sender is ListBox listBox && listBox.Tag is PluginConfigFieldViewModel field)
+        if (sender is CheckBox cb && cb.Tag is string value)
         {
-            List<string> selectedValues = [];
-            foreach (object item in listBox.SelectedItems)
+            // Find the parent ItemsControl to get the field ViewModel
+            ItemsControl? itemsControl = FindParent<ItemsControl>(cb);
+            if (itemsControl?.Tag is PluginConfigFieldViewModel field)
             {
-                if (item is PluginOptionItem option)
-                {
-                    selectedValues.Add(option.Value);
-                }
+                // Check if this value is in the current selection
+                HashSet<string> selected = new(
+                    (field.Value ?? "").Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                    ),
+                    StringComparer.OrdinalIgnoreCase
+                );
+                cb.IsChecked = selected.Contains(value);
             }
-            field.Value = string.Join(",", selectedValues);
         }
+    }
+
+    private void MultiSelectCheckBox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox cb && cb.Tag is string value)
+        {
+            ItemsControl? itemsControl = FindParent<ItemsControl>(cb);
+            if (itemsControl?.Tag is PluginConfigFieldViewModel field)
+            {
+                HashSet<string> selected = new(
+                    (field.Value ?? "").Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                    ),
+                    StringComparer.OrdinalIgnoreCase
+                );
+
+                if (cb.IsChecked == true)
+                    selected.Add(value);
+                else
+                    selected.Remove(value);
+
+                field.Value = string.Join(",", selected);
+            }
+        }
+    }
+
+    private static T? FindParent<T>(System.Windows.DependencyObject child)
+        where T : System.Windows.DependencyObject
+    {
+        System.Windows.DependencyObject? parent = System.Windows.Media.VisualTreeHelper.GetParent(
+            child
+        );
+        while (parent is not null)
+        {
+            if (parent is T found)
+                return found;
+            parent = System.Windows.Media.VisualTreeHelper.GetParent(parent);
+        }
+        return null;
     }
 }

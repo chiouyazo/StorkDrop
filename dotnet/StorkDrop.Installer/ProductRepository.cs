@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 
@@ -9,6 +10,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 {
     private readonly string _filePath;
     private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly ILogger<ProductRepository> _logger;
     private List<InstalledProduct> _products = [];
     private bool _initialized;
 
@@ -19,7 +21,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         Converters = { new JsonStringEnumConverter() },
     };
 
-    public ProductRepository()
+    public ProductRepository(ILogger<ProductRepository> logger)
         : this(
             Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
@@ -27,12 +29,14 @@ public sealed class ProductRepository : IProductRepository, IDisposable
                 "Stork",
                 "Config",
                 "installed-products.json"
-            )
+            ),
+            logger
         ) { }
 
-    public ProductRepository(string filePath)
+    public ProductRepository(string filePath, ILogger<ProductRepository> logger)
     {
         _filePath = filePath;
+        _logger = logger;
         string? directory = Path.GetDirectoryName(_filePath);
         if (directory is not null)
             Directory.CreateDirectory(directory);
@@ -78,6 +82,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 
     private async Task LoadFromDiskAsync(CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Loading product repository from {FilePath}", _filePath);
         if (File.Exists(_filePath))
         {
             string json = await File.ReadAllTextAsync(_filePath, cancellationToken)
@@ -88,10 +93,18 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             _products = deserialized ?? [];
 
             ValidateNoDuplicateProductIds(_products);
+            _logger.LogInformation(
+                "Loaded {Count} installed products from repository",
+                _products.Count
+            );
         }
         else
         {
             _products = [];
+            _logger.LogDebug(
+                "Product repository file not found at {FilePath}, starting empty",
+                _filePath
+            );
         }
 
         _initialized = true;
@@ -135,6 +148,11 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         CancellationToken cancellationToken = default
     )
     {
+        _logger.LogInformation(
+            "Adding product {ProductId} v{Version} to repository",
+            product.ProductId,
+            product.Version
+        );
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -173,6 +191,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 
     public async Task RemoveAsync(string productId, CancellationToken cancellationToken = default)
     {
+        _logger.LogInformation("Removing product {ProductId} from repository", productId);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
@@ -191,6 +210,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 
     private async Task SaveAsync(CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Saving product repository ({Count} products)", _products.Count);
         string json = JsonSerializer.Serialize(_products, JsonOptions);
         string tempPath = _filePath + ".tmp";
         try

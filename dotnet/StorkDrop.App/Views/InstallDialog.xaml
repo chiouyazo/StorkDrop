@@ -108,6 +108,31 @@
         TextWrapping="Wrap"
         Visibility="Collapsed"
       />
+      <Border
+        x:Name="PluginHintBorder"
+        Background="#E3F2FD"
+        CornerRadius="4"
+        Padding="10,8"
+        Margin="0,8,0,0"
+        Visibility="Collapsed"
+      >
+        <StackPanel Orientation="Horizontal">
+          <TextBlock
+            Text="&#xE74C;"
+            FontFamily="Segoe MDL2 Assets"
+            FontSize="14"
+            Foreground="#1565C0"
+            VerticalAlignment="Center"
+            Margin="0,0,8,0"
+          />
+          <TextBlock
+            Text="{DynamicResource InstallDialog_PluginHint}"
+            FontSize="12"
+            Foreground="#1565C0"
+            TextWrapping="Wrap"
+          />
+        </StackPanel>
+      </Border>
     </StackPanel>
 
     <StackPanel Grid.Row="6" Orientation="Horizontal" HorizontalAlignment="Right">
