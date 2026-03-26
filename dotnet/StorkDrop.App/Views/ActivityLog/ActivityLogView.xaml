@@ -42,6 +42,15 @@
 
       <Button
         Grid.Column="1"
+        Content="{DynamicResource ActivityLog_ViewLogs}"
+        Style="{DynamicResource OutlinedButton}"
+        Padding="12,8"
+        Margin="0,0,8,0"
+        Click="OnViewLogs"
+      />
+
+      <Button
+        Grid.Column="2"
         Content="{DynamicResource Button_ClearLog}"
         Style="{DynamicResource OutlinedButton}"
         Command="{Binding ClearLogCommand}"

@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
+using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 
@@ -84,8 +85,10 @@ public partial class App : Application
             IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
             await feedRegistry.ReloadAsync();
 
-            // Wire up file handler config dialog callback
+            // Wire up engine callbacks
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
+
+            // File handler config dialog
             engine.OnFileHandlerConfigNeeded = (fields, currentValues) =>
             {
                 Dictionary<string, string>? result = null;
@@ -99,6 +102,25 @@ public partial class App : Application
                 });
                 return result;
             };
+
+            // Install path resolution via plugins (e.g., {StepsPath} -> actual directory)
+            IEnumerable<IStorkDropPlugin> allPlugins = Services.GetServices<IStorkDropPlugin>();
+            List<StorkDrop.Contracts.IInstallPathResolver> pathResolvers = allPlugins
+                .OfType<StorkDrop.Contracts.IInstallPathResolver>()
+                .ToList();
+            if (pathResolvers.Count > 0)
+            {
+                engine.OnResolveInstallPath = (targetPath, context) =>
+                {
+                    foreach (StorkDrop.Contracts.IInstallPathResolver resolver in pathResolvers)
+                    {
+                        string? resolved = resolver.ResolveInstallPath(targetPath, context);
+                        if (resolved is not null)
+                            return resolved;
+                    }
+                    return null;
+                };
+            }
 
             MainWindow mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();

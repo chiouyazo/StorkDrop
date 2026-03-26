@@ -9,6 +9,7 @@
   xmlns:settings="clr-namespace:StorkDrop.App.Views.Settings"
   xmlns:activitylog="clr-namespace:StorkDrop.App.Views.ActivityLog"
   xmlns:plugins="clr-namespace:StorkDrop.App.Views.Plugins"
+  xmlns:plugintab="clr-namespace:StorkDrop.App.Views.PluginTab"
   Title="StorkDrop"
   Icon="/Assets/stork.ico"
   Width="1200"
@@ -39,6 +40,9 @@
     </DataTemplate>
     <DataTemplate DataType="{x:Type vm:ProductDetailViewModel}">
       <marketplace:ProductDetailView />
+    </DataTemplate>
+    <DataTemplate DataType="{x:Type vm:PluginTabViewModel}">
+      <plugintab:PluginTabView />
     </DataTemplate>
   </Window.Resources>
 
@@ -302,6 +306,7 @@
         <Grid.ColumnDefinitions>
           <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
           <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -358,8 +363,54 @@
           </StackPanel>
         </Button>
 
-        <TextBlock
+        <!-- Installation status indicator -->
+        <Button
           Grid.Column="2"
+          Margin="16,0,0,0"
+          Background="Transparent"
+          BorderThickness="0"
+          Cursor="Hand"
+          HorizontalAlignment="Right"
+          Padding="8,4"
+          Command="{Binding ToggleInstallationPanelCommand}"
+        >
+          <Button.Style>
+            <Style TargetType="Button">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger
+                  Binding="{Binding InstallationTracker.HasActiveInstallations}"
+                  Value="True"
+                >
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ShowInstallationPanel}" Value="True">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Button.Style>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock
+              Text="&#xE896;"
+              FontFamily="Segoe MDL2 Assets"
+              FontSize="14"
+              Foreground="#1565C0"
+              VerticalAlignment="Center"
+              Margin="0,0,6,0"
+            />
+            <TextBlock FontSize="11" Foreground="#1565C0" VerticalAlignment="Center">
+              <TextBlock.Text>
+                <MultiBinding StringFormat="{}{0} installation(s)">
+                  <Binding Path="InstallationTracker.Installations.Count" />
+                </MultiBinding>
+              </TextBlock.Text>
+            </TextBlock>
+          </StackPanel>
+        </Button>
+
+        <TextBlock
+          Grid.Column="3"
           HorizontalAlignment="Right"
           FontSize="11"
           Foreground="#666666"
@@ -377,6 +428,138 @@
             </Style>
           </TextBlock.Style>
         </TextBlock>
+      </Grid>
+    </Border>
+
+    <!-- Installation panel (overlay, anchored to bottom-right) -->
+    <Border
+      Grid.Row="0"
+      Grid.ColumnSpan="2"
+      HorizontalAlignment="Right"
+      VerticalAlignment="Bottom"
+      Margin="0,0,16,8"
+      Width="420"
+      MaxHeight="350"
+      Background="White"
+      BorderBrush="#E0E0E0"
+      BorderThickness="1"
+      CornerRadius="8"
+      Visibility="{Binding ShowInstallationPanel, Converter={StaticResource BoolToVisibilityConverter}}"
+    >
+      <Border.Effect>
+        <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" />
+      </Border.Effect>
+      <Grid>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto" />
+          <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- Panel header -->
+        <Border Background="#F5F5F5" CornerRadius="8,8,0,0" Padding="12,8">
+          <Grid>
+            <TextBlock
+              Text="Installations"
+              FontSize="13"
+              FontWeight="SemiBold"
+              VerticalAlignment="Center"
+            />
+            <Button
+              Content="&#xE711;"
+              FontFamily="Segoe MDL2 Assets"
+              FontSize="12"
+              Background="Transparent"
+              BorderThickness="0"
+              Cursor="Hand"
+              HorizontalAlignment="Right"
+              Padding="4"
+              Command="{Binding ToggleInstallationPanelCommand}"
+            />
+          </Grid>
+        </Border>
+
+        <!-- Installation list -->
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" MaxHeight="300">
+          <ItemsControl ItemsSource="{Binding InstallationTracker.Installations}" Margin="8">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Border
+                  BorderBrush="#F0F0F0"
+                  BorderThickness="0,0,0,1"
+                  Padding="4,8"
+                  Cursor="Hand"
+                  MouseLeftButtonDown="OnInstallationItemClick"
+                >
+                  <StackPanel>
+                    <Grid>
+                      <TextBlock Text="{Binding Title}" FontSize="12" FontWeight="SemiBold" />
+                      <!-- Status icon -->
+                      <TextBlock HorizontalAlignment="Right" FontSize="11">
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Setter Property="Text" Value="..." />
+                            <Setter Property="Foreground" Value="#999999" />
+                            <Style.Triggers>
+                              <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                  <Condition Binding="{Binding IsCompleted}" Value="True" />
+                                  <Condition Binding="{Binding IsSuccess}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Text" Value="&#xE73E;" />
+                                <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+                                <Setter Property="Foreground" Value="#2E7D32" />
+                              </MultiDataTrigger>
+                              <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                  <Condition Binding="{Binding IsCompleted}" Value="True" />
+                                  <Condition Binding="{Binding IsSuccess}" Value="False" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Text" Value="&#xE711;" />
+                                <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+                                <Setter Property="Foreground" Value="#D32F2F" />
+                              </MultiDataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </Grid>
+                    <TextBlock
+                      Text="{Binding StatusMessage}"
+                      FontSize="11"
+                      Foreground="#999999"
+                      Margin="0,2,0,0"
+                      TextTrimming="CharacterEllipsis"
+                    />
+                    <!-- Progress bar (only when active) -->
+                    <ProgressBar
+                      Value="{Binding Percentage}"
+                      Maximum="100"
+                      Height="3"
+                      Margin="0,4,0,0"
+                    >
+                      <ProgressBar.Style>
+                        <Style
+                          TargetType="ProgressBar"
+                          BasedOn="{StaticResource StyledProgressBar}"
+                        >
+                          <Setter Property="IsIndeterminate" Value="False" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Percentage}" Value="0">
+                              <Setter Property="IsIndeterminate" Value="True" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </ProgressBar.Style>
+                    </ProgressBar>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
       </Grid>
     </Border>
   </Grid>

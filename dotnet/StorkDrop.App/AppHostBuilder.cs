@@ -74,6 +74,7 @@ public static class AppHostBuilder
                 services.AddSingleton<TrayIconService>();
                 services.AddSingleton<INotificationService, ToastNotificationService>();
                 services.AddHostedService<UpdateBackgroundService>();
+                services.AddSingleton<InstallationTracker>();
 
                 // Auto-load plugins from plugins/ directory
                 PluginLoadStatus pluginLoadStatus = new PluginLoadStatus();
@@ -140,10 +141,7 @@ public static class AppHostBuilder
                 {
                     string loaderErrors = string.Join(
                         "; ",
-                        ex.LoaderExceptions
-                            ?.Where(e => e is not null)
-                            .Select(e => e!.Message)
-                            ?? []
+                        ex.LoaderExceptions?.Where(e => e is not null).Select(e => e!.Message) ?? []
                     );
                     string error = $"Could not load types: {loaderErrors}";
                     Log.Error("Plugin {DllName} failed: {Error}", dllName, error);
@@ -211,14 +209,13 @@ public static class AppHostBuilder
         protected override Assembly? Load(AssemblyName assemblyName)
         {
             // For shared assemblies, use the host's version (avoids version mismatch)
-            Assembly? alreadyLoaded = Default
-                .Assemblies.FirstOrDefault(a =>
-                    string.Equals(
-                        a.GetName().Name,
-                        assemblyName.Name,
-                        StringComparison.OrdinalIgnoreCase
-                    )
-                );
+            Assembly? alreadyLoaded = Default.Assemblies.FirstOrDefault(a =>
+                string.Equals(
+                    a.GetName().Name,
+                    assemblyName.Name,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
             if (alreadyLoaded is not null)
                 return alreadyLoaded;
 

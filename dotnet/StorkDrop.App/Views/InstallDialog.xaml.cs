@@ -19,7 +19,8 @@ public partial class InstallDialog : Window
         string productTitle,
         string version,
         string defaultPath,
-        ProductManifest? manifest = null
+        ProductManifest? manifest = null,
+        bool hasFileTypeHandlers = false
     )
     {
         InitializeComponent();
@@ -35,6 +36,9 @@ public partial class InstallDialog : Window
         UpdateAdminHint();
         UpdateInstallDetails();
         UpdateDiskSpace();
+
+        if (manifest?.Plugins is { Length: > 0 } || hasFileTypeHandlers)
+            PluginHintBorder.Visibility = Visibility.Visible;
     }
 
     private void UpdateAdminHint()

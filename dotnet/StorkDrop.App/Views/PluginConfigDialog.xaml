@@ -105,21 +105,18 @@
                 SelectedValuePath="Value"
                 DisplayMemberPath="Label"
                 ItemsSource="{Binding Options}"
+                Padding="8,6"
+                FontSize="13"
               >
                 <ComboBox.Style>
                   <Style TargetType="ComboBox">
                     <Setter Property="Visibility" Value="Collapsed" />
+                    <Setter Property="MinHeight" Value="36" />
                     <Style.Triggers>
                       <DataTrigger
                         Binding="{Binding FieldType}"
                         Value="{x:Static contracts:PluginFieldType.Dropdown}"
                       >
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                      <DataTrigger Binding="{Binding FieldType}">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                      <DataTrigger Binding="{Binding FieldType}">
                         <Setter Property="Visibility" Value="Visible" />
                       </DataTrigger>
                     </Style.Triggers>
@@ -151,10 +148,16 @@
               </CheckBox>
 
               <!-- Password -->
-              <PasswordBox Tag="{Binding}" PasswordChanged="PasswordBox_PasswordChanged">
+              <PasswordBox
+                Tag="{Binding}"
+                PasswordChanged="PasswordBox_PasswordChanged"
+                Padding="8,8"
+                FontSize="13"
+              >
                 <PasswordBox.Style>
                   <Style TargetType="PasswordBox">
                     <Setter Property="Visibility" Value="Collapsed" />
+                    <Setter Property="MinHeight" Value="36" />
                     <Style.Triggers>
                       <DataTrigger
                         Binding="{Binding FieldType}"
@@ -238,16 +241,13 @@
               </Grid>
 
               <!-- MultiSelect -->
-              <ListBox
-                ItemsSource="{Binding Options}"
-                SelectionMode="Multiple"
-                MaxHeight="150"
-                Tag="{Binding}"
-                SelectionChanged="MultiSelect_SelectionChanged"
-              >
-                <ListBox.Style>
-                  <Style TargetType="ListBox">
+              <Border MaxHeight="180" Padding="8,4">
+                <Border.Style>
+                  <Style TargetType="Border">
                     <Setter Property="Visibility" Value="Collapsed" />
+                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+                    <Setter Property="BorderThickness" Value="1" />
+                    <Setter Property="CornerRadius" Value="4" />
                     <Style.Triggers>
                       <DataTrigger
                         Binding="{Binding FieldType}"
@@ -257,13 +257,43 @@
                       </DataTrigger>
                     </Style.Triggers>
                   </Style>
-                </ListBox.Style>
-                <ListBox.ItemTemplate>
-                  <DataTemplate>
-                    <CheckBox Content="{Binding Label}" Tag="{Binding Value}" />
-                  </DataTemplate>
-                </ListBox.ItemTemplate>
-              </ListBox>
+                </Border.Style>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                  <ItemsControl ItemsSource="{Binding Options}" Tag="{Binding}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate>
+                        <CheckBox
+                          Content="{Binding Label}"
+                          Tag="{Binding Value}"
+                          Margin="0,3"
+                          Checked="MultiSelectCheckBox_Changed"
+                          Unchecked="MultiSelectCheckBox_Changed"
+                          Loaded="MultiSelectCheckBox_Loaded"
+                        />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </ScrollViewer>
+              </Border>
+
+              <!-- Description -->
+              <TextBlock
+                Text="{Binding Description}"
+                Foreground="#999999"
+                FontSize="11"
+                Margin="0,4,0,0"
+                TextWrapping="Wrap"
+              >
+                <TextBlock.Style>
+                  <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding Description}" Value="">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </TextBlock.Style>
+              </TextBlock>
 
               <!-- Error message -->
               <TextBlock

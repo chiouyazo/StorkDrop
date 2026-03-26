@@ -11,7 +11,7 @@
 <p align="center">
   <img src="docs/images/marketplace.png" alt="StorkDrop Marketplace" width="800" />
   <br />
-  <em>The StorkDrop marketplace  - browse, install, and update products from multiple feeds</em>
+  <em>The StorkDrop marketplace - browse, install, and update products from multiple feeds</em>
 </p>
 
 ## What is StorkDrop?
@@ -27,337 +27,148 @@ It's built for **server software and business tools** that:
 
 ## When to use StorkDrop
 
-| Scenario                          | StorkDrop                           | Traditional installer (MSI/NSIS/Inno) | Fleet management (SCCM/Intune) | Package manager (Chocolatey/WinGet) |
-| --------------------------------- | ----------------------------------- | ------------------------------------- | ------------------------------ | ----------------------------------- |
-| **Server-side business apps**     | ✅ Built for this                   | ❌ Manual per-machine                 | ⚠️ Overkill                    | ⚠️ No custom logic                  |
-| **Custom pre/post install logic** | ✅ Plugin system with dynamic UI    | ❌ Baked into installer               | ❌ Scripts only                | ❌ Scripts only                     |
-| **User chooses install path**     | ✅ Per-install dialog               | ✅ Wizard                             | ❌ Centrally managed           | ❌ Fixed paths                      |
-| **Multiple feeds/repositories**   | ✅ Multi-feed with per-feed plugins | ❌ N/A                                | ✅ Multiple sources            | ✅ Multiple sources                 |
-| **Self-service marketplace**      | ✅ Browse, search, filter           | ❌ No discovery                       | ⚠️ Company portal              | ✅ CLI search                       |
-| **Version rollback**              | ✅ Backup + restore                 | ❌ Manual                             | ⚠️ Complex                     | ⚠️ Limited                          |
-| **Update notifications**          | ✅ Tray + toast                     | ❌ None                               | ✅ Managed                     | ⚠️ CLI only                         |
-| **File-in-use handling**          | ✅ Rename + reboot cleanup          | ⚠️ Varies                             | ✅ Managed                     | ❌ None                             |
-| **Plugin extensibility**          | ✅ Dynamic config UI, custom tabs   | ❌ None                               | ❌ None                        | ❌ None                             |
-| **Cross-product consistency**     | ✅ One tool, many products          | ❌ Different installer per product    | ✅ Unified                     | ✅ Unified                          |
-| **Setup complexity**              | Low - single exe                    | Medium - per product                  | High - infrastructure          | Low - CLI                           |
-| **Infrastructure required**       | Nexus OSS (free)                    | None                                  | AD + SCCM/Intune               | Repository                          |
+| Scenario | StorkDrop | Traditional installer | Fleet management | Package manager |
+|---|---|---|---|---|
+| **Server-side business apps** | Built for this | Manual per-machine | Overkill | No custom logic |
+| **Custom pre/post install logic** | Plugin system with dynamic UI | Baked into installer | Scripts only | Scripts only |
+| **Multiple feeds/repositories** | Multi-feed with per-feed plugins | N/A | Multiple sources | Multiple sources |
+| **Self-service marketplace** | Browse, search, filter | No discovery | Company portal | CLI search |
+| **Version rollback** | Backup + restore | Manual | Complex | Limited |
+| **Plugin extensibility** | Dynamic config UI, custom tabs | None | None | None |
 
 ## How it works
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  Nexus OSS   │     │  StorkDrop   │     │   Target     │
-│  (raw repo)  │────>│   Client     │────>│   Machine    │
-│              │     │              │     │              │
-│  manifest.json     │  Marketplace │     │  C:\Program  │
-│  product.zip │     │  Install UI  │     │  Files\...   │
-│              │     │  Plugin hooks│     │  Shortcuts   │
-└──────────────┘     └──────────────┘     └──────────────┘
+Nexus OSS          StorkDrop Client          Target Machine
+(raw repo)    -->  Marketplace UI     -->    C:\Program Files\...
+manifest.json      Plugin hooks              Shortcuts
+product.zip        Install tracking          Environment variables
 ```
 
 1. **Publish** your product to a Nexus raw repository with a `manifest.json`
 2. **Users** open StorkDrop, browse the marketplace, click Install
-3. **StorkDrop** downloads, extracts, runs plugin hooks, creates shortcuts
+3. **StorkDrop** downloads, extracts, runs plugin hooks, copies files, creates shortcuts
 4. **Updates** are detected automatically and applied with backup/rollback
+5. **Everything is tracked** - what was installed, where, and what changed - for clean uninstall
 
-## Key features
+## Feature overview
 
-- **Manifest-driven** - no custom installer code, just a JSON file declaring what to install
-- **Plugin system** - pre/post install hooks with dynamic configuration UI (10 field types)
-- **Multi-feed** - connect to multiple Nexus repositories, each with their own plugin
-- **File tracking** - knows exactly which files it installed for clean uninstall
-- **File-in-use handling** - renames locked files, schedules cleanup on reboot
-- **UAC on demand** - runs as normal user, elevates only when installing to protected paths
-- **Serilog logging** - configurable log level, rolling daily files
-- **EN/DE** - full English and German translations
-- **System tray** - background update checking with toast notifications
+### Marketplace
 
-## Product manifest
+The marketplace shows all available products from all configured feeds. Users can:
 
-Products are stored in Nexus raw repositories:
+- **Search** products by name, ID, or description
+- **Filter** by feed, publisher, or product type (Suite, Plugin, Bundle)
+- **Browse** product details with version history and release notes
+- **Install** any version - not just the latest
 
+When a product has a plugin connected to it, the install dialog shows a hint:
+> "A plugin is connected to this product and may prompt for additional configuration during installation."
+
+### Installation tracking
+
+Installations run in the background. A status indicator in the bottom bar shows active installations - like a browser's download bar:
+
+- Click it to see all active and completed installations
+- Click any installation to open a **live log viewer** with a dark terminal-style UI
+- Logs show every step: download, extract, plugin processing, file copy, shortcut creation
+- Completed installations stay in the list with their full log history
+- Supports native text selection and Ctrl+C for copying log output
+
+**Example log output:**
 ```
-my-product/
-  manifest.json                    Latest manifest
-  versions/1.0.0/
-    manifest.json                  Version-specific
-    my-product-1.0.0.zip           Artifact
-```
-
-```jsonc
-{
-  "productId": "my-product", // Unique ID, used in URLs and file paths
-  "title": "My Product", // Display name shown in the marketplace
-  "version": "1.0.0", // Semantic version, used for update detection
-  "releaseDate": "2026-03-24", // Shown in product detail view
-  "installType": "Suite", // Marketplace filter category: Plugin | Suite | Bundle
-  "description": "What this does", // Short text shown on the product card
-  "releaseNotes": "What's new", // Markdown shown in product detail / update view
-  "recommendedInstallPath": "C:\\...", // Pre-filled in the install dialog (user can change)
-  "publisher": "My Company", // Marketplace filter + shown in product detail
-  "imageUrl": "https://..../icon.png", // Product card image (optional, falls back to icon)
-  "downloadSizeBytes": 52428800, // Shown in install dialog next to available disk space
-  "requirements": ["Windows 10+"], // Shown in product detail as prerequisites
-  "shortcuts": [
-    // Start Menu shortcuts created after install
-    { "exeName": "MyProduct.exe", "displayName": "My Product" },
-    { "exeName": "MyAdmin.exe", "displayName": "My Product Admin" },
-  ],
-  "shortcutFolder": "My Company", // Start Menu subfolder (default: "StorkDrop")
-  "environmentVariables": [
-    // Environment variables to set or modify on install (removed on uninstall)
-    { "name": "MY_PRODUCT_HOME", "value": "{InstallPath}", "action": "set" },
-    { "name": "PATH", "value": "{InstallPath}\\bin", "action": "append", "mustExist": true }
-  ],
-  "plugins": [
-    // DLLs with pre/post install logic (optional)
-    { "assembly": "MyProduct.dll", "typeName": "MyProduct.Installer" },
-  ],
-  "cleanup": {
-    // Paths to clean up on uninstall (optional)
-    "registryKeys": [], // Registry keys to delete
-    "dataLocations": ["%APPDATA%\\MyProduct"], // Data folders to delete
-  },
-}
+[14:23:01] Installing Acme Dashboard v2.1.0 to C:\Program Files\Acme\Dashboard
+[14:23:01] Downloading product acme-dashboard v2.1.0
+[14:23:05] Download complete, extracting...
+[14:23:06] Plugin found 2 file(s): update-original.sid, update-combined.sid
+[14:23:06] Waiting for user configuration...
+[14:23:12] Processing files with plugin...
+[14:23:12] update-original.sid: Deployed SID to STEPS_Basis via Steps.Update
+[14:23:12] update-combined.sid: Skipped (not selected)
+[14:23:12] Plugin processing completed successfully
+[14:23:13] Copying files to C:\Program Files\Acme\Dashboard
+[14:23:14] Creating shortcuts...
+[14:23:14] Registering product...
+[14:23:14] Installation of Acme Dashboard v2.1.0 completed successfully
 ```
 
-## Plugin system
+Toast notifications appear when installations complete or fail.
 
-### App-level plugins (`IStorkDropPlugin`)
+### Installation isolation
 
-Extend StorkDrop with custom setup wizard steps, settings, navigation tabs, and install hooks. Drop the DLL in the `plugins/` directory next to StorkDrop - it's loaded automatically.
+Every installation is isolated from every other installation and from the main application:
 
-```csharp
-public class MyPlugin : IStorkDropPlugin
-{
-    public string PluginId => "my-plugin";
-    public string DisplayName => "My Plugin";
-    public string[] AssociatedFeeds => new[] { "https://nexus.example.com" };
+- **Per-product locking** - you cannot accidentally install the same product twice at the same time. If you try, StorkDrop immediately tells you "Another installation of X is already in progress" instead of silently corrupting files.
+- **Independent cancellation** - each installation has its own cancellation token. Cancelling one install does not affect others.
+- **Exception containment** - if an installation fails with an unexpected error, it is caught, logged, and reported as a failed result. Other running installations continue unaffected. The main application never crashes due to an install failure.
+- **Environment variable serialization** - if two products both need to modify the `PATH` variable, the operations are serialized so one doesn't overwrite the other's changes.
+- **Elevated process isolation** - when admin privileges are needed, a separate process handles the privileged operation. It has its own DI container, its own service instances, and its own error handling. The main application is never affected by what happens in the elevated process.
 
-    // Add custom pages to the sidebar (see "Navigation tabs" below)
-    public IReadOnlyList<PluginNavTab> GetNavigationTabs() => new[]
-    {
-        new PluginNavTab { TabId = "status", DisplayName = "Server Status", Icon = "\uE8A5" }
-    };
+**What this means in practice:**
 
-    // Called when the user clicks your tab - render your content here
-    public void OnNavigationTabSelected(string tabId)
-    {
-        // tabId == "status" → show your custom UI
-        // StorkDrop passes a content area you can populate
-    }
+You can install Product A and Product B at the same time. If Product A's database migration fails halfway through, Product A's backup is restored and it reports failure - but Product B continues installing normally, completely unaware that anything went wrong with Product A.
 
-    // Called when a product from your associated feed is installed
-    public async Task OnProductInstalledAsync(PluginInstallContext context, CancellationToken ct)
-    {
-        // e.g. run SQL scripts found in the package, register services, etc.
-        foreach (string sqlFile in Directory.GetFiles(context.InstallPath, "*.sql"))
-        {
-            // Execute against configured database...
-        }
-    }
+### Reliability and safety
 
-    // ... setup steps, settings, uninstall hooks
-}
-```
+StorkDrop is designed for production servers where failed updates are not acceptable.
 
-#### Navigation tabs
+**Backup and rollback:**
+Before updating a product, StorkDrop creates a ZIP backup of the entire installation directory. If anything goes wrong during the update - download failure, extraction error, plugin crash, file copy issue - the backup is automatically restored and the product is left in its previous working state. The user sees a clear error message; the product continues working.
 
-Plugins can add their own pages to the StorkDrop sidebar. This is useful for plugins that manage external state (database connections, service status, etc.) that users need to monitor independently of individual products.
+**File manifest tracking:**
+Every file that StorkDrop installs is recorded in a manifest (`{productId}.files.json`). When you uninstall, only those exact files are removed - nothing more, nothing less. If you manually added files to the installation directory, they are left untouched. If the manifest is missing (e.g., from a very old install), StorkDrop falls back to removing the entire directory, but warns first.
 
-**How it works:**
+**Plugin failure handling:**
+If a plugin's file handler (e.g., a SID file deployer) reports failure, the entire installation is aborted immediately. StorkDrop does not continue copying files or creating shortcuts for a product whose custom deployment step failed. The error is logged, a toast notification is shown, and the user can review the full log.
 
-1. `GetNavigationTabs()` declares one or more tabs with an ID, label, and icon
-2. StorkDrop renders them in the sidebar under a "Plugins" section
-3. When the user clicks the tab, `OnNavigationTabSelected(tabId)` is called
-4. The plugin can then show status information, run diagnostics, or provide a management UI
+**Atomic configuration writes:**
+All configuration files (product registry, settings, activity log) are written to a temporary file first, then atomically moved into place. If StorkDrop crashes mid-write, the previous valid file is still intact.
 
-**Example use cases:**
+**Retry with backoff:**
+File deletions during uninstall and update retry up to 3 times with 500ms delays. This handles transient locks from antivirus scanners, Windows Search indexer, and other processes that briefly hold file handles.
 
-- A database plugin showing connection status and letting users run health checks
-- A service manager plugin showing which Windows services are running
-- A monitoring plugin showing server metrics from installed products
+**Environment variable rollback:**
+When a product sets `ACME_HOME` or appends to `PATH`, the exact change is recorded in a tracking file. On uninstall, only that specific change is reversed. For `PATH`, only the appended segment is removed - all other entries are preserved.
 
-#### Custom file type handlers (`IFileTypeHandler`)
+### File-in-use handling
 
-Plugins can claim specific file types from product packages. Files matching the registered extensions are **not copied** to the install directory - the plugin handles them entirely.
+When an update needs to replace a running executable:
 
-```csharp
-public class MyPlugin : IStorkDropPlugin, IFileTypeHandler
-{
-    // ... IStorkDropPlugin members ...
+1. The locked file is renamed to `DEL_{guid}_{filename}` in the same directory
+2. The new version is copied into place with the original filename
+3. The renamed old file is scheduled for deletion on next reboot (via Windows `MoveFileEx` API)
+4. The application runs the new version immediately; the old file is cleaned up on restart
 
-    // Claim .sql and .migration files
-    public IReadOnlyList<string> HandledExtensions => new[] { ".sql", ".migration" };
+### UAC elevation
 
-    public async Task<FileHandlerResult> HandleFilesAsync(
-        IReadOnlyList<string> files,
-        PluginContext context,
-        CancellationToken ct
-    )
-    {
-        List<FileHandlerFileResult> results = new List<FileHandlerFileResult>();
-        string connectionString = context.DatabaseConnections
-            .FirstOrDefault(db => db.IsDefault)?.ConnectionString ?? "";
+StorkDrop runs as a normal user. When the install path requires admin privileges (Program Files, Windows directory):
 
-        foreach (string file in files)
-        {
-            // Execute the SQL file against the configured database
-            string sql = await File.ReadAllTextAsync(file, ct);
-            // ... execute sql ...
-            results.Add(new FileHandlerFileResult
-            {
-                FilePath = file,
-                Success = true,
-                Action = $"Executed against database",
-            });
-        }
+1. The install dialog detects the protected path and shows a warning
+2. A separate elevated process is spawned via the Windows `runas` verb (UAC prompt)
+3. The elevated process performs only the install/update/uninstall operation, then exits
+4. The main process reloads state from disk to see the changes
+5. The feed ID is passed to the elevated process so it downloads from the correct repository
 
-        return new FileHandlerResult { Success = true, FileResults = results };
-    }
-}
-```
+For uninstall, if the product was installed to a protected directory, the confirmation dialog includes a note that admin privileges will be required.
 
-**How it works:**
+### File lock detection
 
-1. After extracting the product ZIP, StorkDrop checks all registered `IFileTypeHandler` plugins
-2. Files matching `HandledExtensions` are passed to `HandleFilesAsync` (still in the temp directory)
-3. Those files are **excluded** from the copy step - they never reach the install directory
-4. The plugin decides what to do: run SQL scripts, deploy to a service, register with an API, etc.
+Before uninstalling or updating, StorkDrop checks `.exe` and `.dll` files for locks:
 
-**Use cases:**
+- Uses the Windows Restart Manager API (`rstrtmgr.dll`) to identify which process holds the lock
+- Only checks executable files to avoid false positives from the Windows indexer or antivirus
+- Uses `FileShare.ReadWrite | FileShare.Delete` - the minimum access needed to determine if deletion is possible
+- Shows a clear error: "Cannot uninstall: file 'MyApp.exe' is locked by: MyApp"
 
-- SQL migration scripts executed against a database during install
-- Configuration templates processed and written to custom locations
-- Service registration files deployed to a runtime directory
-- Any file type that needs custom handling instead of simple file copy
+### Data protection
 
-### Product-level plugins (`IStorkPlugin`)
-
-Products ship a DLL with pre/post install logic and dynamic configuration:
-
-```csharp
-public class MyInstaller : IStorkPlugin
-{
-    public IReadOnlyList<PluginConfigField> GetConfigurationSchema(PluginEnvironment env)
-    {
-        return new[]
-        {
-            new PluginConfigField
-            {
-                Key = "database",
-                Label = "Target Database",
-                FieldType = PluginFieldType.DatabasePicker,
-                Required = true,
-            },
-        };
-    }
-
-    public async Task<PluginPreInstallResult> PreInstallAsync(PluginContext ctx, CancellationToken ct)
-    {
-        // Validate, prepare - return result instead of throwing
-        if (string.IsNullOrEmpty(ctx.ConfigValues["database"]))
-            return new PluginPreInstallResult
-            {
-                Success = false,
-                ValidationErrors = new[] { new PluginValidationError("database", "Required") }
-            };
-        return new PluginPreInstallResult { Success = true };
-    }
-
-    public async Task PostInstallAsync(PluginContext ctx, CancellationToken ct)
-    {
-        // Create DB entries, register components, run migrations
-    }
-
-    public async Task<PluginPreInstallResult> PreUninstallAsync(PluginContext ctx, CancellationToken ct)
-        => new PluginPreInstallResult { Success = true };
-
-    public async Task PostUninstallAsync(PluginContext ctx, CancellationToken ct)
-    {
-        // Clean up DB entries
-    }
-}
-```
-
-### Plugin debug support
-
-Test plugins without running StorkDrop:
-
-```csharp
-await StorkPluginDebugger.RunAsync<MyInstaller>(
-    new PluginContext { ProductId = "test", Version = "1.0.0", InstallPath = @"C:\Test" },
-    new Dictionary<string, string> { ["database"] = "MyDb" }
-);
-```
-
-### Configuration field types
-
-| Type              | Control           | Use case                  |
-| ----------------- | ----------------- | ------------------------- |
-| `Text`            | TextBox           | Free text                 |
-| `Number`          | Validated TextBox | Numeric with min/max      |
-| `Dropdown`        | ComboBox          | Single selection          |
-| `MultiSelect`     | Checkbox list     | Multiple selections       |
-| `Checkbox`        | CheckBox          | Boolean                   |
-| `Password`        | PasswordBox       | Sensitive input           |
-| `FilePath`        | TextBox + browse  | File selection            |
-| `FolderPath`      | TextBox + browse  | Directory selection       |
-| `DatabasePicker`  | ComboBox          | From configured databases |
-| `StepsPathPicker` | ComboBox          | From configured paths     |
-
-## Environment variables
-
-Products can declare environment variables to set or modify during installation. Changes are tracked and precisely reversed on uninstall.
-
-### Actions
-
-| Action   | Behavior on install                     | Behavior on uninstall             |
-| -------- | --------------------------------------- | --------------------------------- |
-| `set`    | Creates or overwrites the variable      | Deletes the variable entirely     |
-| `append` | Appends a value to the existing variable | Removes only the appended portion |
-
-### Fields
-
-| Field       | Required | Default     | Description                                                  |
-| ----------- | -------- | ----------- | ------------------------------------------------------------ |
-| `name`      | Yes      |             | Variable name (e.g., `PATH`, `ACME_HOME`)                    |
-| `value`     | Yes      |             | Value to set or append. Supports `{InstallPath}` templating  |
-| `action`    | No       | `"set"`     | `"set"` or `"append"`                                        |
-| `mustExist` | No       | `false`     | For `append`: skip if the variable doesn't already exist     |
-| `separator` | No       | `";"`       | Delimiter for `append` (`;` on Windows)                      |
-| `target`    | No       | `"machine"` | `"machine"` or `"user"` scope                                |
-
-### Template variables
-
-| Template        | Resolves to                       |
-| --------------- | --------------------------------- |
-| `{InstallPath}` | The chosen installation directory |
-
-### Example
-
-```jsonc
-"environmentVariables": [
-  { "name": "ACME_HOME", "value": "{InstallPath}", "action": "set" },
-  { "name": "PATH", "value": "{InstallPath}\\bin", "action": "append", "mustExist": true }
-]
-```
-
-On install to `C:\Program Files\Acme\Dashboard`:
-- `ACME_HOME` is set to `C:\Program Files\Acme\Dashboard`
-- `C:\Program Files\Acme\Dashboard\bin` is appended to `PATH`
-
-On uninstall:
-- `ACME_HOME` is deleted
-- Only `C:\Program Files\Acme\Dashboard\bin` is removed from `PATH`, leaving all other entries intact
+- Feed passwords are encrypted with DPAPI (`ProtectedData` with `CurrentUser` scope) - they're tied to the current Windows user and machine
+- Configuration files use atomic writes (temp file + move) to prevent corruption
+- The product registry validates for duplicate entries on load
 
 ## Multi-feed support
 
-StorkDrop can connect to multiple Nexus repositories simultaneously. Products from all feeds appear in a unified marketplace with a feed filter dropdown.
-
-### Configuration
-
-Add multiple feeds in Settings or during the setup wizard. Each feed has its own URL, repository name, and optional credentials:
+StorkDrop connects to multiple Nexus repositories simultaneously. Products from all feeds appear in a unified marketplace.
 
 ```json
 {
@@ -368,88 +179,185 @@ Add multiple feeds in Settings or during the setup wizard. Each feed has its own
 }
 ```
 
-### How it works
-
-- Each configured feed gets its own dedicated HTTP client with independent authentication
-- The marketplace loads products from all feeds in parallel, tagging each product with its source feed
-- Installing, updating, and uninstalling always uses the correct feed  - even through UAC elevation
-- The feed filter dropdown lets users browse products from a specific feed or all feeds at once
-- Installed products remember which feed they came from, so updates are checked against the right source
+- Each feed gets its own HTTP client with independent credentials
+- Products are tagged with their source feed throughout the entire lifecycle
+- The feed filter dropdown appears when 2+ feeds are configured
+- Installed products remember their source feed, so updates check the right repository
+- Elevated processes receive the feed ID as a command-line argument
 
 ### Adding a new feed type
 
-The current architecture is designed for extensibility. All feed interactions go through the `IRegistryClient` interface:
+All feed interactions go through the `IRegistryClient` interface. To add a non-Nexus backend (GitHub Releases, S3, Azure Artifacts):
 
-```csharp
-public interface IRegistryClient
+1. Implement `IRegistryClient` for your backend
+2. Extend `FeedRegistry` to create your client type based on a field in `FeedConfiguration`
+3. The marketplace, engine, updates, and all UI features work automatically
+
+## Product manifest
+
+Products are stored in Nexus raw repositories:
+
+```
+my-product/
+  manifest.json                    Latest version manifest
+  versions/1.0.0/
+    manifest.json                  Version-specific manifest
+    my-product-1.0.0.zip           Product artifact
+```
+
+```jsonc
 {
-    Task<IReadOnlyList<ProductManifest>> GetAllProductsAsync(CancellationToken ct = default);
-    Task<ProductManifest?> GetProductManifestAsync(string productId, CancellationToken ct = default);
-    Task<IReadOnlyList<string>> GetAvailableVersionsAsync(string productId, CancellationToken ct = default);
-    Task<Stream> DownloadProductAsync(string productId, string version, CancellationToken ct = default);
-    Task<bool> TestConnectionAsync(CancellationToken ct = default);
+  "productId": "my-product",
+  "title": "My Product",
+  "version": "1.0.0",
+  "releaseDate": "2026-03-24",
+  "installType": "Suite",                        // Plugin | Suite | Bundle
+  "description": "Short description for the marketplace card",
+  "releaseNotes": "# What's new\n- Feature A\n- Bug fix B",
+  "recommendedInstallPath": "C:\\Program Files\\MyCompany\\MyProduct",
+  "publisher": "My Company",
+  "imageUrl": "https://example.com/icon.png",
+  "downloadSizeBytes": 52428800,
+  "requirements": ["Windows 10+", ".NET 8 Runtime"],
+  "shortcuts": [
+    { "exeName": "MyProduct.exe", "displayName": "My Product" },
+    { "exeName": "MyAdmin.exe", "displayName": "My Product Admin", "iconPath": "admin.ico" }
+  ],
+  "shortcutFolder": "My Company",
+  "environmentVariables": [
+    { "name": "MY_PRODUCT_HOME", "value": "{InstallPath}", "action": "set" },
+    { "name": "PATH", "value": "{InstallPath}\\bin", "action": "append", "mustExist": true }
+  ],
+  "plugins": [
+    { "assembly": "MyProduct.dll", "typeName": "MyProduct.Installer" }
+  ],
+  "cleanup": {
+    "registryKeys": [],
+    "dataLocations": ["%APPDATA%\\MyProduct"]
+  }
 }
 ```
 
-To add support for a different repository type (Azure Artifacts, GitHub Releases, S3, etc.):
+## Plugin system
 
-1. Implement `IRegistryClient` for your repository backend
-2. Extend `FeedRegistry` to create your client type based on a feed type field in `FeedConfiguration`
-3. That's it  - the marketplace, install engine, updates, and all other features work automatically
+### App-level plugins (`IStorkDropPlugin`)
 
-No changes needed in the UI, plugin system, or installation engine.
+Drop a DLL in the `plugins/` directory next to StorkDrop. It's discovered and loaded automatically at startup. Plugins can:
 
-## Reliability and safety
+- Add sidebar navigation tabs with custom configuration pages
+- Claim file types from product packages (e.g., `.sid`, `.sql`) for custom deployment
+- Show setup wizard steps during first-run configuration
+- Add sections to the Settings page
+- React to product install/uninstall events
 
-StorkDrop is designed for production servers where failed updates are not acceptable.
+```csharp
+public class MyPlugin : IStorkDropPlugin, IFileTypeHandler
+{
+    public string PluginId => "my-plugin";
+    public string DisplayName => "My Plugin";
+    public string[] AssociatedFeeds => new[] { "https://nexus.example.com" };
 
-### Update safety
+    public IReadOnlyList<string> HandledExtensions => new[] { ".sql" };
 
-| Protection | How it works |
-|---|---|
-| **Backup before update** | Before updating, the current installation is backed up. If the update fails at any step, the backup is automatically restored. |
-| **File manifest tracking** | Every installed file is recorded in `{productId}.files.json`. Uninstall removes exactly what was installed  - nothing more, nothing less. |
-| **Atomic file writes** | Configuration and product registry files are written to a temp file first, then moved into place. A crash mid-write can't corrupt the data. |
-| **Retry with backoff** | File deletions during uninstall/update retry up to 3 times with 500ms delays, handling transient locks from antivirus or indexer. |
-| **Environment variable rollback** | Environment variable changes are tracked per-product. Uninstall precisely reverses only what was added  - for PATH-style variables, only the appended segment is removed. |
+    // Called after extraction - return config fields the user must fill in
+    public IReadOnlyList<PluginConfigField> GetFileHandlerConfig(
+        IReadOnlyList<string> files, PluginContext context)
+    {
+        return new[] {
+            new PluginConfigField {
+                Key = "target-db",
+                Label = "Target Database",
+                FieldType = PluginFieldType.Dropdown,
+                Required = true,
+                Options = { new PluginOptionItem { Value = "prod", Label = "Production DB" } }
+            }
+        };
+    }
 
-### File-in-use handling
+    // Called after user fills in the config - deploy the files
+    public async Task<FileHandlerResult> HandleFilesAsync(
+        IReadOnlyList<string> files, PluginContext context, CancellationToken ct)
+    {
+        // If this returns Success = false, the entire installation is aborted
+        // ...
+    }
+}
+```
 
-When an update needs to replace a file that's currently running:
+**Plugin loading and version compatibility:**
+Plugins reference `StorkDrop.Contracts` via NuGet. At runtime, StorkDrop's plugin loader uses a custom `AssemblyLoadContext` that resolves shared assemblies (like `StorkDrop.Contracts`) from the host application. This means a plugin built against Contracts v1.0.7 works with a StorkDrop built against v1.0.8 - the types are the same, just different version stamps.
 
-1. The locked file is renamed to `DEL_{guid}_{filename}` in the same directory
-2. The new file is copied into place
-3. The renamed file is scheduled for deletion on next reboot via the Windows MoveFileEx API
-4. The application continues with the new version; the old file is cleaned up on restart
+**Debug support:**
+Use `--plugin-dir C:\path\to\build\output` to load plugins from a development directory. In Rider/VS, configure the launch profile to start StorkDrop with this argument pointing to your plugin's `bin/Debug` folder. Set breakpoints in the plugin code and debug directly.
 
-### UAC elevation
+### Product-level plugins (`IStorkPlugin`)
 
-StorkDrop runs as a normal user by default. When installing to a protected directory (Program Files, Windows, etc.):
+Products ship a DLL with pre/post install logic and dynamic configuration UI:
 
-1. The UI detects the protected path and shows a hint
-2. On install/update/uninstall, a separate elevated process is spawned via `runas`
-3. The elevated process performs only the privileged operation, then exits
-4. The main process reloads state from disk to pick up changes made by the elevated process
-5. The feed ID is passed to the elevated process so it downloads from the correct source
+```csharp
+public class MyInstaller : IStorkPlugin
+{
+    public IReadOnlyList<PluginConfigField> GetConfigurationSchema(PluginEnvironment env)
+    {
+        // Return fields - StorkDrop renders them as a form before installation
+        return new[] {
+            new PluginConfigField { Key = "db", Label = "Database", FieldType = PluginFieldType.Dropdown, Required = true }
+        };
+    }
 
-### File lock detection
+    public async Task<PluginPreInstallResult> PreInstallAsync(PluginContext ctx, CancellationToken ct)
+    {
+        // Validate config, check prerequisites - return Success = false to abort
+    }
 
-Before uninstalling or updating, StorkDrop checks for locked `.exe` and `.dll` files:
+    public async Task PostInstallAsync(PluginContext ctx, CancellationToken ct)
+    {
+        // Write config files, run migrations, register services
+    }
+}
+```
 
-- Uses the Windows Restart Manager API to identify which process holds the lock
-- Only checks executable files (not configs, logs, etc.) to avoid false positives from the indexer
-- Opens files with `FileShare.ReadWrite | FileShare.Delete`  - the minimum check needed for deletion
-- Shows a clear error naming the locked file and the process holding it
+### Configuration field types
 
-### Data protection
+| Type | Control | Use case |
+|---|---|---|
+| `Text` | TextBox | Free text input |
+| `Number` | Validated TextBox | Numeric with optional min/max |
+| `Dropdown` | ComboBox | Single selection from options |
+| `MultiSelect` | Checkbox list | Multiple selections |
+| `Checkbox` | CheckBox | Boolean toggle |
+| `Password` | PasswordBox | Sensitive input (masked) |
+| `FilePath` | TextBox + browse | File selection |
+| `FolderPath` | TextBox + browse | Directory selection |
 
-- Feed passwords are encrypted with DPAPI (Windows Data Protection)  - they're tied to the current user and machine
-- Configuration files use atomic writes (temp + move) to prevent corruption
-- The product registry validates for duplicate entries on load
+## Environment variables
+
+Products declare environment variables in the manifest. Changes are tracked per-product and precisely reversed on uninstall.
+
+| Action | On install | On uninstall |
+|---|---|---|
+| `set` | Creates or overwrites the variable | Deletes it entirely |
+| `append` | Appends a value with separator | Removes only the appended portion |
+
+The `mustExist` flag (for `append`) controls what happens when the target variable doesn't exist: if `true`, the append is silently skipped; if `false` (default), the variable is created.
+
+Concurrent environment variable modifications from parallel installations are serialized to prevent race conditions where two products both append to `PATH` and one overwrites the other.
+
+## Logging
+
+StorkDrop logs every operation with structured logging via Serilog:
+
+- **Installation steps** - download, extract, plugin processing, file copy, shortcuts, env vars, registration
+- **Feed operations** - which feeds are loaded, how many products found, connection test results
+- **Plugin loading** - which DLLs were discovered, which types were found, which failed and why
+- **Update checking** - which feeds were queried, what updates were found
+- **Configuration changes** - settings saves, imports, exports
+
+Log files are stored in `%APPDATA%/StorkDrop/Logs/` with daily rolling and 30-day retention.
+
+The Activity Log page has a "View Application Logs" button that opens the log directory. The installation panel's log viewer shows real-time per-installation logs.
 
 ## NuGet package
-
-Reference in your plugin projects:
 
 ```xml
 <PackageReference Include="StorkDrop.Contracts" />
@@ -462,7 +370,7 @@ StorkDrop.sln
 dotnet/
   StorkDrop.Contracts/     Models, interfaces, plugin contracts (NuGet, net10.0)
   StorkDrop.Registry/      Nexus client, FeedRegistry (net10.0)
-  StorkDrop.Installer/     Install engine (net10.0-windows)
+  StorkDrop.Installer/     Install engine, coordinator (net10.0-windows)
   StorkDrop.App/           WPF application (net10.0-windows, win-x64)
   StorkDrop.Tests/         Unit tests (net10.0-windows)
 ```
@@ -478,16 +386,16 @@ dotnet test StorkDrop.sln --configuration Release
 
 Stored in `%APPDATA%/StorkDrop/Config/`:
 
-| File                             | Purpose                                           |
-| -------------------------------- | ------------------------------------------------- |
-| `config.json`                    | Feeds, preferences, language                      |
-| `installed-products.json`        | Installed product registry                        |
-| `activity-log.json`              | Installation activity log                         |
-| `{productId}.files.json`         | Per-product file manifest (for clean uninstall)   |
-| `{productId}.envvars.json`     | Per-product environment variable tracking (for clean uninstall) |
+| File | Purpose |
+|---|---|
+| `config.json` | Feeds, preferences, language |
+| `installed-products.json` | Installed product registry |
+| `activity-log.json` | Installation activity log |
+| `{productId}.files.json` | Per-product file manifest (for clean uninstall) |
+| `{productId}.envvars.json` | Per-product environment variable tracking |
 | `plugin-config-{productId}.json` | Plugin config values (remembered between updates) |
 
-Logs in `%APPDATA%/StorkDrop/Logs/` (Serilog, rolling daily).
+Logs in `%APPDATA%/StorkDrop/Logs/` (Serilog, rolling daily, 30-day retention).
 
 ## Roadmap
 

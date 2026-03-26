@@ -305,4 +305,12 @@
 
   <!-- Loading error -->
   <system:String x:Key="Error_LoadFailed">Error loading: {0}</system:String>
+
+  <!-- Install dialog plugin hint -->
+  <system:String x:Key="InstallDialog_PluginHint"
+    >A plugin is connected to this product and may prompt for additional configuration during installation.</system:String
+  >
+
+  <!-- Activity log -->
+  <system:String x:Key="ActivityLog_ViewLogs">View Application Logs</system:String>
 </ResourceDictionary>

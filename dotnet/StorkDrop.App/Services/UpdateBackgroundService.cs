@@ -52,6 +52,7 @@ public sealed class UpdateBackgroundService : BackgroundService
 
                 if (config is not null && config.AutoCheckForUpdates)
                 {
+                    _logger.LogInformation("Background update check starting");
                     IReadOnlyList<InstalledProduct> installed = await _productRepository
                         .GetAllAsync(stoppingToken)
                         .ConfigureAwait(false);
@@ -61,10 +62,16 @@ public sealed class UpdateBackgroundService : BackgroundService
                     {
                         try
                         {
+                            _logger.LogDebug("Checking feed {FeedId} for updates", feed.Id);
                             IRegistryClient client = _feedRegistry.GetClient(feed.Id);
                             IReadOnlyList<ProductManifest> available = await client
                                 .GetAllProductsAsync(stoppingToken)
                                 .ConfigureAwait(false);
+                            _logger.LogDebug(
+                                "Found {Count} products from feed {FeedId}",
+                                available.Count,
+                                feed.Id
+                            );
                             allAvailable.AddRange(available);
                         }
                         catch (Exception ex)
@@ -88,6 +95,12 @@ public sealed class UpdateBackgroundService : BackgroundService
                             && VersionComparer.IsNewer(latest.Version, product.Version)
                         )
                         {
+                            _logger.LogInformation(
+                                "Update available for {ProductTitle}: {CurrentVersion} -> {NewVersion}",
+                                product.Title,
+                                product.Version,
+                                latest.Version
+                            );
                             try
                             {
                                 _notificationService.ShowUpdateAvailable(
@@ -111,6 +124,10 @@ public sealed class UpdateBackgroundService : BackgroundService
                             ? config.CheckInterval
                             : TimeSpan.FromHours(4);
 
+                    _logger.LogInformation(
+                        "Background update check complete, next check in {Interval}",
+                        interval
+                    );
                     await Task.Delay(interval, stoppingToken).ConfigureAwait(false);
                 }
                 else

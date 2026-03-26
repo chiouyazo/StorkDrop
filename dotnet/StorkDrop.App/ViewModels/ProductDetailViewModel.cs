@@ -5,6 +5,7 @@ using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Installer;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -14,7 +15,7 @@ namespace StorkDrop.App.ViewModels;
 public partial class ProductDetailViewModel : ObservableObject
 {
     private readonly IFeedRegistry _feedRegistry;
-    private readonly IInstallationEngine _installationEngine;
+    private readonly InstallationCoordinator _coordinator;
     private readonly IProductRepository _productRepository;
     private readonly DialogService _dialogService;
 
@@ -22,18 +23,18 @@ public partial class ProductDetailViewModel : ObservableObject
     /// Initializes a new instance of the <see cref="ProductDetailViewModel"/> class.
     /// </summary>
     /// <param name="feedRegistry">The feed registry for fetching product details.</param>
-    /// <param name="installationEngine">The engine for installing products.</param>
+    /// <param name="coordinator">The installation coordinator for isolated installs.</param>
     /// <param name="productRepository">The repository for installed products.</param>
     /// <param name="dialogService">The dialog service for user interactions.</param>
     public ProductDetailViewModel(
         IFeedRegistry feedRegistry,
-        IInstallationEngine installationEngine,
+        InstallationCoordinator coordinator,
         IProductRepository productRepository,
         DialogService dialogService
     )
     {
         _feedRegistry = feedRegistry;
-        _installationEngine = installationEngine;
+        _coordinator = coordinator;
         _productRepository = productRepository;
         _dialogService = dialogService;
     }
@@ -215,10 +216,12 @@ public partial class ProductDetailViewModel : ObservableObject
 
             if (versionManifest is not null)
             {
-                InstallResult result = await _installationEngine.InstallAsync(
+                using CancellationTokenSource cts = new();
+                InstallResult result = await _coordinator.InstallWithIsolationAsync(
                     versionManifest,
                     options,
-                    progress
+                    progress,
+                    cts.Token
                 );
 
                 if (result.Success)

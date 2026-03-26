@@ -41,6 +41,7 @@ public partial class MainWindowViewModel : ObservableObject
         PluginsViewModel pluginsViewModel,
         SettingsViewModel settingsViewModel,
         ILogger<MainWindowViewModel> logger,
+        InstallationTracker installationTracker,
         IEnumerable<IStorkDropPlugin> plugins,
         PluginLoadStatus pluginLoadStatus
     )
@@ -54,6 +55,7 @@ public partial class MainWindowViewModel : ObservableObject
         _pluginsViewModel = pluginsViewModel;
         _settingsViewModel = settingsViewModel;
         _logger = logger;
+        InstallationTracker = installationTracker;
         _plugins = plugins;
         _pluginLoadStatus = pluginLoadStatus;
 
@@ -68,6 +70,17 @@ public partial class MainWindowViewModel : ObservableObject
 
     [ObservableProperty]
     private object? _currentContent;
+
+    public InstallationTracker InstallationTracker { get; }
+
+    [ObservableProperty]
+    private bool _showInstallationPanel;
+
+    [RelayCommand]
+    private void ToggleInstallationPanel() => ShowInstallationPanel = !ShowInstallationPanel;
+
+    [ObservableProperty]
+    private TrackedInstallation? _selectedInstallation;
 
     [ObservableProperty]
     private bool _isConnected;
@@ -94,12 +107,19 @@ public partial class MainWindowViewModel : ObservableObject
 
     private void BuildPluginNavTabs()
     {
+        _logger.LogInformation("Building plugin nav tabs from {Count} plugins", _plugins.Count());
         foreach (IStorkDropPlugin plugin in _plugins)
         {
             try
             {
+                _logger.LogInformation("Getting nav tabs from plugin {PluginId}", plugin.PluginId);
                 System.Collections.Generic.IReadOnlyList<PluginNavTab> tabs =
                     plugin.GetNavigationTabs();
+                _logger.LogInformation(
+                    "Plugin {PluginId} returned {Count} tabs",
+                    plugin.PluginId,
+                    tabs.Count
+                );
                 foreach (PluginNavTab tab in tabs)
                 {
                     PluginNavTabs.Add(
@@ -198,6 +218,11 @@ public partial class MainWindowViewModel : ObservableObject
     [RelayCommand]
     private void NavigateToPluginTab(PluginNavTabViewModel tab)
     {
+        _logger.LogInformation(
+            "Navigating to plugin tab {TabId} from plugin {PluginId}",
+            tab.TabId,
+            tab.PluginId
+        );
         foreach (IStorkDropPlugin plugin in _plugins)
         {
             if (plugin.PluginId == tab.PluginId)
@@ -216,6 +241,14 @@ public partial class MainWindowViewModel : ObservableObject
                     );
                 }
 
+                DialogService dialogService = App.Services.GetRequiredService<DialogService>();
+                PluginTabViewModel pluginTabVm = new(plugin, dialogService);
+                _logger.LogInformation(
+                    "Created PluginTabViewModel for {PluginId} with {SectionCount} sections",
+                    plugin.PluginId,
+                    pluginTabVm.Sections.Count
+                );
+                CurrentContent = pluginTabVm;
                 break;
             }
         }

@@ -16,23 +16,23 @@ namespace StorkDrop.App.ViewModels;
 public partial class InstalledViewModel : ObservableObject
 {
     private readonly IProductRepository _productRepository;
-    private readonly IInstallationEngine _installationEngine;
+    private readonly InstallationCoordinator _coordinator;
     private readonly DialogService _dialogService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InstalledViewModel"/> class.
     /// </summary>
     /// <param name="productRepository">The repository for installed products.</param>
-    /// <param name="installationEngine">The engine for installing and uninstalling products.</param>
+    /// <param name="coordinator">The installation coordinator for isolated operations.</param>
     /// <param name="dialogService">The dialog service for user confirmations.</param>
     public InstalledViewModel(
         IProductRepository productRepository,
-        IInstallationEngine installationEngine,
+        InstallationCoordinator coordinator,
         DialogService dialogService
     )
     {
         _productRepository = productRepository;
-        _installationEngine = installationEngine;
+        _coordinator = coordinator;
         _dialogService = dialogService;
     }
 
@@ -151,7 +151,7 @@ public partial class InstalledViewModel : ObservableObject
             );
             if (installed is not null)
             {
-                await _installationEngine.UninstallAsync(installed, cancellationToken);
+                await _coordinator.UninstallWithIsolationAsync(installed, cancellationToken);
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
                 OnPropertyChanged(nameof(HasNoProducts));

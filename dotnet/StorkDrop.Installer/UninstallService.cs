@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 
@@ -16,18 +17,21 @@ public sealed class UninstallService
     private readonly IActivityLog _activityLog;
     private readonly IFileLockDetector _fileLockDetector;
     private readonly EnvironmentVariableService _envVarService;
+    private readonly ILogger<UninstallService> _logger;
 
     public UninstallService(
         IProductRepository productRepository,
         IActivityLog activityLog,
         IFileLockDetector fileLockDetector,
-        EnvironmentVariableService envVarService
+        EnvironmentVariableService envVarService,
+        ILogger<UninstallService> logger
     )
     {
         _productRepository = productRepository;
         _activityLog = activityLog;
         _fileLockDetector = fileLockDetector;
         _envVarService = envVarService;
+        _logger = logger;
     }
 
     /// <summary>
@@ -41,10 +45,17 @@ public sealed class UninstallService
         CancellationToken cancellationToken = default
     )
     {
+        _logger.LogInformation(
+            "Starting uninstall of {ProductId} from {InstalledPath}",
+            product.ProductId,
+            product.InstalledPath
+        );
+
         // Check for file locks (only .exe and .dll — these are the files that actually get locked
         // by running processes; checking all files causes false positives from transient OS handles)
         if (Directory.Exists(product.InstalledPath))
         {
+            _logger.LogDebug("Checking file locks in {InstalledPath}", product.InstalledPath);
             string[] files;
             try
             {
@@ -79,6 +90,7 @@ public sealed class UninstallService
         }
 
         // Remove environment variables
+        _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
         await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
 
         // Delete installed files using file manifest if available
@@ -91,6 +103,11 @@ public sealed class UninstallService
 
             if (trackedFiles is not null && trackedFiles.Count > 0)
             {
+                _logger.LogInformation(
+                    "Deleting {Count} tracked files for {ProductId}",
+                    trackedFiles.Count,
+                    product.ProductId
+                );
                 // Delete only tracked files
                 foreach (string relativePath in trackedFiles)
                 {
@@ -106,6 +123,10 @@ public sealed class UninstallService
             }
             else
             {
+                _logger.LogWarning(
+                    "No file manifest found for {ProductId}, deleting entire directory",
+                    product.ProductId
+                );
                 // Fallback: delete entire directory if no manifest exists
                 await DeleteDirectoryWithRetryAsync(product.InstalledPath, cancellationToken);
             }
@@ -115,9 +136,11 @@ public sealed class UninstallService
         }
 
         // Remove Start Menu shortcuts
+        _logger.LogDebug("Removing shortcuts for {ProductTitle}", product.Title);
         RemoveShortcuts(product.Title);
 
         // Remove from repository
+        _logger.LogDebug("Removing {ProductId} from product repository", product.ProductId);
         await _productRepository.RemoveAsync(product.ProductId, cancellationToken);
 
         // Log the activity
@@ -130,6 +153,12 @@ public sealed class UninstallService
             Success: true
         );
         await _activityLog.LogAsync(entry, cancellationToken);
+
+        _logger.LogInformation(
+            "Uninstall of {ProductId} v{Version} complete",
+            product.ProductId,
+            product.Version
+        );
     }
 
     private static async Task<List<string>?> LoadFileManifestAsync(

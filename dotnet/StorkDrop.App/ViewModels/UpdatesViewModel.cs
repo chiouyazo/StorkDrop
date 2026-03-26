@@ -13,17 +13,17 @@ public partial class UpdatesViewModel : ObservableObject
 {
     private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
-    private readonly IInstallationEngine _installationEngine;
+    private readonly InstallationCoordinator _coordinator;
 
     public UpdatesViewModel(
         IFeedRegistry feedRegistry,
         IProductRepository productRepository,
-        IInstallationEngine installationEngine
+        InstallationCoordinator coordinator
     )
     {
         _feedRegistry = feedRegistry;
         _productRepository = productRepository;
-        _installationEngine = installationEngine;
+        _coordinator = coordinator;
     }
 
     [ObservableProperty]
@@ -201,7 +201,7 @@ public partial class UpdatesViewModel : ObservableObject
                 update.UpdateStatusMessage = p.Message;
             });
 
-            await _installationEngine.UpdateAsync(
+            InstallResult updateResult = await _coordinator.UpdateWithIsolationAsync(
                 installed,
                 manifest,
                 options,
@@ -210,6 +210,18 @@ public partial class UpdatesViewModel : ObservableObject
             );
 
             update.IsUpdating = false;
+
+            if (!updateResult.Success)
+            {
+                ErrorMessage =
+                    LocalizationManager
+                        .GetString("Error_UpdateProductFailed")
+                        .Replace("{0}", update.Title)
+                    + ": "
+                    + (updateResult.ErrorMessage ?? string.Empty);
+                return;
+            }
+
             Updates.Remove(update);
         }
         catch (Exception ex)
