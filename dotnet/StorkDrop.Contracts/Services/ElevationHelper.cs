@@ -46,12 +46,14 @@ public static class ElevationHelper
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
+            string pluginDirArgs = GetPluginDirArgs();
             ProcessStartInfo startInfo = new()
             {
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\"",
+                Arguments =
+                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" {pluginDirArgs}",
             };
 
             Process? process = Process.Start(startInfo);
@@ -83,7 +85,7 @@ public static class ElevationHelper
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--uninstall \"{productId}\"",
+                Arguments = $"--uninstall \"{productId}\" {GetPluginDirArgs()}",
             };
 
             Process? process = Process.Start(startInfo);
@@ -115,7 +117,8 @@ public static class ElevationHelper
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\"",
+                Arguments =
+                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" {GetPluginDirArgs()}",
             };
 
             Process? process = Process.Start(startInfo);
@@ -157,5 +160,20 @@ public static class ElevationHelper
         {
             return false;
         }
+    }
+
+    /// <summary>
+    /// Collects --plugin-dir arguments from the current process to forward to elevated processes.
+    /// </summary>
+    private static string GetPluginDirArgs()
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        List<string> pluginDirs = [];
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--plugin-dir")
+                pluginDirs.Add($"--plugin-dir \"{args[i + 1]}\"");
+        }
+        return string.Join(" ", pluginDirs);
     }
 }

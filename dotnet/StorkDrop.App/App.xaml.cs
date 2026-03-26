@@ -155,7 +155,11 @@ public partial class App : Application
 
             if (manifest is not null)
             {
-                InstallOptions options = new(TargetPath: targetPath, FeedId: feedId);
+                InstallOptions options = new(
+                    TargetPath: targetPath,
+                    FeedId: feedId,
+                    SkipFileHandlers: true
+                );
                 Progress<InstallProgress> progress = new(_ => { });
                 await engine.InstallAsync(manifest, options, progress);
             }

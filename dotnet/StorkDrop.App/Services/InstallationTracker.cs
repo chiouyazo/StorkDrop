@@ -16,8 +16,12 @@ public sealed partial class InstallationTracker : ObservableObject
 
     public int ActiveCount => Installations.Count(i => !i.IsCompleted);
 
+    [ObservableProperty]
+    private bool _showPanel;
+
     public TrackedInstallation StartInstallation(string productId, string title)
     {
+        ShowPanel = true;
         TrackedInstallation install = new()
         {
             ProductId = productId,

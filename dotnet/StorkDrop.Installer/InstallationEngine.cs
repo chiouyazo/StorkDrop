@@ -259,6 +259,50 @@ public sealed class InstallationEngine : IInstallationEngine
             try
             {
                 ZipFile.ExtractToDirectory(zipPath, extractPath);
+
+                // Check for inner ZIP: if the extracted contents contain a single .zip file,
+                // extract it as the actual product contents (two-layer packaging)
+                string[] innerZips = Directory.GetFiles(extractPath, "*.zip");
+                if (innerZips.Length == 1)
+                {
+                    string innerZipPath = innerZips[0];
+                    string innerExtractPath = Path.Combine(tempDir, "inner-extracted");
+                    _logger.LogInformation(
+                        "Found inner ZIP {InnerZip}, extracting product contents",
+                        Path.GetFileName(innerZipPath)
+                    );
+                    progress.Report(
+                        new InstallProgress(
+                            InstallStage.Extracting,
+                            50,
+                            $"Extracting inner archive {Path.GetFileName(innerZipPath)}..."
+                        )
+                    );
+                    ZipFile.ExtractToDirectory(innerZipPath, innerExtractPath);
+
+                    // Remove the inner ZIP from the outer extraction so it's not copied/handled
+                    File.Delete(innerZipPath);
+
+                    // Move inner contents into the extract path
+                    foreach (
+                        string file in Directory.GetFiles(
+                            innerExtractPath,
+                            "*",
+                            SearchOption.AllDirectories
+                        )
+                    )
+                    {
+                        string relativePath = Path.GetRelativePath(innerExtractPath, file);
+                        string targetFile = Path.Combine(extractPath, relativePath);
+                        string? targetDir = Path.GetDirectoryName(targetFile);
+                        if (targetDir is not null)
+                            Directory.CreateDirectory(targetDir);
+                        File.Move(file, targetFile, overwrite: true);
+                    }
+
+                    Directory.Delete(innerExtractPath, true);
+                    _logger.LogInformation("Inner ZIP extracted successfully");
+                }
             }
             catch (Exception ex)
             {
@@ -318,7 +362,33 @@ public sealed class InstallationEngine : IInstallationEngine
             // Step: Handle custom file types (plugins claim files before copy)
             HashSet<string> handledFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             PluginContext? fileHandlerContext = null;
-            if (_fileTypeHandlers.Count > 0)
+
+            // When skipping file handlers (elevated process), still exclude their file extensions
+            if (options.SkipFileHandlers && _fileTypeHandlers.Count > 0)
+            {
+                foreach (IFileTypeHandler handler in _fileTypeHandlers)
+                {
+                    foreach (string ext in handler.HandledExtensions)
+                    {
+                        foreach (
+                            string file in Directory.GetFiles(
+                                extractPath,
+                                "*" + ext,
+                                SearchOption.AllDirectories
+                            )
+                        )
+                        {
+                            handledFiles.Add(file);
+                        }
+                    }
+                }
+                _logger.LogInformation(
+                    "Elevated install: excluded {Count} plugin-handled files from copy",
+                    handledFiles.Count
+                );
+            }
+
+            if (_fileTypeHandlers.Count > 0 && !options.SkipFileHandlers)
             {
                 fileHandlerContext = await BuildPluginContextAsync(
                     manifest,
@@ -380,19 +450,38 @@ public sealed class InstallationEngine : IInstallationEngine
 
                             if (userValues is null)
                             {
-                                _logger.LogInformation("User cancelled file handler config dialog");
+                                _logger.LogInformation(
+                                    "User cancelled file handler config dialog, aborting installation"
+                                );
                                 progress.Report(
                                     new InstallProgress(
                                         InstallStage.RunningPlugins,
                                         0,
-                                        "File handler skipped (cancelled by user)"
+                                        "Installation cancelled by user."
                                     )
                                 );
-                                continue;
+                                return new InstallResult
+                                {
+                                    Success = false,
+                                    ErrorMessage = "Installation cancelled by user.",
+                                    FailedStep = "FileHandlerConfig",
+                                };
                             }
 
                             foreach (KeyValuePair<string, string> kv in userValues)
                             {
+                                _logger.LogDebug(
+                                    "File handler config: {Key} = {Value}",
+                                    kv.Key,
+                                    kv.Value
+                                );
+                                progress.Report(
+                                    new InstallProgress(
+                                        InstallStage.RunningPlugins,
+                                        0,
+                                        $"Config: {kv.Key} = {kv.Value}"
+                                    )
+                                );
                                 fileHandlerContext.ConfigValues[kv.Key] = kv.Value;
                             }
                         }
@@ -488,6 +577,76 @@ public sealed class InstallationEngine : IInstallationEngine
                     );
                     resolvedTargetPath = resolved;
                 }
+            }
+
+            // Check elevation for resolved path (the initial check used the raw template path)
+            if (
+                resolvedTargetPath != options.TargetPath
+                && ElevationHelper.PathRequiresAdmin(resolvedTargetPath)
+                && !ElevationHelper.IsRunningAsAdmin()
+            )
+            {
+                _logger.LogInformation(
+                    "Resolved path {Path} requires elevation, spawning elevated process",
+                    resolvedTargetPath
+                );
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        "Administrator privileges required for resolved path..."
+                    )
+                );
+                bool elevated = ElevationHelper.RunElevatedInstall(
+                    manifest.ProductId,
+                    manifest.Version,
+                    resolvedTargetPath,
+                    options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
+                );
+                if (!elevated)
+                {
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Installation cancelled: administrator rights were denied.",
+                        FailedStep = "Elevation",
+                    };
+                }
+
+                InstalledProduct elevatedProduct = new InstalledProduct(
+                    ProductId: manifest.ProductId,
+                    Title: manifest.Title,
+                    Version: manifest.Version,
+                    InstalledPath: resolvedTargetPath,
+                    InstalledDate: DateTime.UtcNow,
+                    FeedId: options.FeedId,
+                    BackupPath: null
+                );
+                await _productRepository.AddAsync(elevatedProduct, cancellationToken);
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        100,
+                        $"Installation completed via elevated process."
+                    )
+                );
+                return new InstallResult { Success = true };
+            }
+
+            // Check for unresolved templates in the target path
+            if (resolvedTargetPath.Contains('{') && resolvedTargetPath.Contains('}'))
+            {
+                string msg =
+                    $"Install path contains unresolved template: {resolvedTargetPath}. "
+                    + "Configure the required plugin settings (e.g., STEPS paths) before installing.";
+                _logger.LogError(msg);
+                progress.Report(new InstallProgress(InstallStage.Installing, 0, msg));
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = msg,
+                    FailedStep = "PathResolution",
+                };
             }
 
             // Step: Copy files (excluding handled files)
