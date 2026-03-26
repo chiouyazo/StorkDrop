@@ -376,16 +376,10 @@
         >
           <Button.Style>
             <Style TargetType="Button">
-              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="Visibility" Value="Visible" />
               <Style.Triggers>
-                <DataTrigger
-                  Binding="{Binding InstallationTracker.HasActiveInstallations}"
-                  Value="True"
-                >
-                  <Setter Property="Visibility" Value="Visible" />
-                </DataTrigger>
-                <DataTrigger Binding="{Binding ShowInstallationPanel}" Value="True">
-                  <Setter Property="Visibility" Value="Visible" />
+                <DataTrigger Binding="{Binding InstallationTracker.Installations.Count}" Value="0">
+                  <Setter Property="Visibility" Value="Collapsed" />
                 </DataTrigger>
               </Style.Triggers>
             </Style>
@@ -444,7 +438,7 @@
       BorderBrush="#E0E0E0"
       BorderThickness="1"
       CornerRadius="8"
-      Visibility="{Binding ShowInstallationPanel, Converter={StaticResource BoolToVisibilityConverter}}"
+      Visibility="{Binding InstallationTracker.ShowPanel, Converter={StaticResource BoolToVisibilityConverter}}"
     >
       <Border.Effect>
         <DropShadowEffect BlurRadius="12" ShadowDepth="2" Opacity="0.15" />

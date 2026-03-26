@@ -73,11 +73,9 @@ public partial class MainWindowViewModel : ObservableObject
 
     public InstallationTracker InstallationTracker { get; }
 
-    [ObservableProperty]
-    private bool _showInstallationPanel;
-
     [RelayCommand]
-    private void ToggleInstallationPanel() => ShowInstallationPanel = !ShowInstallationPanel;
+    private void ToggleInstallationPanel() =>
+        InstallationTracker.ShowPanel = !InstallationTracker.ShowPanel;
 
     [ObservableProperty]
     private TrackedInstallation? _selectedInstallation;

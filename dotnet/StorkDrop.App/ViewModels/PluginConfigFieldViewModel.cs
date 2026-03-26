@@ -21,6 +21,15 @@ public partial class PluginConfigFieldViewModel : ObservableObject
     [ObservableProperty]
     private PluginFieldType _fieldType;
 
+    /// <summary>
+    /// String representation of FieldType for XAML DataTrigger binding.
+    /// Avoids type identity issues when plugins are loaded from separate AssemblyLoadContexts.
+    /// </summary>
+    public string FieldTypeName => FieldType.ToString();
+
+    partial void OnFieldTypeChanged(PluginFieldType value) =>
+        OnPropertyChanged(nameof(FieldTypeName));
+
     [ObservableProperty]
     private string _value = string.Empty;
 
