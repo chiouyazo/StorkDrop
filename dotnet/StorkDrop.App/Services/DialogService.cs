@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Microsoft.Win32;
 using StorkDrop.App.Localization;
@@ -6,9 +7,14 @@ namespace StorkDrop.App.Services;
 
 public sealed class DialogService
 {
-    public string? ShowFolderPicker(string description = "Select a folder")
+    public string? ShowFolderPicker(
+        string description = "Select a folder",
+        string? initialDirectory = null
+    )
     {
         OpenFolderDialog dialog = new() { Title = description };
+        if (!string.IsNullOrEmpty(initialDirectory) && Directory.Exists(initialDirectory))
+            dialog.InitialDirectory = initialDirectory;
 
         bool? result = dialog.ShowDialog();
         return result == true ? dialog.FolderName : null;

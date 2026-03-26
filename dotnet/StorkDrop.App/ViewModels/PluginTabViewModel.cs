@@ -9,11 +9,17 @@ using StorkDrop.Contracts;
 
 namespace StorkDrop.App.ViewModels;
 
+/// <summary>
+/// Generic ViewModel for a plugin's navigation tab.
+/// Renders the plugin's GetSettingsSections() as an editable form.
+/// Supports Group fields (repeatable add/remove groups).
+/// Persists values to a JSON file per plugin.
+/// </summary>
 public partial class PluginTabViewModel : ObservableObject
 {
     private readonly IStorkDropPlugin _plugin;
     private readonly DialogService _dialogService;
-    private readonly string _stepsConfigPath;
+    private readonly string _configPath;
 
     [ObservableProperty]
     private string _title = string.Empty;
@@ -22,18 +28,10 @@ public partial class PluginTabViewModel : ObservableObject
     private string _pluginId = string.Empty;
 
     [ObservableProperty]
-    private ObservableCollection<StepsDatabaseViewModel> _databases = [];
-
-    [ObservableProperty]
-    private ObservableCollection<StepsPathViewModel> _stepsPaths = [];
+    private ObservableCollection<PluginSettingsSectionViewModel> _sections = [];
 
     [ObservableProperty]
     private string _statusMessage = string.Empty;
-
-    [ObservableProperty]
-    private ObservableCollection<PluginSettingsSectionViewModel> _sections = [];
-
-    public bool IsStepsPlugin => PluginId == "creativity-steps";
 
     public PluginTabViewModel(IStorkDropPlugin plugin, DialogService dialogService)
     {
@@ -42,99 +40,22 @@ public partial class PluginTabViewModel : ObservableObject
         Title = plugin.DisplayName;
         PluginId = plugin.PluginId;
 
-        _stepsConfigPath = Path.Combine(
+        _configPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
             "StorkDrop",
             "Config",
-            "creativity-steps-config.json"
+            $"plugin-settings-{plugin.PluginId}.json"
         );
 
-        if (IsStepsPlugin)
-            LoadStepsConfig();
-        else
-            LoadGenericSections();
+        LoadSections();
     }
 
-    private void LoadStepsConfig()
+    private void LoadSections()
     {
-        try
-        {
-            if (File.Exists(_stepsConfigPath))
-            {
-                string json = File.ReadAllText(_stepsConfigPath);
-                using JsonDocument doc = JsonDocument.Parse(json);
-
-                Databases.Clear();
-                if (doc.RootElement.TryGetProperty("Databases", out JsonElement dbArray))
-                {
-                    foreach (JsonElement el in dbArray.EnumerateArray())
-                    {
-                        Databases.Add(
-                            new StepsDatabaseViewModel
-                            {
-                                Name = el.TryGetProperty("Name", out var n)
-                                    ? n.GetString() ?? ""
-                                    : "",
-                                Server = el.TryGetProperty("Server", out var s)
-                                    ? s.GetString() ?? ""
-                                    : "",
-                                DatabaseName = el.TryGetProperty("DatabaseName", out var d)
-                                    ? d.GetString() ?? ""
-                                    : "",
-                                UseWindowsAuth =
-                                    el.TryGetProperty("UseWindowsAuth", out var w)
-                                    && w.GetBoolean(),
-                                Username = el.TryGetProperty("Username", out var u)
-                                    ? u.GetString() ?? "sao"
-                                    : "sao",
-                                Password = el.TryGetProperty("Password", out var p)
-                                    ? p.GetString() ?? "sao"
-                                    : "sao",
-                                TrustCertificate =
-                                    !el.TryGetProperty("TrustCertificate", out var t)
-                                    || t.GetBoolean(),
-                            }
-                        );
-                    }
-                }
-
-                StepsPaths.Clear();
-                if (doc.RootElement.TryGetProperty("StepsPaths", out JsonElement pathArray))
-                {
-                    foreach (JsonElement el in pathArray.EnumerateArray())
-                    {
-                        StepsPaths.Add(
-                            new StepsPathViewModel
-                            {
-                                Name = el.TryGetProperty("Name", out var n)
-                                    ? n.GetString() ?? ""
-                                    : "",
-                                Path = el.TryGetProperty("Path", out var p)
-                                    ? p.GetString() ?? ""
-                                    : "",
-                                IsRemote =
-                                    el.TryGetProperty("IsRemote", out var r) && r.GetBoolean(),
-                                RdpHost = el.TryGetProperty("RdpHost", out var h)
-                                    ? h.GetString() ?? ""
-                                    : "",
-                                RdpUsername = el.TryGetProperty("RdpUsername", out var u)
-                                    ? u.GetString() ?? ""
-                                    : "",
-                                RdpPassword = el.TryGetProperty("RdpPassword", out var pw)
-                                    ? pw.GetString() ?? ""
-                                    : "",
-                            }
-                        );
-                    }
-                }
-            }
-        }
-        catch { }
-    }
-
-    private void LoadGenericSections()
-    {
+        Dictionary<string, string> savedValues = LoadSavedValues();
         IReadOnlyList<PluginSettingsSection> pluginSections = _plugin.GetSettingsSections();
+        ObservableCollection<PluginSettingsSectionViewModel> sectionVms = [];
+
         foreach (PluginSettingsSection section in pluginSections)
         {
             PluginSettingsSectionViewModel sectionVm = new()
@@ -142,10 +63,47 @@ public partial class PluginTabViewModel : ObservableObject
                 Title = section.Title,
                 SectionId = section.SectionId,
             };
+
             foreach (PluginConfigField field in section.Fields)
             {
-                sectionVm.Fields.Add(
-                    new PluginConfigFieldViewModel
+                if (field.FieldType == PluginFieldType.Group)
+                {
+                    GroupFieldViewModel groupVm = new()
+                    {
+                        Key = field.Key,
+                        Label = field.Label,
+                        Description = field.Description ?? string.Empty,
+                        SubFieldTemplates = field.SubFields,
+                    };
+
+                    // Load saved group instances from JSON
+                    if (savedValues.TryGetValue(field.Key, out string? groupJson))
+                    {
+                        try
+                        {
+                            var items = JsonSerializer.Deserialize<
+                                List<Dictionary<string, string>>
+                            >(groupJson);
+                            if (items is not null)
+                            {
+                                foreach (var item in items)
+                                {
+                                    GroupInstanceViewModel instance = CreateGroupInstance(
+                                        field.SubFields,
+                                        item
+                                    );
+                                    groupVm.Instances.Add(instance);
+                                }
+                            }
+                        }
+                        catch { }
+                    }
+
+                    sectionVm.GroupFields.Add(groupVm);
+                }
+                else
+                {
+                    PluginConfigFieldViewModel fieldVm = new()
                     {
                         Key = field.Key,
                         Label = field.Label,
@@ -153,86 +111,74 @@ public partial class PluginTabViewModel : ObservableObject
                         FieldType = field.FieldType,
                         Required = field.Required,
                         Options = new ObservableCollection<PluginOptionItem>(field.Options),
-                        Value = field.DefaultValue ?? string.Empty,
-                    }
-                );
+                        Min = field.Min,
+                        Max = field.Max,
+                    };
+
+                    if (savedValues.TryGetValue(field.Key, out string? saved))
+                        fieldVm.Value = saved;
+                    else if (!string.IsNullOrEmpty(field.DefaultValue))
+                        fieldVm.Value = field.DefaultValue;
+
+                    sectionVm.Fields.Add(fieldVm);
+                }
             }
-            Sections.Add(sectionVm);
+
+            sectionVms.Add(sectionVm);
         }
+
+        Sections = sectionVms;
     }
 
-    [RelayCommand]
-    private void AddDatabase()
+    private static GroupInstanceViewModel CreateGroupInstance(
+        List<PluginConfigField> templates,
+        Dictionary<string, string>? values = null
+    )
     {
-        Databases.Add(
-            new StepsDatabaseViewModel
+        GroupInstanceViewModel instance = new();
+        foreach (PluginConfigField tmpl in templates)
+        {
+            PluginConfigFieldViewModel fieldVm = new()
             {
-                Name = $"Database {Databases.Count + 1}",
-                DatabaseName = "STEPS_Basis_2025_05_00",
-                Username = "sao",
-                Password = "sao",
-                TrustCertificate = true,
-            }
-        );
+                Key = tmpl.Key,
+                Label = tmpl.Label,
+                Description = tmpl.Description ?? string.Empty,
+                FieldType = tmpl.FieldType,
+                Required = tmpl.Required,
+                Options = new ObservableCollection<PluginOptionItem>(tmpl.Options),
+                Min = tmpl.Min,
+                Max = tmpl.Max,
+            };
+
+            if (values is not null && values.TryGetValue(tmpl.Key, out string? val))
+                fieldVm.Value = val;
+            else if (!string.IsNullOrEmpty(tmpl.DefaultValue))
+                fieldVm.Value = tmpl.DefaultValue;
+
+            instance.Fields.Add(fieldVm);
+        }
+        return instance;
     }
 
     [RelayCommand]
-    private void RemoveDatabase(StepsDatabaseViewModel db) => Databases.Remove(db);
-
-    [RelayCommand]
-    private void AddStepsPath()
+    private void AddGroupInstance(GroupFieldViewModel group)
     {
-        StepsPaths.Add(
-            new StepsPathViewModel
-            {
-                Name = $"STEPS {StepsPaths.Count + 1}",
-                Path = @"C:\Program Files (x86)\STAPS\Application",
-            }
-        );
+        GroupInstanceViewModel instance = CreateGroupInstance(group.SubFieldTemplates);
+        group.Instances.Add(instance);
     }
 
     [RelayCommand]
-    private void RemoveStepsPath(StepsPathViewModel path) => StepsPaths.Remove(path);
+    private void RemoveGroupInstance(RemoveGroupInstanceRequest request)
+    {
+        request.Group.Instances.Remove(request.Instance);
+    }
 
     [RelayCommand]
-    private void BrowseStepsPath(StepsPathViewModel path)
+    private void BrowsePath(PluginConfigFieldViewModel field)
     {
-        string? folder = _dialogService.ShowFolderPicker("Select STEPS Application Directory");
+        string? folder = _dialogService.ShowFolderPicker(field.Label, field.Value);
         if (folder is not null)
-            path.Path = folder;
-    }
-
-    [RelayCommand]
-    private async Task TestDatabaseAsync(StepsDatabaseViewModel db)
-    {
-        db.ConnectionTestMessage = LocalizationManager.GetString("Status_Connecting");
-        db.ConnectionTestSuccess = null;
-
-        try
-        {
-            string cs = $"Server={db.Server};Database={db.DatabaseName}";
-            if (db.UseWindowsAuth)
-                cs += ";Integrated Security=true";
-            else
-                cs += $";User Id={db.Username};Password={db.Password}";
-            if (db.TrustCertificate)
-                cs += ";TrustServerCertificate=true";
-            cs += ";Connect Timeout=5";
-
-            await Task.Run(() =>
-            {
-                using var conn = new Microsoft.Data.SqlClient.SqlConnection(cs);
-                conn.Open();
-            });
-
-            db.ConnectionTestMessage = LocalizationManager.GetString("Status_TestSuccess");
-            db.ConnectionTestSuccess = true;
-        }
-        catch (Exception ex)
-        {
-            db.ConnectionTestMessage = ex.Message;
-            db.ConnectionTestSuccess = false;
-        }
+            field.Value = folder;
     }
 
     [RelayCommand]
@@ -240,93 +186,61 @@ public partial class PluginTabViewModel : ObservableObject
     {
         try
         {
-            var config = new
-            {
-                Databases = Databases.Select(db => new
-                {
-                    db.Name,
-                    db.Server,
-                    db.DatabaseName,
-                    db.UseWindowsAuth,
-                    db.Username,
-                    db.Password,
-                    db.TrustCertificate,
-                }),
-                StepsPaths = StepsPaths.Select(p => new
-                {
-                    p.Name,
-                    p.Path,
-                    p.IsRemote,
-                    p.RdpHost,
-                    p.RdpUsername,
-                    p.RdpPassword,
-                }),
-            };
+            Dictionary<string, string> values = [];
 
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(_stepsConfigPath)!);
+            foreach (PluginSettingsSectionViewModel section in Sections)
+            {
+                foreach (PluginConfigFieldViewModel field in section.Fields)
+                    values[field.Key] = field.Value;
+
+                foreach (GroupFieldViewModel group in section.GroupFields)
+                {
+                    List<Dictionary<string, string>> items = [];
+                    foreach (GroupInstanceViewModel instance in group.Instances)
+                    {
+                        Dictionary<string, string> item = [];
+                        foreach (PluginConfigFieldViewModel field in instance.Fields)
+                            item[field.Key] = field.Value;
+                        items.Add(item);
+                    }
+                    values[group.Key] = JsonSerializer.Serialize(items);
+                }
+            }
+
+            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
             string json = JsonSerializer.Serialize(
-                config,
+                values,
                 new JsonSerializerOptions { WriteIndented = true }
             );
-            File.WriteAllText(_stepsConfigPath, json);
-            StatusMessage = "Saved successfully";
+            File.WriteAllText(_configPath, json);
+            StatusMessage = LocalizationManager.GetString("Status_TestSuccess");
         }
         catch (Exception ex)
         {
-            StatusMessage = "Save failed: " + ex.Message;
+            StatusMessage = LocalizationManager.GetString("Error_SaveFailed") + ": " + ex.Message;
         }
     }
-}
 
-public partial class StepsDatabaseViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private string _name = string.Empty;
+    [RelayCommand]
+    private void Refresh()
+    {
+        LoadSections();
+        StatusMessage = string.Empty;
+    }
 
-    [ObservableProperty]
-    private string _server = string.Empty;
-
-    [ObservableProperty]
-    private string _databaseName = string.Empty;
-
-    [ObservableProperty]
-    private bool _useWindowsAuth;
-
-    [ObservableProperty]
-    private string _username = "sao";
-
-    [ObservableProperty]
-    private string _password = "sao";
-
-    [ObservableProperty]
-    private bool _trustCertificate = true;
-
-    [ObservableProperty]
-    private string _connectionTestMessage = string.Empty;
-
-    [ObservableProperty]
-    private bool? _connectionTestSuccess;
-}
-
-public partial class StepsPathViewModel : ObservableObject
-{
-    [ObservableProperty]
-    private string _name = string.Empty;
-
-    [ObservableProperty]
-    private string _path = string.Empty;
-
-    [ObservableProperty]
-    private bool _isRemote;
-
-    [ObservableProperty]
-    private string _rdpHost = string.Empty;
-
-    [ObservableProperty]
-    private string _rdpUsername = string.Empty;
-
-    [ObservableProperty]
-    private string _rdpPassword = string.Empty;
+    private Dictionary<string, string> LoadSavedValues()
+    {
+        try
+        {
+            if (File.Exists(_configPath))
+            {
+                string json = File.ReadAllText(_configPath);
+                return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
+            }
+        }
+        catch { }
+        return [];
+    }
 }
 
 public partial class PluginSettingsSectionViewModel : ObservableObject
@@ -339,4 +253,39 @@ public partial class PluginSettingsSectionViewModel : ObservableObject
 
     [ObservableProperty]
     private ObservableCollection<PluginConfigFieldViewModel> _fields = [];
+
+    [ObservableProperty]
+    private ObservableCollection<GroupFieldViewModel> _groupFields = [];
+}
+
+public partial class GroupFieldViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private string _key = string.Empty;
+
+    [ObservableProperty]
+    private string _label = string.Empty;
+
+    [ObservableProperty]
+    private string _description = string.Empty;
+
+    [ObservableProperty]
+    private ObservableCollection<GroupInstanceViewModel> _instances = [];
+
+    public List<PluginConfigField> SubFieldTemplates { get; set; } = [];
+}
+
+public partial class GroupInstanceViewModel : ObservableObject
+{
+    [ObservableProperty]
+    private ObservableCollection<PluginConfigFieldViewModel> _fields = [];
+}
+
+/// <summary>
+/// Helper to pass both group and instance to the remove command.
+/// </summary>
+public sealed class RemoveGroupInstanceRequest
+{
+    public required GroupFieldViewModel Group { get; init; }
+    public required GroupInstanceViewModel Instance { get; init; }
 }

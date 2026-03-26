@@ -52,4 +52,10 @@ public sealed class PluginConfigField
     /// For <see cref="PluginFieldType.Number"/>: maximum value.
     /// </summary>
     public double? Max { get; set; }
+
+    /// <summary>
+    /// For <see cref="PluginFieldType.Group"/>: the fields that make up each group instance.
+    /// Each instance gets its own copy of these sub-fields.
+    /// </summary>
+    public List<PluginConfigField> SubFields { get; set; } = new List<PluginConfigField>();
 }

@@ -28,7 +28,7 @@ public delegate string? InstallPathResolverCallback(
 public interface IInstallationEngine
 {
     /// <summary>
-    /// Set by plugins to resolve template variables in install paths (e.g. {StepsPath}).
+    /// Set by plugins to resolve template variables in install paths (e.g. {ACMEPath}).
     /// Called before files are copied, after file handler config dialog has run.
     /// </summary>
     InstallPathResolverCallback? OnResolveInstallPath { get; set; }

@@ -568,7 +568,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
-            // Allow plugins to resolve templates in the target path (e.g. {StepsPath})
+            // Allow plugins to resolve templates in the target path (e.g. {ACMEPath})
             string resolvedTargetPath = options.TargetPath;
             if (OnResolveInstallPath is not null)
             {
@@ -650,7 +650,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 string msg =
                     $"Install path contains unresolved template: {resolvedTargetPath}. "
-                    + "Configure the required plugin settings (e.g., STEPS paths) before installing.";
+                    + "Configure the required plugin settings (e.g., Application paths) before installing.";
                 _logger.LogError(msg);
                 progress.Report(new InstallProgress(InstallStage.Installing, 0, msg));
                 return new InstallResult

@@ -11,15 +11,43 @@ public partial class PluginTabView : UserControl
         InitializeComponent();
     }
 
-    private void OnDbPasswordChanged(object sender, RoutedEventArgs e)
+    private void OnPasswordChanged(object sender, RoutedEventArgs e)
     {
-        if (sender is PasswordBox pb && pb.Tag is StepsDatabaseViewModel db)
-            db.Password = pb.Password;
+        if (sender is PasswordBox pb && pb.Tag is PluginConfigFieldViewModel field)
+            field.Value = pb.Password;
     }
 
-    private void OnRdpPasswordChanged(object sender, RoutedEventArgs e)
+    private void OnCheckBoxChanged(object sender, RoutedEventArgs e)
     {
-        if (sender is PasswordBox pb && pb.Tag is StepsPathViewModel path)
-            path.RdpPassword = pb.Password;
+        if (sender is CheckBox cb && cb.Tag is PluginConfigFieldViewModel field)
+            field.Value = cb.IsChecked == true ? "true" : "false";
+    }
+
+    private void OnCheckBoxLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is CheckBox cb && cb.Tag is PluginConfigFieldViewModel field)
+            cb.IsChecked = string.Equals(field.Value, "true", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnRemoveGroupInstance(object sender, RoutedEventArgs e)
+    {
+        if (
+            sender is FrameworkElement { DataContext: GroupInstanceViewModel instance }
+            && DataContext is PluginTabViewModel vm
+        )
+        {
+            // Find which group this instance belongs to
+            foreach (PluginSettingsSectionViewModel section in vm.Sections)
+            {
+                foreach (GroupFieldViewModel group in section.GroupFields)
+                {
+                    if (group.Instances.Contains(instance))
+                    {
+                        group.Instances.Remove(instance);
+                        return;
+                    }
+                }
+            }
+        }
     }
 }

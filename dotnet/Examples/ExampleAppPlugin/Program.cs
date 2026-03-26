@@ -37,6 +37,16 @@ foreach (PluginSettingsSection section in sections)
     {
         string requiredMarker = field.Required ? " *" : "";
         Console.WriteLine($"[Debug]     Field: {field.Key} ({field.FieldType}){requiredMarker}");
+        if (field.FieldType == PluginFieldType.Group && field.SubFields.Count > 0)
+        {
+            Console.WriteLine($"[Debug]       SubFields ({field.SubFields.Count}):");
+            foreach (PluginConfigField sub in field.SubFields)
+            {
+                Console.WriteLine(
+                    $"[Debug]         - {sub.Key} ({sub.FieldType}){(sub.Required ? " *" : "")}"
+                );
+            }
+        }
     }
 }
 Console.WriteLine();

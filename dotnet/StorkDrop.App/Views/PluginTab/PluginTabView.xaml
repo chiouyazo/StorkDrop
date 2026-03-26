@@ -2,388 +2,265 @@
   x:Class="StorkDrop.App.Views.PluginTab.PluginTabView"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:vm="clr-namespace:StorkDrop.App.ViewModels"
 >
+  <UserControl.Resources>
+    <!-- Template for rendering a single field (reused in sections and group instances) -->
+    <DataTemplate x:Key="FieldTemplate" DataType="{x:Type vm:PluginConfigFieldViewModel}">
+      <StackPanel Margin="0,0,0,8">
+        <TextBlock
+          Text="{Binding Label}"
+          Style="{DynamicResource CaptionText}"
+          FontWeight="SemiBold"
+          Margin="0,0,0,4"
+        />
+
+        <!-- Text / Number -->
+        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}">
+          <TextBox.Style>
+            <Style TargetType="TextBox" BasedOn="{StaticResource StyledTextBox}">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Text">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Number">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBox.Style>
+        </TextBox>
+
+        <!-- Password -->
+        <Border>
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="BorderBrush" Value="#E0E0E0" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="CornerRadius" Value="4" />
+              <Setter Property="Background" Value="White" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Password">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <PasswordBox
+            Padding="8,6"
+            FontSize="13"
+            MinHeight="36"
+            VerticalContentAlignment="Center"
+            BorderThickness="0"
+            Background="Transparent"
+            Tag="{Binding}"
+            PasswordChanged="OnPasswordChanged"
+          />
+        </Border>
+
+        <!-- Checkbox -->
+        <CheckBox
+          Content="{Binding Label}"
+          Tag="{Binding}"
+          Checked="OnCheckBoxChanged"
+          Unchecked="OnCheckBoxChanged"
+          Loaded="OnCheckBoxLoaded"
+        >
+          <CheckBox.Style>
+            <Style TargetType="CheckBox">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Checkbox">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </CheckBox.Style>
+        </CheckBox>
+
+        <!-- FolderPath -->
+        <Grid>
+          <Grid.Style>
+            <Style TargetType="Grid">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="FolderPath">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <TextBox
+            Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+            Style="{DynamicResource StyledTextBox}"
+            Margin="0,0,8,0"
+          />
+          <Button
+            Grid.Column="1"
+            Content="..."
+            Style="{DynamicResource OutlinedButton}"
+            Padding="8,6"
+            Command="{Binding DataContext.BrowsePathCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+            CommandParameter="{Binding}"
+          />
+        </Grid>
+
+        <!-- Description -->
+        <TextBlock
+          Text="{Binding Description}"
+          FontSize="11"
+          Foreground="#999999"
+          TextWrapping="Wrap"
+          Margin="0,2,0,0"
+        >
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding Description}" Value="">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
   <ScrollViewer VerticalScrollBarVisibility="Auto">
     <StackPanel MaxWidth="700">
       <TextBlock Text="{Binding Title}" Style="{DynamicResource HeadingLarge}" Margin="0,0,0,24" />
 
-      <!-- === STEPS: Database Connections === -->
-      <Border
-        Style="{DynamicResource CardBorder}"
-        Margin="0,0,0,16"
-        Visibility="{Binding IsStepsPlugin, Converter={StaticResource BoolToVisibilityConverter}}"
-      >
-        <StackPanel>
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock
-              Text="Database Connections"
-              Style="{DynamicResource HeadingSmall}"
-              VerticalAlignment="Center"
-            />
-            <Button
-              Content="+ Add Database"
-              Style="{DynamicResource OutlinedButton}"
-              Command="{Binding AddDatabaseCommand}"
-              Margin="12,0,0,0"
-              Padding="12,4"
-            />
-          </StackPanel>
+      <ItemsControl ItemsSource="{Binding Sections}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate>
+            <StackPanel>
+              <!-- Regular fields -->
+              <Border
+                Style="{DynamicResource CardBorder}"
+                Margin="0,0,0,16"
+                Visibility="{Binding Fields.Count, Converter={StaticResource BoolToVisibilityConverter}}"
+              >
+                <StackPanel>
+                  <TextBlock
+                    Text="{Binding Title}"
+                    Style="{DynamicResource HeadingSmall}"
+                    Margin="0,0,0,12"
+                  />
+                  <ItemsControl
+                    ItemsSource="{Binding Fields}"
+                    ItemTemplate="{StaticResource FieldTemplate}"
+                  />
+                </StackPanel>
+              </Border>
 
-          <ItemsControl ItemsSource="{Binding Databases}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <Border
-                  BorderBrush="{DynamicResource BorderBrush}"
-                  BorderThickness="0,0,0,1"
-                  Margin="0,0,0,12"
-                  Padding="0,0,0,12"
-                >
-                  <StackPanel>
-                    <Grid Margin="0,0,0,8">
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                      </Grid.ColumnDefinitions>
+              <!-- Group fields (repeatable) -->
+              <ItemsControl ItemsSource="{Binding GroupFields}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate>
+                    <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
                       <StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
+                          <TextBlock
+                            Text="{Binding Label}"
+                            Style="{DynamicResource HeadingSmall}"
+                            VerticalAlignment="Center"
+                          />
+                          <Button
+                            Content="+ Add"
+                            Style="{DynamicResource OutlinedButton}"
+                            Margin="12,0,0,0"
+                            Padding="12,4"
+                            Command="{Binding DataContext.AddGroupInstanceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                            CommandParameter="{Binding}"
+                          />
+                        </StackPanel>
+
+                        <!-- Description -->
                         <TextBlock
-                          Text="Display Name"
-                          Style="{DynamicResource CaptionText}"
-                          Margin="0,0,0,4"
-                        />
-                        <TextBox
-                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                          Style="{DynamicResource StyledTextBox}"
-                        />
-                      </StackPanel>
-                      <Button
-                        Grid.Column="1"
-                        Content="Remove"
-                        Style="{DynamicResource OutlinedButton}"
-                        Command="{Binding DataContext.RemoveDatabaseCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                        CommandParameter="{Binding}"
-                        Padding="8,2"
-                        FontSize="11"
-                        VerticalAlignment="Top"
-                        Margin="8,20,0,0"
-                      />
-                    </Grid>
+                          Text="{Binding Description}"
+                          FontSize="12"
+                          Foreground="#999999"
+                          TextWrapping="Wrap"
+                          Margin="0,0,0,8"
+                        >
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding Description}" Value="">
+                                  <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
 
-                    <TextBlock
-                      Text="Server"
-                      Style="{DynamicResource CaptionText}"
-                      Margin="0,0,0,4"
-                    />
-                    <TextBox
-                      Text="{Binding Server, UpdateSourceTrigger=PropertyChanged}"
-                      Style="{DynamicResource StyledTextBox}"
-                      Margin="0,0,0,8"
-                    />
+                        <!-- Group instances -->
+                        <ItemsControl ItemsSource="{Binding Instances}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                              <Border
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,0,0,1"
+                                Margin="0,0,0,12"
+                                Padding="0,0,0,12"
+                              >
+                                <StackPanel>
+                                  <Button
+                                    Content="Remove"
+                                    Style="{DynamicResource OutlinedButton}"
+                                    HorizontalAlignment="Right"
+                                    Padding="8,2"
+                                    FontSize="11"
+                                    Margin="0,0,0,8"
+                                    Click="OnRemoveGroupInstance"
+                                  />
+                                  <ItemsControl
+                                    ItemsSource="{Binding Fields}"
+                                    ItemTemplate="{StaticResource FieldTemplate}"
+                                  />
+                                </StackPanel>
+                              </Border>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
 
-                    <TextBlock
-                      Text="Database Name"
-                      Style="{DynamicResource CaptionText}"
-                      Margin="0,0,0,4"
-                    />
-                    <TextBox
-                      Text="{Binding DatabaseName, UpdateSourceTrigger=PropertyChanged}"
-                      Style="{DynamicResource StyledTextBox}"
-                      Margin="0,0,0,8"
-                    />
-
-                    <CheckBox
-                      Content="Use Windows Authentication"
-                      IsChecked="{Binding UseWindowsAuth}"
-                      Margin="0,0,0,8"
-                    />
-
-                    <!-- SQL credentials (hidden when Windows auth) -->
-                    <StackPanel>
-                      <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                          <Style.Triggers>
-                            <DataTrigger Binding="{Binding UseWindowsAuth}" Value="True">
+                        <!-- Empty state -->
+                        <TextBlock
+                          FontSize="13"
+                          Foreground="{DynamicResource OnSurfaceVariantBrush}"
+                          Margin="0,4,0,0"
+                        >
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
                               <Setter Property="Visibility" Value="Collapsed" />
-                            </DataTrigger>
-                          </Style.Triggers>
-                        </Style>
-                      </StackPanel.Style>
-                      <Grid Margin="0,0,0,8">
-                        <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="*" />
-                          <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Margin="0,0,8,0">
-                          <TextBlock
-                            Text="Username"
-                            Style="{DynamicResource CaptionText}"
-                            Margin="0,0,0,4"
-                          />
-                          <TextBox
-                            Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
-                            Style="{DynamicResource StyledTextBox}"
-                          />
-                        </StackPanel>
-                        <StackPanel Grid.Column="1">
-                          <TextBlock
-                            Text="Password"
-                            Style="{DynamicResource CaptionText}"
-                            Margin="0,0,0,4"
-                          />
-                          <PasswordBox
-                            Padding="8,8"
-                            FontSize="13"
-                            MinHeight="36"
-                            Tag="{Binding}"
-                            PasswordChanged="OnDbPasswordChanged"
-                          />
-                        </StackPanel>
-                      </Grid>
-                    </StackPanel>
-
-                    <CheckBox
-                      Content="Trust Server Certificate"
-                      IsChecked="{Binding TrustCertificate}"
-                      Margin="0,0,0,8"
-                    />
-
-                    <StackPanel Orientation="Horizontal">
-                      <Button
-                        Content="{DynamicResource Button_TestConnection}"
-                        Style="{DynamicResource OutlinedButton}"
-                        Command="{Binding DataContext.TestDatabaseCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                        CommandParameter="{Binding}"
-                        Padding="12,6"
-                        Margin="0,0,12,0"
-                      />
-                      <TextBlock
-                        Text="{Binding ConnectionTestMessage}"
-                        VerticalAlignment="Center"
-                        FontSize="13"
-                      >
-                        <TextBlock.Style>
-                          <Style TargetType="TextBlock">
-                            <Style.Triggers>
-                              <DataTrigger Binding="{Binding ConnectionTestSuccess}" Value="True">
-                                <Setter
-                                  Property="Foreground"
-                                  Value="{DynamicResource SuccessBrush}"
-                                />
-                              </DataTrigger>
-                              <DataTrigger Binding="{Binding ConnectionTestSuccess}" Value="False">
-                                <Setter
-                                  Property="Foreground"
-                                  Value="{DynamicResource ErrorBrush}"
-                                />
-                              </DataTrigger>
-                            </Style.Triggers>
-                          </Style>
-                        </TextBlock.Style>
-                      </TextBlock>
-                    </StackPanel>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-
-          <!-- Empty state -->
-          <TextBlock
-            Text="No databases configured yet. Click '+ Add Database' to add one."
-            Foreground="{DynamicResource OnSurfaceVariantBrush}"
-            FontSize="13"
-            Margin="0,4,0,0"
-          >
-            <TextBlock.Style>
-              <Style TargetType="TextBlock">
-                <Setter Property="Visibility" Value="Collapsed" />
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding Databases.Count}" Value="0">
-                    <Setter Property="Visibility" Value="Visible" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </TextBlock.Style>
-          </TextBlock>
-        </StackPanel>
-      </Border>
-
-      <!-- === STEPS: Application Paths === -->
-      <Border
-        Style="{DynamicResource CardBorder}"
-        Margin="0,0,0,16"
-        Visibility="{Binding IsStepsPlugin, Converter={StaticResource BoolToVisibilityConverter}}"
-      >
-        <StackPanel>
-          <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock
-              Text="STEPS Application Paths"
-              Style="{DynamicResource HeadingSmall}"
-              VerticalAlignment="Center"
-            />
-            <Button
-              Content="+ Add Path"
-              Style="{DynamicResource OutlinedButton}"
-              Command="{Binding AddStepsPathCommand}"
-              Margin="12,0,0,0"
-              Padding="12,4"
-            />
-          </StackPanel>
-
-          <ItemsControl ItemsSource="{Binding StepsPaths}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate>
-                <Border
-                  BorderBrush="{DynamicResource BorderBrush}"
-                  BorderThickness="0,0,0,1"
-                  Margin="0,0,0,12"
-                  Padding="0,0,0,12"
-                >
-                  <StackPanel>
-                    <Grid Margin="0,0,0,8">
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                      </Grid.ColumnDefinitions>
-                      <StackPanel>
-                        <TextBlock
-                          Text="Display Name"
-                          Style="{DynamicResource CaptionText}"
-                          Margin="0,0,0,4"
-                        />
-                        <TextBox
-                          Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
-                          Style="{DynamicResource StyledTextBox}"
-                        />
+                              <Setter
+                                Property="Text"
+                                Value="No items configured yet. Click '+ Add' to add one."
+                              />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding Instances.Count}" Value="0">
+                                  <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
                       </StackPanel>
-                      <Button
-                        Grid.Column="1"
-                        Content="Remove"
-                        Style="{DynamicResource OutlinedButton}"
-                        Command="{Binding DataContext.RemoveStepsPathCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                        CommandParameter="{Binding}"
-                        Padding="8,2"
-                        FontSize="11"
-                        VerticalAlignment="Top"
-                        Margin="8,20,0,0"
-                      />
-                    </Grid>
-
-                    <TextBlock
-                      Text="Application Directory"
-                      Style="{DynamicResource CaptionText}"
-                      Margin="0,0,0,4"
-                    />
-                    <Grid Margin="0,0,0,8">
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                      </Grid.ColumnDefinitions>
-                      <TextBox
-                        Text="{Binding Path, UpdateSourceTrigger=PropertyChanged}"
-                        Style="{DynamicResource StyledTextBox}"
-                        Margin="0,0,8,0"
-                      />
-                      <Button
-                        Grid.Column="1"
-                        Content="..."
-                        Style="{DynamicResource OutlinedButton}"
-                        Padding="8,6"
-                        Command="{Binding DataContext.BrowseStepsPathCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
-                        CommandParameter="{Binding}"
-                      />
-                    </Grid>
-
-                    <CheckBox
-                      Content="Remote server (deploy via RDP)"
-                      IsChecked="{Binding IsRemote}"
-                      Margin="0,0,0,8"
-                    />
-
-                    <!-- RDP settings (shown when IsRemote) -->
-                    <StackPanel>
-                      <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                          <Setter Property="Visibility" Value="Collapsed" />
-                          <Style.Triggers>
-                            <DataTrigger Binding="{Binding IsRemote}" Value="True">
-                              <Setter Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-                          </Style.Triggers>
-                        </Style>
-                      </StackPanel.Style>
-                      <Border Background="#F0F7FF" CornerRadius="4" Padding="12,8" Margin="0,0,0,8">
-                        <StackPanel>
-                          <TextBlock
-                            Text="RDP Host"
-                            Style="{DynamicResource CaptionText}"
-                            Margin="0,0,0,4"
-                          />
-                          <TextBox
-                            Text="{Binding RdpHost, UpdateSourceTrigger=PropertyChanged}"
-                            Style="{DynamicResource StyledTextBox}"
-                            Margin="0,0,0,8"
-                          />
-
-                          <Grid>
-                            <Grid.ColumnDefinitions>
-                              <ColumnDefinition Width="*" />
-                              <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Margin="0,0,8,0">
-                              <TextBlock
-                                Text="RDP Username"
-                                Style="{DynamicResource CaptionText}"
-                                Margin="0,0,0,4"
-                              />
-                              <TextBox
-                                Text="{Binding RdpUsername, UpdateSourceTrigger=PropertyChanged}"
-                                Style="{DynamicResource StyledTextBox}"
-                              />
-                            </StackPanel>
-                            <StackPanel Grid.Column="1">
-                              <TextBlock
-                                Text="RDP Password"
-                                Style="{DynamicResource CaptionText}"
-                                Margin="0,0,0,4"
-                              />
-                              <PasswordBox
-                                Padding="8,8"
-                                FontSize="13"
-                                MinHeight="36"
-                                Tag="{Binding}"
-                                PasswordChanged="OnRdpPasswordChanged"
-                              />
-                            </StackPanel>
-                          </Grid>
-                        </StackPanel>
-                      </Border>
-                    </StackPanel>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-
-          <!-- Empty state -->
-          <TextBlock
-            Text="No STEPS paths configured yet. Click '+ Add Path' to add one."
-            Foreground="{DynamicResource OnSurfaceVariantBrush}"
-            FontSize="13"
-            Margin="0,4,0,0"
-          >
-            <TextBlock.Style>
-              <Style TargetType="TextBlock">
-                <Setter Property="Visibility" Value="Collapsed" />
-                <Style.Triggers>
-                  <DataTrigger Binding="{Binding StepsPaths.Count}" Value="0">
-                    <Setter Property="Visibility" Value="Visible" />
-                  </DataTrigger>
-                </Style.Triggers>
-              </Style>
-            </TextBlock.Style>
-          </TextBlock>
-        </StackPanel>
-      </Border>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
 
       <!-- Status -->
       <TextBlock Text="{Binding StatusMessage}" FontSize="13" Margin="0,0,0,8">
@@ -407,7 +284,6 @@
         HorizontalAlignment="Left"
         MinWidth="160"
         Margin="0,0,0,24"
-        Visibility="{Binding IsStepsPlugin, Converter={StaticResource BoolToVisibilityConverter}}"
       />
     </StackPanel>
   </ScrollViewer>

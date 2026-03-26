@@ -93,17 +93,49 @@ public sealed class SqlToolsPlugin : IStorkDropPlugin
             new PluginSettingsSection
             {
                 SectionId = "sql-server-settings",
-                Title = "SQL Server",
+                Title = "SQL Server Settings",
                 Fields = new List<PluginConfigField>
                 {
+                    // Group field: repeatable database connections
+                    new PluginConfigField
+                    {
+                        Key = "connections",
+                        Label = "Database Connections",
+                        Description = "Add one or more SQL Server connections.",
+                        FieldType = PluginFieldType.Group,
+                        SubFields = new List<PluginConfigField>
+                        {
+                            new PluginConfigField
+                            {
+                                Key = "name",
+                                Label = "Display Name",
+                                FieldType = PluginFieldType.Text,
+                                Required = true,
+                            },
+                            new PluginConfigField
+                            {
+                                Key = "connectionString",
+                                Label = "Connection String",
+                                FieldType = PluginFieldType.Text,
+                                Required = true,
+                                DefaultValue =
+                                    "Server=localhost;Database=StorkDrop;Trusted_Connection=true",
+                            },
+                            new PluginConfigField
+                            {
+                                Key = "password",
+                                Label = "Password",
+                                FieldType = PluginFieldType.Password,
+                            },
+                        },
+                    },
+                    // Regular fields
                     new PluginConfigField
                     {
                         Key = "commandTimeout",
                         Label = "Command Timeout (seconds)",
-                        Description =
-                            "Default timeout for SQL commands executed by product plugins.",
+                        Description = "Default timeout for SQL commands.",
                         FieldType = PluginFieldType.Number,
-                        Required = false,
                         DefaultValue = "30",
                         Min = 1,
                         Max = 3600,
@@ -114,7 +146,6 @@ public sealed class SqlToolsPlugin : IStorkDropPlugin
                         Label = "Log SQL Statements",
                         Description = "Write all executed SQL statements to the activity log.",
                         FieldType = PluginFieldType.Checkbox,
-                        Required = false,
                         DefaultValue = "false",
                     },
                     new PluginConfigField
@@ -123,7 +154,6 @@ public sealed class SqlToolsPlugin : IStorkDropPlugin
                         Label = "Backup Folder",
                         Description = "Folder where database backups are stored before migrations.",
                         FieldType = PluginFieldType.FolderPath,
-                        Required = false,
                     },
                 },
             },

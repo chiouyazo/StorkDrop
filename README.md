@@ -27,14 +27,14 @@ It's built for **server software and business tools** that:
 
 ## When to use StorkDrop
 
-| Scenario | StorkDrop | Traditional installer | Fleet management | Package manager |
-|---|---|---|---|---|
-| **Server-side business apps** | Built for this | Manual per-machine | Overkill | No custom logic |
-| **Custom pre/post install logic** | Plugin system with dynamic UI | Baked into installer | Scripts only | Scripts only |
-| **Multiple feeds/repositories** | Multi-feed with per-feed plugins | N/A | Multiple sources | Multiple sources |
-| **Self-service marketplace** | Browse, search, filter | No discovery | Company portal | CLI search |
-| **Version rollback** | Backup + restore | Manual | Complex | Limited |
-| **Plugin extensibility** | Dynamic config UI, custom tabs | None | None | None |
+| Scenario                          | StorkDrop                        | Traditional installer | Fleet management | Package manager  |
+| --------------------------------- | -------------------------------- | --------------------- | ---------------- | ---------------- |
+| **Server-side business apps**     | Built for this                   | Manual per-machine    | Overkill         | No custom logic  |
+| **Custom pre/post install logic** | Plugin system with dynamic UI    | Baked into installer  | Scripts only     | Scripts only     |
+| **Multiple feeds/repositories**   | Multi-feed with per-feed plugins | N/A                   | Multiple sources | Multiple sources |
+| **Self-service marketplace**      | Browse, search, filter           | No discovery          | Company portal   | CLI search       |
+| **Version rollback**              | Backup + restore                 | Manual                | Complex          | Limited          |
+| **Plugin extensibility**          | Dynamic config UI, custom tabs   | None                  | None             | None             |
 
 ## How it works
 
@@ -63,6 +63,7 @@ The marketplace shows all available products from all configured feeds. Users ca
 - **Install** any version - not just the latest
 
 When a product has a plugin connected to it, the install dialog shows a hint:
+
 > "A plugin is connected to this product and may prompt for additional configuration during installation."
 
 ### Installation tracking
@@ -76,15 +77,16 @@ Installations run in the background. A status indicator in the bottom bar shows 
 - Supports native text selection and Ctrl+C for copying log output
 
 **Example log output:**
+
 ```
 [14:23:01] Installing Acme Dashboard v2.1.0 to C:\Program Files\Acme\Dashboard
 [14:23:01] Downloading product acme-dashboard v2.1.0
 [14:23:05] Download complete, extracting...
-[14:23:06] Plugin found 2 file(s): update-original.sid, update-combined.sid
+[14:23:06] Plugin found 2 file(s): update-original.sql, update-combined.sql
 [14:23:06] Waiting for user configuration...
 [14:23:12] Processing files with plugin...
-[14:23:12] update-original.sid: Deployed SID to STEPS_Basis via Steps.Update
-[14:23:12] update-combined.sid: Skipped (not selected)
+[14:23:12] update-original.sql: Deployed SQL to Database_xyz via sqlcmd
+[14:23:12] update-combined.sql: Skipped (not selected)
 [14:23:12] Plugin processing completed successfully
 [14:23:13] Copying files to C:\Program Files\Acme\Dashboard
 [14:23:14] Creating shortcuts...
@@ -119,7 +121,7 @@ Before updating a product, StorkDrop creates a ZIP backup of the entire installa
 Every file that StorkDrop installs is recorded in a manifest (`{productId}.files.json`). When you uninstall, only those exact files are removed - nothing more, nothing less. If you manually added files to the installation directory, they are left untouched. If the manifest is missing (e.g., from a very old install), StorkDrop falls back to removing the entire directory, but warns first.
 
 **Plugin failure handling:**
-If a plugin's file handler (e.g., a SID file deployer) reports failure, the entire installation is aborted immediately. StorkDrop does not continue copying files or creating shortcuts for a product whose custom deployment step failed. The error is logged, a toast notification is shown, and the user can review the full log.
+If a plugin's file handler (e.g., a SQL file deployer) reports failure, the entire installation is aborted immediately. StorkDrop does not continue copying files or creating shortcuts for a product whose custom deployment step failed. The error is logged, a toast notification is shown, and the user can review the full log.
 
 **Atomic configuration writes:**
 All configuration files (product registry, settings, activity log) are written to a temporary file first, then atomically moved into place. If StorkDrop crashes mid-write, the previous valid file is still intact.
@@ -173,8 +175,18 @@ StorkDrop connects to multiple Nexus repositories simultaneously. Products from 
 ```json
 {
   "feeds": [
-    { "id": "internal", "name": "Internal Feed", "url": "https://nexus.company.com", "repository": "releases" },
-    { "id": "vendor", "name": "Vendor Feed", "url": "https://feed.vendor.com:8443", "repository": "tools" }
+    {
+      "id": "internal",
+      "name": "Internal Feed",
+      "url": "https://nexus.company.com",
+      "repository": "releases"
+    },
+    {
+      "id": "vendor",
+      "name": "Vendor Feed",
+      "url": "https://feed.vendor.com:8443",
+      "repository": "tools"
+    }
   ]
 }
 ```
@@ -222,9 +234,10 @@ my-product/
 StorkDrop supports **two-layer packaging**. The outer ZIP (downloaded from Nexus) can contain:
 
 1. An inner ZIP with the actual product files to install
-2. Loose files like `.sid`, `.sql` that are handled by plugins before installation
+2. Loose files like `.sql` that are handled by plugins before installation
 
 **Single-layer packaging** (simple products):
+
 ```
 my-product-1.0.0.zip
   MyProduct.exe                    -> copied to install dir
@@ -234,6 +247,7 @@ my-product-1.0.0.zip
 ```
 
 **Two-layer packaging** (products with plugin-handled files):
+
 ```
 my-product-1.0.0.zip              <- outer ZIP (downloaded by StorkDrop)
   contents.zip                     <- inner ZIP (extracted to install dir)
@@ -241,8 +255,8 @@ my-product-1.0.0.zip              <- outer ZIP (downloaded by StorkDrop)
     MyProduct.dll
     config/
       default.json
-  update-1.0.0.sid                 <- loose file, handled by plugin (NOT copied)
-  migration-combined.sid           <- loose file, handled by plugin (NOT copied)
+  update-1.0.0.sql                 <- loose file, handled by plugin (NOT copied)
+  migration-combined.sql           <- loose file, handled by plugin (NOT copied)
 ```
 
 **How extraction works:**
@@ -250,13 +264,14 @@ my-product-1.0.0.zip              <- outer ZIP (downloaded by StorkDrop)
 1. StorkDrop downloads and extracts the outer ZIP to a temporary directory
 2. If the extracted contents contain **exactly one `.zip` file**, StorkDrop recognizes this as two-layer packaging:
    - The inner ZIP is extracted in-place (its contents replace the ZIP file)
-   - Loose files alongside the inner ZIP (like `.sid` files) remain in the temp directory
-3. File type handler plugins claim their extensions (e.g., `.sid`) and process them
+   - Loose files alongside the inner ZIP (like `.sql` files) remain in the temp directory
+3. File type handler plugins claim their extensions (e.g., `.sql`) and process them
 4. Remaining files (from the inner ZIP extraction) are copied to the install directory
 
 This means you can ship database migration files, scripts, or any plugin-handled files alongside your product binaries in a single package, without them ending up in the install directory.
 
 **Rules:**
+
 - Every copied file is tracked in `{productId}.files.json` for precise uninstall
 - Files claimed by plugins are NOT copied to the install directory
 - The inner ZIP filename can be anything (e.g., `contents.zip`, `binaries.zip`)
@@ -272,7 +287,7 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "title": "My Product",
   "version": "1.0.0",
   "releaseDate": "2026-03-24",
-  "installType": "Suite",                        // Plugin | Suite | Bundle
+  "installType": "Suite", // Plugin | Suite | Bundle
   "description": "Short description for the marketplace card",
   "releaseNotes": "# What's new\n- Feature A\n- Bug fix B",
   "recommendedInstallPath": "C:\\Program Files\\MyCompany\\MyProduct",
@@ -282,20 +297,29 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "requirements": ["Windows 10+", ".NET 8 Runtime"],
   "shortcuts": [
     { "exeName": "MyProduct.exe", "displayName": "My Product" },
-    { "exeName": "MyAdmin.exe", "displayName": "My Product Admin", "iconPath": "admin.ico" }
+    {
+      "exeName": "MyAdmin.exe",
+      "displayName": "My Product Admin",
+      "iconPath": "admin.ico",
+    },
   ],
   "shortcutFolder": "My Company",
   "environmentVariables": [
     { "name": "MY_PRODUCT_HOME", "value": "{InstallPath}", "action": "set" },
-    { "name": "PATH", "value": "{InstallPath}\\bin", "action": "append", "mustExist": true }
+    {
+      "name": "PATH",
+      "value": "{InstallPath}\\bin",
+      "action": "append",
+      "mustExist": true,
+    },
   ],
   "plugins": [
-    { "assembly": "MyProduct.dll", "typeName": "MyProduct.Installer" }
+    { "assembly": "MyProduct.dll", "typeName": "MyProduct.Installer" },
   ],
   "cleanup": {
     "registryKeys": [],
-    "dataLocations": ["%APPDATA%\\MyProduct"]
-  }
+    "dataLocations": ["%APPDATA%\\MyProduct"],
+  },
 }
 ```
 
@@ -306,7 +330,7 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
 Drop a DLL in the `plugins/` directory next to StorkDrop. It's discovered and loaded automatically at startup. Plugins can:
 
 - Add sidebar navigation tabs with custom configuration pages
-- Claim file types from product packages (e.g., `.sid`, `.sql`) for custom deployment
+- Claim file types from product packages (e.g., `.sql`) for custom deployment
 - Show setup wizard steps during first-run configuration
 - Add sections to the Settings page
 - React to product install/uninstall events
@@ -380,25 +404,74 @@ public class MyInstaller : IStorkPlugin
 
 ### Configuration field types
 
-| Type | Control | Use case |
-|---|---|---|
-| `Text` | TextBox | Free text input |
-| `Number` | Validated TextBox | Numeric with optional min/max |
-| `Dropdown` | ComboBox | Single selection from options |
-| `MultiSelect` | Checkbox list | Multiple selections |
-| `Checkbox` | CheckBox | Boolean toggle |
-| `Password` | PasswordBox | Sensitive input (masked) |
-| `FilePath` | TextBox + browse | File selection |
-| `FolderPath` | TextBox + browse | Directory selection |
+| Type          | Control                         | Use case                          |
+| ------------- | ------------------------------- | --------------------------------- |
+| `Text`        | TextBox                         | Free text input                   |
+| `Number`      | Validated TextBox               | Numeric with optional min/max     |
+| `Dropdown`    | ComboBox                        | Single selection from options     |
+| `MultiSelect` | Checkbox list                   | Multiple selections               |
+| `Checkbox`    | CheckBox                        | Boolean toggle                    |
+| `Password`    | PasswordBox                     | Sensitive input (masked)          |
+| `FilePath`    | TextBox + browse                | File selection                    |
+| `FolderPath`  | TextBox + browse                | Directory selection               |
+| `Group`       | Repeatable card with add/remove | Dynamic lists of structured items |
+
+### Group fields
+
+The `Group` field type lets plugins declare repeatable groups of sub-fields. StorkDrop renders each group with an "Add" button and each instance with a "Remove" button. This is useful for managing lists of connections, paths, or any structured configuration.
+
+```csharp
+new PluginConfigField
+{
+    Key = "connections",
+    Label = "Database Connections",
+    FieldType = PluginFieldType.Group,
+    SubFields =
+    {
+        new PluginConfigField { Key = "name", Label = "Display Name", FieldType = PluginFieldType.Text, Required = true },
+        new PluginConfigField { Key = "server", Label = "Server", FieldType = PluginFieldType.Text, Required = true },
+        new PluginConfigField { Key = "password", Label = "Password", FieldType = PluginFieldType.Password },
+        new PluginConfigField { Key = "useSsl", Label = "Use SSL", FieldType = PluginFieldType.Checkbox, DefaultValue = "true" },
+    }
+}
+```
+
+Group values are stored as a JSON array of objects:
+
+```json
+{
+  "connections": "[{\"name\":\"Production\",\"server\":\"db.example.com\",\"password\":\"secret\",\"useSsl\":\"true\"}]"
+}
+```
+
+### Install path templates
+
+Plugins can implement `IInstallPathResolver` to resolve custom template variables in product install paths. StorkDrop calls this after file handler configuration, before copying files.
+
+```csharp
+public class MyPlugin : IStorkDropPlugin, IInstallPathResolver
+{
+    public string? ResolveInstallPath(string targetPath, PluginContext? context)
+    {
+        if (!targetPath.Contains("{MyRoot}"))
+            return null;
+
+        string configuredRoot = LoadMyConfiguredRoot();
+        return targetPath.Replace("{MyRoot}", configuredRoot);
+    }
+}
+```
+
+Products can then use `{MyRoot}/subfolder` as their `recommendedInstallPath` in the manifest. The template is resolved at install time based on the user's plugin configuration.
 
 ## Environment variables
 
 Products declare environment variables in the manifest. Changes are tracked per-product and precisely reversed on uninstall.
 
-| Action | On install | On uninstall |
-|---|---|---|
-| `set` | Creates or overwrites the variable | Deletes it entirely |
-| `append` | Appends a value with separator | Removes only the appended portion |
+| Action   | On install                         | On uninstall                      |
+| -------- | ---------------------------------- | --------------------------------- |
+| `set`    | Creates or overwrites the variable | Deletes it entirely               |
+| `append` | Appends a value with separator     | Removes only the appended portion |
 
 The `mustExist` flag (for `append`) controls what happens when the target variable doesn't exist: if `true`, the append is silently skipped; if `false` (default), the variable is created.
 
@@ -447,23 +520,23 @@ dotnet test StorkDrop.sln --configuration Release
 
 Stored in `%APPDATA%/StorkDrop/Config/`:
 
-| File | Purpose |
-|---|---|
-| `config.json` | Feeds, preferences, language |
-| `installed-products.json` | Installed product registry |
-| `activity-log.json` | Installation activity log |
-| `{productId}.files.json` | Per-product file manifest (for clean uninstall) |
-| `{productId}.envvars.json` | Per-product environment variable tracking |
+| File                             | Purpose                                           |
+| -------------------------------- | ------------------------------------------------- |
+| `config.json`                    | Feeds, preferences, language                      |
+| `installed-products.json`        | Installed product registry                        |
+| `activity-log.json`              | Installation activity log                         |
+| `{productId}.files.json`         | Per-product file manifest (for clean uninstall)   |
+| `{productId}.envvars.json`       | Per-product environment variable tracking         |
 | `plugin-config-{productId}.json` | Plugin config values (remembered between updates) |
 
 Logs in `%APPDATA%/StorkDrop/Logs/` (Serilog, rolling daily, 30-day retention).
 
 ## Roadmap
 
+- **Remote deployment via WinRM** - deploy to remote servers without installing a persistent agent. StorkDrop connects via PowerShell Remoting (WinRM, enabled by default on Windows Server), installs itself on the target machine if needed, verifies plugin compatibility, and runs the installation locally on the remote machine. The local StorkDrop streams config dialogs and progress back to the user. Deployment targets are modular (`IDeploymentTarget`) so additional transports (SSH, custom) can be added alongside the built-in local and WinRM targets.
 - **Cross-platform plugin scripting** - support pre/post install scripts in PowerShell, Python, and Bash alongside compiled .NET plugins
 - **Differential updates** - download only changed files using binary diff instead of full packages
 - **Rollback history** - keep multiple backup versions with a UI to restore any previous state
-- **Remote management API** - REST API for triggering installs and checking status across a fleet of machines
 - **Dependency resolution** - declare dependencies between products and install them in the correct order
 - **Signed manifests** - GPG/Authenticode signing for manifests and packages with verification on install
 - **Linux support** - extend beyond Windows with systemd service management and package integration

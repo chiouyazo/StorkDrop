@@ -26,11 +26,26 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
+        // Warn if installations are running
+        InstallationTracker tracker = App.Services.GetRequiredService<InstallationTracker>();
+        if (tracker.HasActiveInstallations)
+        {
+            MessageBoxResult result = MessageBox.Show(
+                $"There are {tracker.ActiveCount} installation(s) still running. Closing StorkDrop may leave them in an incomplete state.\n\nAre you sure you want to close?",
+                "Installations in progress",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning
+            );
+            if (result != MessageBoxResult.Yes)
+            {
+                e.Cancel = true;
+                return;
+            }
+        }
+
         IConfigurationService configService =
             App.Services.GetRequiredService<IConfigurationService>();
 
-        // Must be synchronous — WPF checks e.Cancel immediately on return.
-        // Use ConfigureAwait(false) via Task.Run to avoid SyncContext deadlock.
         AppConfiguration? config = Task.Run(async () => await configService.LoadAsync())
             .GetAwaiter()
             .GetResult();
