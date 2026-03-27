@@ -49,7 +49,6 @@ public sealed class FileOperations
         }
         catch
         {
-            // Clean up partially copied files on failure
             foreach (string copiedFile in copiedFiles)
             {
                 try
@@ -59,7 +58,7 @@ public sealed class FileOperations
                 }
                 catch
                 {
-                    // Best-effort cleanup
+                    // Best effort cleanup
                 }
             }
             throw;

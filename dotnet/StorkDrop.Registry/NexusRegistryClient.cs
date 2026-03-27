@@ -239,4 +239,30 @@ public sealed class NexusRegistryClient(
             return false;
         }
     }
+
+    /// <summary>
+    /// Lists all raw hosted repositories accessible to the authenticated account.
+    /// </summary>
+    public static async Task<IReadOnlyList<NexusRepositoryInfo>> ListRawHostedRepositoriesAsync(
+        HttpClient httpClient,
+        string baseUrl,
+        CancellationToken cancellationToken = default
+    )
+    {
+        string url = $"{baseUrl.TrimEnd('/')}/service/rest/v1/repositories";
+
+        NexusRepositoryInfo[]? repos = await httpClient
+            .GetFromJsonAsync<NexusRepositoryInfo[]>(url, JsonOptions, cancellationToken)
+            .ConfigureAwait(false);
+
+        if (repos is null)
+            return [];
+
+        return repos
+            .Where(r =>
+                r.Format.Equals("raw", StringComparison.OrdinalIgnoreCase)
+                && r.Type.Equals("hosted", StringComparison.OrdinalIgnoreCase)
+            )
+            .ToList();
+    }
 }

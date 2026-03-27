@@ -8,7 +8,6 @@ public sealed class PathResolver
 
         string expanded = Environment.ExpandEnvironmentVariables(path);
 
-        // Handle ~/ for user home directory
         if (expanded.StartsWith("~/") || expanded.StartsWith("~\\"))
         {
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -41,7 +40,6 @@ public sealed class PathResolver
         try
         {
             string resolved = Resolve(path);
-            // Check for invalid chars (excluding path separator chars)
             char[] invalidChars = Path.GetInvalidPathChars();
             return resolved.IndexOfAny(invalidChars) < 0;
         }

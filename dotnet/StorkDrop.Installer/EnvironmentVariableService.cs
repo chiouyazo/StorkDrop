@@ -85,7 +85,6 @@ public sealed class EnvironmentVariableService
                         continue;
                     }
 
-                    // Idempotency: don't duplicate if already present
                     if (
                         currentValue is not null
                         && ContainsEntry(currentValue, resolvedValue, decl.Separator)
@@ -265,7 +264,7 @@ public sealed class EnvironmentVariableService
         }
         catch
         {
-            // Best-effort
+            // Best effort
         }
     }
 

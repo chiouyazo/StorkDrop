@@ -42,6 +42,12 @@
   <system:String x:Key="Status_Disconnected">Not connected</system:String>
   <system:String x:Key="Status_Timeout">Connection timed out</system:String>
   <system:String x:Key="Status_TestSuccess">Connection successful!</system:String>
+  <system:String x:Key="Status_TestSuccess_WithRepos"
+    >Connected. Found {0} repositories.</system:String
+  >
+  <system:String x:Key="Settings_FeedRepo_Hint"
+    >Leave empty to auto-discover all repositories</system:String
+  >
   <system:String x:Key="Status_Downloading">Downloading {0} v{1}...</system:String>
   <system:String x:Key="Status_DownloadComplete">Download complete.</system:String>
   <system:String x:Key="Status_Extracting">Extracting files...</system:String>

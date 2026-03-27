@@ -94,7 +94,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
             }
             catch
             {
-                // Best-effort cleanup of temp file
+                // Best effort cleanup of temp file
             }
             _saveLock.Release();
         }
@@ -121,7 +121,6 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
         string json = await File.ReadAllTextAsync(filePath, cancellationToken)
             .ConfigureAwait(false);
 
-        // Validate that it deserializes correctly
         AppConfiguration? config = JsonSerializer.Deserialize<AppConfiguration>(json, JsonOptions);
         if (config is null)
             throw new InvalidOperationException("Invalid configuration file.");
@@ -152,7 +151,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
             }
             catch
             {
-                // Best-effort cleanup of temp file
+                // Best effort cleanup of temp file
             }
             _saveLock.Release();
         }

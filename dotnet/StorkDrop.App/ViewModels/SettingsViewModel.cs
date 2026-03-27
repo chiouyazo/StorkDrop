@@ -9,6 +9,7 @@ using StorkDrop.App.Services;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Registry;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -183,7 +184,7 @@ public partial class SettingsViewModel : ObservableObject
                         Id = f.Id,
                         Name = f.Name,
                         Url = f.Url,
-                        Repository = f.Repository,
+                        Repository = f.Repository ?? string.Empty,
                         Username = f.Username ?? string.Empty,
                         Password = decryptedPassword,
                         PluginId = f.PluginId ?? string.Empty,
@@ -255,7 +256,7 @@ public partial class SettingsViewModel : ObservableObject
                     f.Id,
                     f.Name,
                     f.Url,
-                    f.Repository,
+                    !string.IsNullOrWhiteSpace(f.Repository) ? f.Repository : null,
                     !string.IsNullOrEmpty(f.Username) ? f.Username : null,
                     !string.IsNullOrEmpty(f.Password)
                         ? _encryptionService.Encrypt(f.Password)
@@ -331,10 +332,34 @@ public partial class SettingsViewModel : ObservableObject
                 cts.Token
             );
             feed.IsConnectionValid = response.IsSuccessStatusCode;
-            feed.ConnectionTestMessage = feed.IsConnectionValid
-                ? LocalizationManager.GetString("Status_TestSuccess")
-                : LocalizationManager.GetString("Error_ConnectionFailed")
+
+            if (feed.IsConnectionValid)
+            {
+                try
+                {
+                    IReadOnlyList<NexusRepositoryInfo> repos =
+                        await NexusRegistryClient.ListRawHostedRepositoriesAsync(
+                            testClient,
+                            baseUrl,
+                            cts.Token
+                        );
+                    feed.ConnectionTestMessage = LocalizationManager
+                        .GetString("Status_TestSuccess_WithRepos")
+                        .Replace("{0}", repos.Count.ToString());
+                }
+                catch
+                {
+                    feed.ConnectionTestMessage = LocalizationManager.GetString(
+                        "Status_TestSuccess"
+                    );
+                }
+            }
+            else
+            {
+                feed.ConnectionTestMessage =
+                    LocalizationManager.GetString("Error_ConnectionFailed")
                     + $" (HTTP {(int)response.StatusCode})";
+            }
         }
         catch (Exception ex)
         {

@@ -4,7 +4,7 @@ public sealed record FeedConfiguration(
     string Id,
     string Name,
     string Url,
-    string Repository,
+    string? Repository,
     string? Username,
     string? EncryptedPassword,
     string? PluginId

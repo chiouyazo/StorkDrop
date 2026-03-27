@@ -33,12 +33,36 @@
       Style="{DynamicResource BodyText}"
       Margin="0,0,0,4"
     />
-    <TextBox
-      Text="{Binding FeedRepository, UpdateSourceTrigger=PropertyChanged}"
-      Padding="8,6"
-      FontSize="13"
-      Margin="0,0,0,12"
-    />
+    <Grid Margin="0,0,0,12">
+      <TextBox
+        Text="{Binding FeedRepository, UpdateSourceTrigger=PropertyChanged}"
+        Padding="8,6"
+        FontSize="13"
+      />
+      <TextBlock
+        Text="{DynamicResource Settings_FeedRepo_Hint}"
+        IsHitTestVisible="False"
+        Foreground="#888"
+        FontStyle="Italic"
+        FontSize="12"
+        VerticalAlignment="Center"
+        Margin="10,0,0,0"
+      >
+        <TextBlock.Style>
+          <Style TargetType="TextBlock">
+            <Setter Property="Visibility" Value="Collapsed" />
+            <Style.Triggers>
+              <DataTrigger Binding="{Binding FeedRepository}" Value="">
+                <Setter Property="Visibility" Value="Visible" />
+              </DataTrigger>
+              <DataTrigger Binding="{Binding FeedRepository}" Value="{x:Null}">
+                <Setter Property="Visibility" Value="Visible" />
+              </DataTrigger>
+            </Style.Triggers>
+          </Style>
+        </TextBlock.Style>
+      </TextBlock>
+    </Grid>
 
     <TextBlock
       Text="{DynamicResource Settings_FeedUser}"

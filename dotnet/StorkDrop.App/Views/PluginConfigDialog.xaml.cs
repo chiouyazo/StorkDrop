@@ -95,11 +95,9 @@ public partial class PluginConfigDialog : Window
     {
         if (sender is CheckBox cb && cb.Tag is string value)
         {
-            // Find the parent ItemsControl to get the field ViewModel
             ItemsControl? itemsControl = FindParent<ItemsControl>(cb);
             if (itemsControl?.Tag is PluginConfigFieldViewModel field)
             {
-                // Check if this value is in the current selection
                 HashSet<string> selected = new(
                     (field.Value ?? "").Split(
                         ',',

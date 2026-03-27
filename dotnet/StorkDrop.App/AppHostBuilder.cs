@@ -76,7 +76,6 @@ public static class AppHostBuilder
                 services.AddHostedService<UpdateBackgroundService>();
                 services.AddSingleton<InstallationTracker>();
 
-                // Auto-load plugins from plugins/ directory
                 PluginLoadStatus pluginLoadStatus = new PluginLoadStatus();
                 LoadPlugins(services, pluginLoadStatus);
                 services.AddSingleton(pluginLoadStatus);
@@ -208,7 +207,7 @@ public static class AppHostBuilder
 
         protected override Assembly? Load(AssemblyName assemblyName)
         {
-            // For shared assemblies, use the host's version (avoids version mismatch)
+            // For shared assemblies, use the host's version (avoiding mismatch)
             Assembly? alreadyLoaded = Default.Assemblies.FirstOrDefault(a =>
                 string.Equals(
                     a.GetName().Name,

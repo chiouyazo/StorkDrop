@@ -50,7 +50,6 @@ public sealed class BackupService : IBackupService
                 }
                 catch
                 {
-                    // Clean up partial backup file on failure
                     if (File.Exists(backupPath))
                     {
                         try
@@ -59,7 +58,7 @@ public sealed class BackupService : IBackupService
                         }
                         catch
                         {
-                            // Best-effort cleanup
+                            // Best effort cleanup
                         }
                     }
                     throw;
@@ -103,7 +102,7 @@ public sealed class BackupService : IBackupService
                         }
                         catch
                         {
-                            // Best-effort cleanup
+                            // Best effort cleanup
                         }
                     }
                     throw;

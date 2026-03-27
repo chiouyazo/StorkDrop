@@ -88,7 +88,6 @@ public partial class ProductCardViewModel : ObservableObject
         }
         catch
         {
-            // Image load failed, fallback to icon
             ProductImage = null;
         }
         finally

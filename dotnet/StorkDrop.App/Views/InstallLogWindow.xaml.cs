@@ -18,7 +18,6 @@ public partial class InstallLogWindow : Window
         // Populate with existing log entries
         LogTextBox.Text = string.Join(Environment.NewLine, installation.LogEntries);
 
-        // Auto-append new entries
         if (installation.LogEntries is INotifyCollectionChanged ncc)
         {
             ncc.CollectionChanged += (_, args) =>

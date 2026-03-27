@@ -227,7 +227,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             }
             catch
             {
-                // Best-effort cleanup of temp file
+                // Best effort cleanup of temp file
             }
         }
     }

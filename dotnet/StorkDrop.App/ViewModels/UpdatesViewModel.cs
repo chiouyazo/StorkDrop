@@ -151,7 +151,6 @@ public partial class UpdatesViewModel : ObservableObject
             if (installed is null || manifest is null)
                 return;
 
-            // Check if UAC is needed
             bool needsAdmin =
                 ElevationHelper.PathRequiresAdmin(installed.InstalledPath)
                 && !ElevationHelper.IsRunningAsAdmin();

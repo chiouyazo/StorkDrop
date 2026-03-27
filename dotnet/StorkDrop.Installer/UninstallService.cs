@@ -89,11 +89,9 @@ public sealed class UninstallService
             }
         }
 
-        // Remove environment variables
         _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
         await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
 
-        // Delete installed files using file manifest if available
         if (Directory.Exists(product.InstalledPath))
         {
             List<string>? trackedFiles = await LoadFileManifestAsync(
@@ -108,7 +106,7 @@ public sealed class UninstallService
                     trackedFiles.Count,
                     product.ProductId
                 );
-                // Delete only tracked files
+
                 foreach (string relativePath in trackedFiles)
                 {
                     string fullPath = Path.Combine(product.InstalledPath, relativePath);
@@ -118,7 +116,6 @@ public sealed class UninstallService
                     }
                 }
 
-                // Clean up empty directories
                 CleanupEmptyDirectories(product.InstalledPath);
             }
             else
@@ -127,23 +124,19 @@ public sealed class UninstallService
                     "No file manifest found for {ProductId}, deleting entire directory",
                     product.ProductId
                 );
-                // Fallback: delete entire directory if no manifest exists
+
                 await DeleteDirectoryWithRetryAsync(product.InstalledPath, cancellationToken);
             }
 
-            // Delete the file manifest itself
             DeleteFileManifest(product.ProductId);
         }
 
-        // Remove Start Menu shortcuts
         _logger.LogDebug("Removing shortcuts for {ProductTitle}", product.Title);
         RemoveShortcuts(product.Title);
 
-        // Remove from repository
         _logger.LogDebug("Removing {ProductId} from product repository", product.ProductId);
         await _productRepository.RemoveAsync(product.ProductId, cancellationToken);
 
-        // Log the activity
         ActivityLogEntry entry = new ActivityLogEntry(
             Id: Guid.NewGuid().ToString(),
             Timestamp: DateTime.UtcNow,
@@ -202,7 +195,7 @@ public sealed class UninstallService
         }
         catch
         {
-            // Best-effort cleanup
+            // Best effort cleanup
         }
     }
 
@@ -232,11 +225,10 @@ public sealed class UninstallService
                 }
                 catch
                 {
-                    // Best-effort cleanup
+                    // Best effort cleanup
                 }
             }
 
-            // Try to remove root if empty
             if (
                 Directory.Exists(rootPath)
                 && Directory.GetFiles(rootPath).Length == 0
@@ -248,13 +240,12 @@ public sealed class UninstallService
         }
         catch
         {
-            // Best-effort cleanup
+            // Best effort cleanup
         }
     }
 
     private static void RemoveShortcuts(string productTitle)
     {
-        // Search in multiple possible shortcut folders
         string programsFolder = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
             "Programs"
@@ -265,7 +256,6 @@ public sealed class UninstallService
 
         try
         {
-            // Search all subdirectories for matching shortcuts
             foreach (string subDir in Directory.GetDirectories(programsFolder))
             {
                 try
@@ -281,7 +271,6 @@ public sealed class UninstallService
                         }
                     }
 
-                    // Remove folder if empty
                     if (
                         Directory.Exists(subDir)
                         && Directory.GetFiles(subDir).Length == 0
@@ -293,13 +282,13 @@ public sealed class UninstallService
                 }
                 catch
                 {
-                    // Best-effort per folder
+                    // Best effort per folder
                 }
             }
         }
         catch
         {
-            // Non-critical
+            // Non critical
         }
     }
 
@@ -345,7 +334,7 @@ public sealed class UninstallService
         }
         catch
         {
-            // Best-effort
+            // Best effort
         }
     }
 

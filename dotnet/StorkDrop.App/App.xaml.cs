@@ -91,10 +91,8 @@ public partial class App : Application
             IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
             await feedRegistry.ReloadAsync();
 
-            // Wire up engine callbacks
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
 
-            // File handler config dialog
             engine.OnFileHandlerConfigNeeded = (fields, currentValues) =>
             {
                 Dictionary<string, string>? result = null;

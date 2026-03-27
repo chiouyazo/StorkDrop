@@ -91,7 +91,6 @@ public sealed class Installer : IValidatingStorkPlugin
     {
         List<PluginValidationError> errors = new List<PluginValidationError>();
 
-        // Database must be selected
         if (
             !context.ConfigValues.TryGetValue("database", out string? database)
             || string.IsNullOrWhiteSpace(database)
@@ -102,7 +101,6 @@ public sealed class Installer : IValidatingStorkPlugin
             );
         }
 
-        // API URL must be a valid URI
         if (context.ConfigValues.TryGetValue("apiUrl", out string? apiUrl))
         {
             if (
@@ -124,7 +122,6 @@ public sealed class Installer : IValidatingStorkPlugin
             errors.Add(new PluginValidationError("apiUrl", "API URL is required."));
         }
 
-        // Port must be in valid range
         if (context.ConfigValues.TryGetValue("port", out string? portString))
         {
             if (!int.TryParse(portString, out int port) || port < 1 || port > 65535)
