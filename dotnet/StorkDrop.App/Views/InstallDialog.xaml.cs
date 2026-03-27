@@ -69,7 +69,6 @@ public partial class InstallDialog : Window
 
     private void UpdateInstallDetails()
     {
-        // Download size
         if (_manifest?.DownloadSizeBytes is not null and > 0)
         {
             DownloadSizeText.Text = FormatBytes(_manifest.DownloadSizeBytes.Value);
@@ -79,7 +78,6 @@ public partial class InstallDialog : Window
             DownloadSizeText.Text = " - ";
         }
 
-        // Shortcut count
         int shortcutCount = _manifest?.Shortcuts?.Length ?? 0;
         if (shortcutCount > 0)
         {

@@ -27,10 +27,8 @@ public sealed class TrayIconService : IDisposable
             ContextMenu = new ContextMenu { Items = { openItem, new Separator(), exitItem } },
         };
 
-        // Single left click opens the window (Feature 4)
         _trayIcon.TrayLeftMouseUp += (_, _) => onOpen();
 
-        // Keep double-click as well
         _trayIcon.TrayMouseDoubleClick += (_, _) => onOpen();
 
         try

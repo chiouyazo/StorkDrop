@@ -49,6 +49,21 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         {
             if (_feeds.TryGetValue(feedId, out FeedEntry? entry))
                 return entry.Client;
+
+            // Fallback: if feedId was a base config ID that is now expanded into composite IDs,
+            // find the first match with that prefix (handles migration from pinned to discovery mode)
+            string prefix = feedId + ":";
+            FeedEntry? fallback = _feeds.Values.FirstOrDefault(f => f.Info.Id.StartsWith(prefix));
+            if (fallback is not null)
+            {
+                _logger.LogDebug(
+                    "Feed {FeedId} not found directly, falling back to {FallbackId}",
+                    feedId,
+                    fallback.Info.Id
+                );
+                return fallback.Client;
+            }
+
             _logger.LogError("Feed {FeedId} not found in registry", feedId);
             throw new KeyNotFoundException($"Feed '{feedId}' not found.");
         }
@@ -81,60 +96,72 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         foreach (FeedConfiguration fc in feedConfigs)
         {
             _logger.LogDebug("Loading feed {FeedName} ({FeedId}) at {Url}", fc.Name, fc.Id, fc.Url);
-            string password = string.Empty;
-            if (!string.IsNullOrEmpty(fc.EncryptedPassword))
+            string password = DecryptPassword(fc);
+
+            HttpClient baseHttpClient = CreateHttpClient(fc.Url, fc.Username, password);
+
+            if (!string.IsNullOrWhiteSpace(fc.Repository))
             {
+                // Pinned mode
+                FeedEntry entry = CreateFeedEntry(
+                    fc.Id,
+                    fc.Name,
+                    fc.Url,
+                    fc.Repository,
+                    baseHttpClient
+                );
+                newFeeds[fc.Id] = entry;
+            }
+            else
+            {
+                // Discovery Mode
                 try
                 {
-                    password = _encryptionService.Decrypt(fc.EncryptedPassword);
+                    IReadOnlyList<NexusRepositoryInfo> repos =
+                        await NexusRegistryClient.ListRawHostedRepositoriesAsync(
+                            baseHttpClient,
+                            fc.Url,
+                            cancellationToken
+                        );
+
+                    _logger.LogInformation(
+                        "Discovered {Count} raw hosted repositories on {FeedName}",
+                        repos.Count,
+                        fc.Name
+                    );
+
+                    foreach (NexusRepositoryInfo repo in repos)
+                    {
+                        string feedId = $"{fc.Id}:{repo.Name}";
+                        string feedName = $"{fc.Name} / {repo.Name}";
+
+                        // Each discovered repo needs its own HttpClient (same auth)
+                        HttpClient repoHttpClient = CreateHttpClient(fc.Url, fc.Username, password);
+
+                        FeedEntry entry = CreateFeedEntry(
+                            feedId,
+                            feedName,
+                            fc.Url,
+                            repo.Name,
+                            repoHttpClient
+                        );
+                        newFeeds[feedId] = entry;
+                    }
+
+                    // Dispose the base client used only for discovery
+                    baseHttpClient.Dispose();
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(
                         ex,
-                        "Failed to decrypt password for feed {FeedName} ({FeedId})",
+                        "Failed to discover repositories for feed {FeedName} ({FeedId}), skipping",
                         fc.Name,
                         fc.Id
                     );
+                    baseHttpClient.Dispose();
                 }
             }
-
-            NexusOptions opts = new()
-            {
-                BaseUrl = fc.Url,
-                Repository = fc.Repository,
-                Username = fc.Username ?? string.Empty,
-                Password = password,
-            };
-
-            HttpClientHandler handler = new()
-            {
-                ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-            };
-
-            HttpClient httpClient = new(handler)
-            {
-                BaseAddress = new Uri(opts.BaseUrl),
-                Timeout = opts.Timeout,
-            };
-
-            if (!string.IsNullOrEmpty(opts.Username) && !string.IsNullOrEmpty(opts.Password))
-            {
-                string creds = Convert.ToBase64String(
-                    Encoding.ASCII.GetBytes($"{opts.Username}:{opts.Password}")
-                );
-                httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                    "Basic",
-                    creds
-                );
-            }
-
-            ILogger<NexusRegistryClient> logger =
-                _loggerFactory.CreateLogger<NexusRegistryClient>();
-            NexusRegistryClient client = new(httpClient, Options.Create(opts), logger);
-
-            newFeeds[fc.Id] = new FeedEntry(new FeedInfo(fc.Id, fc.Name), client, httpClient);
         }
 
         Dictionary<string, FeedEntry> oldFeeds;
@@ -148,6 +175,71 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
             entry.HttpClient.Dispose();
 
         _logger.LogInformation("Feed registry reloaded with {Count} feeds", newFeeds.Count);
+    }
+
+    private string DecryptPassword(FeedConfiguration fc)
+    {
+        if (string.IsNullOrEmpty(fc.EncryptedPassword))
+            return string.Empty;
+
+        try
+        {
+            return _encryptionService.Decrypt(fc.EncryptedPassword);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to decrypt password for feed {FeedName} ({FeedId})",
+                fc.Name,
+                fc.Id
+            );
+            return string.Empty;
+        }
+    }
+
+    private static HttpClient CreateHttpClient(string baseUrl, string? username, string password)
+    {
+        HttpClientHandler handler = new()
+        {
+            ServerCertificateCustomValidationCallback =
+                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
+        };
+
+        HttpClient httpClient = new(handler)
+        {
+            BaseAddress = new Uri(baseUrl),
+            Timeout = TimeSpan.FromSeconds(30),
+        };
+
+        if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
+        {
+            string creds = Convert.ToBase64String(
+                Encoding.ASCII.GetBytes($"{username}:{password}")
+            );
+            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
+                "Basic",
+                creds
+            );
+        }
+
+        return httpClient;
+    }
+
+    private FeedEntry CreateFeedEntry(
+        string feedId,
+        string feedName,
+        string baseUrl,
+        string repository,
+        HttpClient httpClient
+    )
+    {
+        NexusOptions opts = new() { BaseUrl = baseUrl, Repository = repository };
+
+        ILogger<NexusRegistryClient> logger = _loggerFactory.CreateLogger<NexusRegistryClient>();
+        NexusRegistryClient client = new(httpClient, Options.Create(opts), logger);
+
+        return new FeedEntry(new FeedInfo(feedId, feedName), client, httpClient);
     }
 
     public void Dispose()

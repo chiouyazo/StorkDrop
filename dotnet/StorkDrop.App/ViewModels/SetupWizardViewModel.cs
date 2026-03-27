@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Registry;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -158,10 +159,33 @@ public partial class SetupWizardViewModel : ObservableObject
                 cts.Token
             );
             IsConnectionValid = response.IsSuccessStatusCode;
-            ConnectionTestMessage = IsConnectionValid
-                ? LocalizationManager.GetString("Status_TestSuccess")
-                : LocalizationManager.GetString("Error_ConnectionFailed")
+
+            if (IsConnectionValid)
+            {
+                try
+                {
+                    IReadOnlyList<NexusRepositoryInfo> repos =
+                        await NexusRegistryClient.ListRawHostedRepositoriesAsync(
+                            testClient,
+                            baseUrl,
+                            cts.Token
+                        );
+                    ConnectionTestMessage = LocalizationManager
+                        .GetString("Status_TestSuccess_WithRepos")
+                        .Replace("{0}", repos.Count.ToString());
+                }
+                catch
+                {
+                    ConnectionTestMessage = LocalizationManager.GetString("Status_TestSuccess");
+                }
+            }
+            else
+            {
+                ConnectionTestMessage =
+                    LocalizationManager.GetString("Error_ConnectionFailed")
                     + $" (HTTP {(int)response.StatusCode})";
+            }
+
             IsConnectionTested = true;
         }
         catch (Exception ex)
@@ -184,7 +208,7 @@ public partial class SetupWizardViewModel : ObservableObject
             Id: Guid.NewGuid().ToString(),
             Name: FeedName,
             Url: FeedUrl,
-            Repository: FeedRepository,
+            Repository: !string.IsNullOrWhiteSpace(FeedRepository) ? FeedRepository : null,
             Username: Username,
             EncryptedPassword: !string.IsNullOrEmpty(Password)
                 ? _encryptionService.Encrypt(Password)

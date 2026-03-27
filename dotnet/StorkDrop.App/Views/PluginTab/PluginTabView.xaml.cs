@@ -36,7 +36,6 @@ public partial class PluginTabView : UserControl
             && DataContext is PluginTabViewModel vm
         )
         {
-            // Find which group this instance belongs to
             foreach (PluginSettingsSectionViewModel section in vm.Sections)
             {
                 foreach (GroupFieldViewModel group in section.GroupFields)

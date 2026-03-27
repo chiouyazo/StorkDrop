@@ -28,6 +28,7 @@ public sealed class ToastNotificationService : INotificationService
             {
                 // Use reflection to call ToastNotificationManagerCompat.Show at runtime
                 // This avoids compile-time dependency on WinRT APIs while still supporting toast on Windows
+                // Looks weird because we reference Uwp below, but it works.
                 Type? compatType = Type.GetType(
                     "Microsoft.Toolkit.Uwp.Notifications.ToastNotificationManagerCompat, Microsoft.Toolkit.Uwp.Notifications"
                 );
@@ -46,10 +47,9 @@ public sealed class ToastNotificationService : INotificationService
 
                     if (showMethod is not null)
                     {
-                        // The Show static method takes ToastContent
                         Microsoft.Toolkit.Uwp.Notifications.ToastContent content =
                             builder.GetToastContent();
-                        // Try invoking - may throw on non-UWP environments
+                        // may throw on non-UWP environments
                         showMethod.Invoke(null, [content]);
                         return;
                     }

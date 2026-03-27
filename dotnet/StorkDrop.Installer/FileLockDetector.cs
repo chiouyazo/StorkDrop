@@ -66,7 +66,7 @@ public sealed class FileLockDetector : IFileLockDetector
         }
         catch
         {
-            // P/Invoke call failed - return whatever we have so far
+            // P/Invoke call failed; return whatever we have so far
         }
         finally
         {
@@ -88,7 +88,7 @@ public sealed class FileLockDetector : IFileLockDetector
         if (!File.Exists(filePath))
             return false;
 
-        // Try to open with Delete share — this is what matters for uninstall.
+        // Try to open with Delete share. This is what matters for uninstall.
         // Using Read access with Delete share is much less sensitive than
         // ReadWrite with no sharing, avoiding false positives from antivirus,
         // Windows indexer, or other transient handles.

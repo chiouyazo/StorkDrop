@@ -76,7 +76,6 @@ public partial class PluginTabViewModel : ObservableObject
                         SubFieldTemplates = field.SubFields,
                     };
 
-                    // Load saved group instances from JSON
                     if (savedValues.TryGetValue(field.Key, out string? groupJson))
                     {
                         try

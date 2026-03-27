@@ -42,6 +42,12 @@
   <system:String x:Key="Status_Disconnected">Nicht verbunden</system:String>
   <system:String x:Key="Status_Timeout">Zeit&#252;berschreitung</system:String>
   <system:String x:Key="Status_TestSuccess">Verbindung erfolgreich!</system:String>
+  <system:String x:Key="Status_TestSuccess_WithRepos"
+    >Verbunden. {0} Repositories gefunden.</system:String
+  >
+  <system:String x:Key="Settings_FeedRepo_Hint"
+    >Leer lassen um alle Repositories automatisch zu erkennen</system:String
+  >
   <system:String x:Key="Status_Downloading">{0} v{1} wird heruntergeladen...</system:String>
   <system:String x:Key="Status_DownloadComplete">Download abgeschlossen.</system:String>
   <system:String x:Key="Status_Extracting">Dateien werden extrahiert...</system:String>

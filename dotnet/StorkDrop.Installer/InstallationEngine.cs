@@ -223,7 +223,6 @@ public sealed class InstallationEngine : IInstallationEngine
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Step: Download
             _logger.LogInformation(
                 "Downloading product {ProductId} v{Version}",
                 manifest.ProductId,
@@ -259,7 +258,6 @@ public sealed class InstallationEngine : IInstallationEngine
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Step: Extract
             progress.Report(new InstallProgress(InstallStage.Extracting, 0, "Extracting files..."));
             string extractPath = Path.Combine(tempDir, "extracted");
             try
@@ -286,10 +284,8 @@ public sealed class InstallationEngine : IInstallationEngine
                     );
                     ZipFile.ExtractToDirectory(innerZipPath, innerExtractPath);
 
-                    // Remove the inner ZIP from the outer extraction so it's not copied/handled
                     File.Delete(innerZipPath);
 
-                    // Move inner contents into the extract path
                     foreach (
                         string file in Directory.GetFiles(
                             innerExtractPath,
@@ -332,7 +328,6 @@ public sealed class InstallationEngine : IInstallationEngine
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Step: PreInstall plugins
             PluginContext pluginContext = await BuildPluginContextAsync(
                 manifest,
                 options,
@@ -365,7 +360,6 @@ public sealed class InstallationEngine : IInstallationEngine
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            // Step: Handle custom file types (plugins claim files before copy)
             HashSet<string> handledFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             PluginContext? fileHandlerContext = null;
 
@@ -375,7 +369,6 @@ public sealed class InstallationEngine : IInstallationEngine
                 _fileTypeHandlers.Count
             );
 
-            // When skipping file handlers (elevated process), still exclude their file extensions
             if (options.SkipFileHandlers && _fileTypeHandlers.Count > 0)
             {
                 foreach (IFileTypeHandler handler in _fileTypeHandlers)

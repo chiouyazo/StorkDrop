@@ -23,7 +23,6 @@ public partial class PluginsViewModel : ObservableObject
     {
         List<PluginInfoViewModel> items = [];
 
-        // Successfully loaded plugins
         foreach (IStorkDropPlugin p in _plugins)
         {
             items.Add(
@@ -36,7 +35,6 @@ public partial class PluginsViewModel : ObservableObject
             );
         }
 
-        // Failed plugins
         foreach (PluginLoadError error in _loadStatus.Errors)
         {
             items.Add(

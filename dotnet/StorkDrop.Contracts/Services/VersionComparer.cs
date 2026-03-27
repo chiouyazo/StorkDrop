@@ -40,7 +40,6 @@ public sealed class VersionComparer : IComparer<string>
             spanY = spanY[..dashIndexY];
         }
 
-        // Compare numeric parts
         int result = CompareNumericParts(spanX, spanY);
         if (result != 0)
             return result;

@@ -26,7 +26,6 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Warn if installations are running
         InstallationTracker tracker = App.Services.GetRequiredService<InstallationTracker>();
         if (tracker.HasActiveInstallations)
         {
@@ -80,7 +79,7 @@ public partial class MainWindow : Window
                 );
 
                 AppConfiguration updatedConfig = config with { HasShownTrayToast = true };
-                // Fire-and-forget — closing shouldn't block on saving the toast flag
+                // Fire-and-forget; closing shouldn't block on saving the toast flag
                 _ = configService.SaveAsync(updatedConfig);
             }
         }
@@ -101,7 +100,6 @@ public partial class MainWindow : Window
         {
             vm.SelectedInstallation = install;
 
-            // Show a log window
             Views.InstallLogWindow logWindow = new(install) { Owner = this };
             logWindow.Show();
         }

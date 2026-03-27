@@ -162,11 +162,36 @@
                       Style="{DynamicResource CaptionText}"
                       Margin="0,0,0,4"
                     />
-                    <TextBox
-                      Text="{Binding Repository, UpdateSourceTrigger=PropertyChanged}"
-                      Style="{DynamicResource StyledTextBox}"
-                      Margin="0,0,0,8"
-                    />
+                    <Grid Margin="0,0,0,8">
+                      <TextBox
+                        x:Name="RepoTextBox"
+                        Text="{Binding Repository, UpdateSourceTrigger=PropertyChanged}"
+                        Style="{DynamicResource StyledTextBox}"
+                      />
+                      <TextBlock
+                        Text="{DynamicResource Settings_FeedRepo_Hint}"
+                        IsHitTestVisible="False"
+                        Foreground="#888"
+                        FontStyle="Italic"
+                        FontSize="12"
+                        VerticalAlignment="Center"
+                        Margin="10,0,0,0"
+                      >
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding Repository}" Value="">
+                                <Setter Property="Visibility" Value="Visible" />
+                              </DataTrigger>
+                              <DataTrigger Binding="{Binding Repository}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Visible" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </Grid>
 
                     <TextBlock
                       Text="{DynamicResource Settings_FeedUser}"
