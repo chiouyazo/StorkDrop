@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 /// <summary>
 /// Represents an item in the Nexus repository content tree.

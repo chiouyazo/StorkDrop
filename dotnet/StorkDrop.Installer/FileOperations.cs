@@ -14,7 +14,7 @@ public sealed class FileOperations
         if (string.IsNullOrWhiteSpace(targetDir))
             throw new ArgumentException("Zielpfad darf nicht leer sein.", nameof(targetDir));
 
-        DirectoryInfo source = new(sourceDir);
+        DirectoryInfo source = new DirectoryInfo(sourceDir);
         if (!source.Exists)
             throw new DirectoryNotFoundException($"Source directory not found: {sourceDir}");
 
@@ -47,7 +47,7 @@ public sealed class FileOperations
                 progress?.Report(percentage);
             }
         }
-        catch
+        catch (Exception)
         {
             foreach (string copiedFile in copiedFiles)
             {
@@ -56,7 +56,7 @@ public sealed class FileOperations
                     if (File.Exists(copiedFile))
                         File.Delete(copiedFile);
                 }
-                catch
+                catch (Exception)
                 {
                     // Best effort cleanup
                 }
@@ -77,7 +77,7 @@ public sealed class FileOperations
             throw new ArgumentException("Zieldateipfad darf nicht leer sein.", nameof(destination));
 
         const int bufferSize = 81920;
-        await using FileStream sourceStream = new(
+        await using FileStream sourceStream = new FileStream(
             source,
             FileMode.Open,
             FileAccess.Read,
@@ -85,7 +85,7 @@ public sealed class FileOperations
             bufferSize,
             true
         );
-        await using FileStream destStream = new(
+        await using FileStream destStream = new FileStream(
             destination,
             FileMode.Create,
             FileAccess.Write,

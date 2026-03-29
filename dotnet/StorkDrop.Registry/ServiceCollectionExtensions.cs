@@ -1,8 +1,8 @@
-using System.Net.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Registry.Nexus;
 
 namespace StorkDrop.Registry;
 
@@ -40,6 +40,7 @@ public static class ServiceCollectionExtensions
 
     public static IServiceCollection AddFeedRegistry(this IServiceCollection services)
     {
+        services.AddSingleton<IFeedConnectionService, FeedConnectionService>();
         services.AddSingleton<IFeedRegistry, FeedRegistry>();
         return services;
     }

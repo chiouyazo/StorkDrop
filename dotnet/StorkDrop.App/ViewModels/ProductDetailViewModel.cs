@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts.Interfaces;
@@ -18,6 +19,7 @@ public partial class ProductDetailViewModel : ObservableObject
     private readonly InstallationCoordinator _coordinator;
     private readonly IProductRepository _productRepository;
     private readonly DialogService _dialogService;
+    private readonly ILogger<ProductDetailViewModel> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ProductDetailViewModel"/> class.
@@ -26,17 +28,20 @@ public partial class ProductDetailViewModel : ObservableObject
     /// <param name="coordinator">The installation coordinator for isolated installs.</param>
     /// <param name="productRepository">The repository for installed products.</param>
     /// <param name="dialogService">The dialog service for user interactions.</param>
+    /// <param name="logger">The logger instance.</param>
     public ProductDetailViewModel(
         IFeedRegistry feedRegistry,
         InstallationCoordinator coordinator,
         IProductRepository productRepository,
-        DialogService dialogService
+        DialogService dialogService,
+        ILogger<ProductDetailViewModel> logger
     )
     {
         _feedRegistry = feedRegistry;
         _coordinator = coordinator;
         _productRepository = productRepository;
         _dialogService = dialogService;
+        _logger = logger;
     }
 
     public string FeedId { get; set; } = string.Empty;
@@ -160,8 +165,9 @@ public partial class ProductDetailViewModel : ObservableObject
             );
             SelectedVersionReleaseNotes = versionManifest?.ReleaseNotes ?? string.Empty;
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Failed to load release notes for version {Version}", version);
             SelectedVersionReleaseNotes = string.Empty;
         }
     }
@@ -216,7 +222,7 @@ public partial class ProductDetailViewModel : ObservableObject
 
             if (versionManifest is not null)
             {
-                using CancellationTokenSource cts = new();
+                using CancellationTokenSource cts = new CancellationTokenSource();
                 InstallResult result = await _coordinator.InstallWithIsolationAsync(
                     versionManifest,
                     options,

@@ -1,5 +1,6 @@
 using System.IO.Compression;
 using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
@@ -9,11 +10,7 @@ public sealed class BackupService : IBackupService
 
     public BackupService()
     {
-        _backupRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "StorkDrop",
-            "Backups"
-        );
+        _backupRoot = StorkPaths.BackupRoot;
         Directory.CreateDirectory(_backupRoot);
     }
 
@@ -48,7 +45,7 @@ public sealed class BackupService : IBackupService
                         includeBaseDirectory: false
                     );
                 }
-                catch
+                catch (Exception)
                 {
                     if (File.Exists(backupPath))
                     {
@@ -56,7 +53,7 @@ public sealed class BackupService : IBackupService
                         {
                             File.Delete(backupPath);
                         }
-                        catch
+                        catch (Exception)
                         {
                             // Best effort cleanup
                         }
@@ -91,7 +88,7 @@ public sealed class BackupService : IBackupService
                 {
                     ZipFile.ExtractToDirectory(backupPath, targetPath, overwriteFiles: true);
                 }
-                catch
+                catch (Exception)
                 {
                     // Clean up partially extracted directory on failure
                     if (Directory.Exists(targetPath))
@@ -100,7 +97,7 @@ public sealed class BackupService : IBackupService
                         {
                             Directory.Delete(targetPath, recursive: true);
                         }
-                        catch
+                        catch (Exception)
                         {
                             // Best effort cleanup
                         }

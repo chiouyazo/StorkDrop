@@ -12,7 +12,7 @@ public sealed class DialogService
         string? initialDirectory = null
     )
     {
-        OpenFolderDialog dialog = new() { Title = description };
+        OpenFolderDialog dialog = new OpenFolderDialog { Title = description };
         if (!string.IsNullOrEmpty(initialDirectory) && Directory.Exists(initialDirectory))
             dialog.InitialDirectory = initialDirectory;
 
@@ -25,7 +25,7 @@ public sealed class DialogService
         string title = "Open File"
     )
     {
-        OpenFileDialog dialog = new() { Filter = filter, Title = title };
+        OpenFileDialog dialog = new OpenFileDialog { Filter = filter, Title = title };
 
         bool? result = dialog.ShowDialog();
         return result == true ? dialog.FileName : null;
@@ -36,7 +36,7 @@ public sealed class DialogService
         string title = "Save File"
     )
     {
-        SaveFileDialog dialog = new() { Filter = filter, Title = title };
+        SaveFileDialog dialog = new SaveFileDialog { Filter = filter, Title = title };
 
         bool? result = dialog.ShowDialog();
         return result == true ? dialog.FileName : null;

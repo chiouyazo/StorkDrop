@@ -7,13 +7,14 @@ using Microsoft.Extensions.Options;
 using RichardSzalay.MockHttp;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Registry;
+using StorkDrop.Registry.Nexus;
 using Xunit;
 
 namespace StorkDrop.Tests.Registry;
 
 public sealed class NexusRegistryClientTests
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new JsonStringEnumConverter() },
@@ -21,7 +22,7 @@ public sealed class NexusRegistryClientTests
 
     private static NexusRegistryClient CreateClient(MockHttpMessageHandler mockHttp)
     {
-        NexusOptions options = new()
+        NexusOptions options = new NexusOptions
         {
             BaseUrl = "https://nexus.test.com",
             Repository = "storkdrop-releases",
@@ -40,8 +41,8 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task GetProductManifestAsync_ReturnsManifest_WhenFound()
     {
-        MockHttpMessageHandler mockHttp = new();
-        ProductManifest manifest = new(
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
+        ProductManifest manifest = new ProductManifest(
             ProductId: "my-plugin",
             Title: "My Plugin",
             Version: "2.1.0",
@@ -68,7 +69,7 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task GetProductManifestAsync_ReturnsNull_WhenNotFound()
     {
-        MockHttpMessageHandler mockHttp = new();
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
         mockHttp
             .When("https://nexus.test.com/repository/storkdrop-releases/missing/manifest.json")
             .Respond(HttpStatusCode.NotFound);
@@ -83,8 +84,8 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task GetProductManifestAsync_WithVersion_ReturnsVersionedManifest()
     {
-        MockHttpMessageHandler mockHttp = new();
-        ProductManifest manifest = new(
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
+        ProductManifest manifest = new ProductManifest(
             ProductId: "my-plugin",
             Title: "My Plugin",
             Version: "1.5.0",
@@ -109,7 +110,7 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task TestConnectionAsync_ReturnsTrue_WhenServerResponds()
     {
-        MockHttpMessageHandler mockHttp = new();
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
         mockHttp
             .When("https://nexus.test.com/service/rest/v1/repositories")
             .Respond(HttpStatusCode.OK);
@@ -124,7 +125,7 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task TestConnectionAsync_ReturnsFalse_WhenServerReturnsError()
     {
-        MockHttpMessageHandler mockHttp = new();
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
         mockHttp
             .When("https://nexus.test.com/service/rest/v1/repositories")
             .Respond(HttpStatusCode.Unauthorized);
@@ -139,7 +140,7 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task TestConnectionAsync_ReturnsFalse_WhenConnectionFails()
     {
-        MockHttpMessageHandler mockHttp = new();
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
         mockHttp
             .When("https://nexus.test.com/service/rest/v1/repositories")
             .Throw(new HttpRequestException("Connection refused"));
@@ -154,7 +155,7 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task DownloadProductAsync_ReturnsStream()
     {
-        MockHttpMessageHandler mockHttp = new();
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
         byte[] content = "fake-zip-content"u8.ToArray();
         mockHttp
             .When(
@@ -166,7 +167,7 @@ public sealed class NexusRegistryClientTests
 
         Stream result = await client.DownloadProductAsync("my-plugin", "1.0.0");
 
-        using MemoryStream ms = new();
+        using MemoryStream ms = new MemoryStream();
         await result.CopyToAsync(ms);
         ms.Length.Should().BeGreaterThan(0);
     }
@@ -174,9 +175,9 @@ public sealed class NexusRegistryClientTests
     [Fact]
     public async Task GetAllProductsAsync_ParsesAssetList()
     {
-        MockHttpMessageHandler mockHttp = new();
+        MockHttpMessageHandler mockHttp = new MockHttpMessageHandler();
 
-        NexusComponentSearchResponse searchResponse = new()
+        NexusComponentSearchResponse searchResponse = new NexusComponentSearchResponse
         {
             Items =
             [
@@ -203,14 +204,14 @@ public sealed class NexusRegistryClientTests
             .When("https://nexus.test.com/service/rest/v1/components?repository=storkdrop-releases")
             .Respond("application/json", JsonSerializer.Serialize(searchResponse));
 
-        ProductManifest manifestA = new(
+        ProductManifest manifestA = new ProductManifest(
             "plugin-a",
             "Plugin A",
             "2.0.0",
             new DateOnly(2025, 1, 1),
             InstallType.Plugin
         );
-        ProductManifest manifestB = new(
+        ProductManifest manifestB = new ProductManifest(
             "plugin-b",
             "Plugin B",
             "1.0.0",

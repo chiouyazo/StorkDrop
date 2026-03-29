@@ -6,7 +6,7 @@ using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
 
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 public sealed class NexusRegistryClient(
     HttpClient httpClient,
@@ -14,7 +14,7 @@ public sealed class NexusRegistryClient(
     ILogger<NexusRegistryClient> logger
 ) : IRegistryClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true,
         Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
@@ -48,8 +48,7 @@ public sealed class NexusRegistryClient(
                         JsonOptions,
                         cancellationToken
                     )
-                    .ConfigureAwait(false)
-                ?? new NexusComponentSearchResponse();
+                    .ConfigureAwait(false) ?? new NexusComponentSearchResponse();
 
             foreach (NexusComponent component in response.Items)
             {
@@ -179,8 +178,7 @@ public sealed class NexusRegistryClient(
                         JsonOptions,
                         cancellationToken
                     )
-                    .ConfigureAwait(false)
-                ?? new NexusComponentSearchResponse();
+                    .ConfigureAwait(false) ?? new NexusComponentSearchResponse();
 
             foreach (NexusComponent component in response.Items)
             {

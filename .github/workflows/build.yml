@@ -41,7 +41,7 @@ jobs:
           echo "Building version: $VERSION"
 
       - name: Install CSharpier
-        run: dotnet tool install --global csharpier --version 1.2.6
+        run: dotnet tool install --global csharpier --version 1.2.1
 
       - name: Check formatting
         run: csharpier check dotnet/
@@ -80,9 +80,13 @@ jobs:
           }
 
       - name: Pack NuGet
-        run: |
-          dotnet clean dotnet/StorkDrop.Contracts/StorkDrop.Contracts.csproj --configuration Release
-          dotnet pack dotnet/StorkDrop.Contracts/StorkDrop.Contracts.csproj --configuration Release --output publish/ -p:Version=${{ steps.version.outputs.version }}
+        run: >
+          dotnet pack dotnet/StorkDrop.Contracts/StorkDrop.Contracts.csproj
+          --configuration Release
+          --no-build
+          --no-restore
+          --output publish/
+          -p:Version=${{ steps.version.outputs.version }}
 
       - name: Build installer
         run: iscc /DAppVersion=${{ steps.version.outputs.version }} installer\setup.iss

@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
 using StorkDrop.App.ViewModels;
-using StorkDrop.Contracts;
 
 namespace StorkDrop.App.Views;
 
@@ -69,7 +68,7 @@ public partial class PluginConfigDialog : Window
     {
         if (sender is Button button && button.Tag is PluginConfigFieldViewModel field)
         {
-            OpenFileDialog dialog = new() { Title = field.Label };
+            OpenFileDialog dialog = new OpenFileDialog { Title = field.Label };
             if (dialog.ShowDialog() == true)
             {
                 field.Value = dialog.FileName;
@@ -81,7 +80,7 @@ public partial class PluginConfigDialog : Window
     {
         if (sender is Button button && button.Tag is PluginConfigFieldViewModel field)
         {
-            OpenFolderDialog dialog = new() { Title = field.Label };
+            OpenFolderDialog dialog = new OpenFolderDialog { Title = field.Label };
             if (dialog.ShowDialog() == true)
             {
                 field.Value = dialog.FolderName;
@@ -98,7 +97,7 @@ public partial class PluginConfigDialog : Window
             ItemsControl? itemsControl = FindParent<ItemsControl>(cb);
             if (itemsControl?.Tag is PluginConfigFieldViewModel field)
             {
-                HashSet<string> selected = new(
+                HashSet<string> selected = new HashSet<string>(
                     (field.Value ?? "").Split(
                         ',',
                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
@@ -117,7 +116,7 @@ public partial class PluginConfigDialog : Window
             ItemsControl? itemsControl = FindParent<ItemsControl>(cb);
             if (itemsControl?.Tag is PluginConfigFieldViewModel field)
             {
-                HashSet<string> selected = new(
+                HashSet<string> selected = new HashSet<string>(
                     (field.Value ?? "").Split(
                         ',',
                         StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries

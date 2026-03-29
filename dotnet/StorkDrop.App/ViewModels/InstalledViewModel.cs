@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts.Interfaces;
@@ -18,6 +19,7 @@ public partial class InstalledViewModel : ObservableObject
     private readonly IProductRepository _productRepository;
     private readonly InstallationCoordinator _coordinator;
     private readonly DialogService _dialogService;
+    private readonly ILogger<InstalledViewModel> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InstalledViewModel"/> class.
@@ -25,15 +27,18 @@ public partial class InstalledViewModel : ObservableObject
     /// <param name="productRepository">The repository for installed products.</param>
     /// <param name="coordinator">The installation coordinator for isolated operations.</param>
     /// <param name="dialogService">The dialog service for user confirmations.</param>
+    /// <param name="logger">The logger instance.</param>
     public InstalledViewModel(
         IProductRepository productRepository,
         InstallationCoordinator coordinator,
-        DialogService dialogService
+        DialogService dialogService,
+        ILogger<InstalledViewModel> logger
     )
     {
         _productRepository = productRepository;
         _coordinator = coordinator;
         _dialogService = dialogService;
+        _logger = logger;
     }
 
     [ObservableProperty]

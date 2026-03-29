@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<UninstallService>();
         services.AddSingleton<EnvironmentVariableService>();
         services.AddSingleton<InstallationCoordinator>();
+        services.AddSingleton<IPluginSettingsStore, PluginSettingsStore>();
 
         return services;
     }

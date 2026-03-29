@@ -1,9 +1,7 @@
 using System.Collections.ObjectModel;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts;
@@ -20,31 +18,29 @@ public partial class SettingsViewModel : ObservableObject
 {
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
+    private readonly IFeedConnectionService _connectionService;
     private readonly DialogService _dialogService;
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
     private readonly IFeedRegistry _feedRegistry;
+    private readonly ILogger<SettingsViewModel> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SettingsViewModel"/> class.
-    /// </summary>
-    /// <param name="configurationService">The configuration service for loading and saving settings.</param>
-    /// <param name="encryptionService">The encryption service for securing passwords.</param>
-    /// <param name="dialogService">The dialog service for user interactions.</param>
-    /// <param name="plugins">The loaded plugins to get recommended feeds from.</param>
-    /// <param name="feedRegistry">The feed registry for reloading feeds after save.</param>
     public SettingsViewModel(
         IConfigurationService configurationService,
         IEncryptionService encryptionService,
+        IFeedConnectionService connectionService,
         DialogService dialogService,
         IEnumerable<IStorkDropPlugin> plugins,
-        IFeedRegistry feedRegistry
+        IFeedRegistry feedRegistry,
+        ILogger<SettingsViewModel> logger
     )
     {
         _configurationService = configurationService;
         _encryptionService = encryptionService;
+        _connectionService = connectionService;
         _dialogService = dialogService;
         _plugins = plugins;
         _feedRegistry = feedRegistry;
+        _logger = logger;
 
         BuildRecommendedFeeds();
     }
@@ -173,8 +169,13 @@ public partial class SettingsViewModel : ObservableObject
                         {
                             decryptedPassword = _encryptionService.Decrypt(f.EncryptedPassword);
                         }
-                        catch
+                        catch (Exception ex)
                         {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to decrypt password for feed {FeedId}",
+                                f.Id
+                            );
                             decryptedPassword = string.Empty;
                         }
                     }
@@ -306,60 +307,19 @@ public partial class SettingsViewModel : ObservableObject
             feed.ConnectionTestMessage = LocalizationManager.GetString("Status_Connecting");
             feed.IsConnectionValid = false;
 
-            HttpClientHandler handler = new HttpClientHandler()
-            {
-                ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-            };
-            using HttpClient testClient = new HttpClient(handler);
-            string baseUrl = feed.Url.TrimEnd('/');
-            if (!string.IsNullOrEmpty(feed.Username) && !string.IsNullOrEmpty(feed.Password))
-            {
-                string credentials = Convert.ToBase64String(
-                    Encoding.ASCII.GetBytes($"{feed.Username}:{feed.Password}")
-                );
-                testClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                    "Basic",
-                    credentials
-                );
-            }
-
-            using CancellationTokenSource cts = new CancellationTokenSource(
-                TimeSpan.FromSeconds(15)
+            FeedConnectionResult result = await _connectionService.TestConnectionAsync(
+                feed.Url,
+                feed.Username,
+                feed.Password
             );
-            HttpResponseMessage response = await testClient.GetAsync(
-                $"{baseUrl}/service/rest/v1/repositories",
-                cts.Token
-            );
-            feed.IsConnectionValid = response.IsSuccessStatusCode;
 
-            if (feed.IsConnectionValid)
-            {
-                try
-                {
-                    IReadOnlyList<NexusRepositoryInfo> repos =
-                        await NexusRegistryClient.ListRawHostedRepositoriesAsync(
-                            testClient,
-                            baseUrl,
-                            cts.Token
-                        );
-                    feed.ConnectionTestMessage = LocalizationManager
-                        .GetString("Status_TestSuccess_WithRepos")
-                        .Replace("{0}", repos.Count.ToString());
-                }
-                catch
-                {
-                    feed.ConnectionTestMessage = LocalizationManager.GetString(
-                        "Status_TestSuccess"
-                    );
-                }
-            }
-            else
-            {
-                feed.ConnectionTestMessage =
-                    LocalizationManager.GetString("Error_ConnectionFailed")
-                    + $" (HTTP {(int)response.StatusCode})";
-            }
+            feed.IsConnectionValid = result.Success;
+            feed.ConnectionTestMessage = result.Success
+                ? LocalizationManager
+                    .GetString("Status_TestSuccess_WithRepos")
+                    .Replace("{0}", result.RepositoryCount.ToString())
+                : LocalizationManager.GetString("Error_ConnectionFailed")
+                    + $" (HTTP {result.HttpStatusCode})";
         }
         catch (Exception ex)
         {

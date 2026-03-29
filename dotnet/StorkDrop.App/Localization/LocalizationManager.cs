@@ -1,10 +1,11 @@
+using System.Collections.ObjectModel;
 using System.Windows;
 
 namespace StorkDrop.App.Localization;
 
 public static class LocalizationManager
 {
-    private static readonly Dictionary<string, Uri> LanguageResources = new()
+    private static readonly Dictionary<string, Uri> LanguageResources = new Dictionary<string, Uri>
     {
         ["en"] = new Uri("Localization/Strings.en.xaml", UriKind.Relative),
         ["de"] = new Uri("Localization/Strings.de.xaml", UriKind.Relative),
@@ -57,8 +58,11 @@ public static class LocalizationManager
         if (!LanguageResources.TryGetValue(_currentLanguage, out Uri? uri))
             return;
 
-        ResourceDictionary newDictionary = new() { Source = uri };
-        var mergedDicts = Application.Current.Resources.MergedDictionaries;
+        ResourceDictionary newDictionary = new ResourceDictionary { Source = uri };
+        Collection<ResourceDictionary> mergedDicts = Application
+            .Current
+            .Resources
+            .MergedDictionaries;
 
         if (_currentDictionary is not null)
             mergedDicts.Remove(_currentDictionary);

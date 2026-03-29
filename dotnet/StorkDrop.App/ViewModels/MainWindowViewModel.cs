@@ -240,7 +240,17 @@ public partial class MainWindowViewModel : ObservableObject
                 }
 
                 DialogService dialogService = App.Services.GetRequiredService<DialogService>();
-                PluginTabViewModel pluginTabVm = new(plugin, dialogService);
+                IPluginSettingsStore settingsStore =
+                    App.Services.GetRequiredService<IPluginSettingsStore>();
+                ILogger<PluginTabViewModel> pluginTabLogger = App.Services.GetRequiredService<
+                    ILogger<PluginTabViewModel>
+                >();
+                PluginTabViewModel pluginTabVm = new PluginTabViewModel(
+                    plugin,
+                    dialogService,
+                    settingsStore,
+                    pluginTabLogger
+                );
                 _logger.LogInformation(
                     "Created PluginTabViewModel for {PluginId} with {SectionCount} sections",
                     plugin.PluginId,
@@ -313,7 +323,10 @@ public partial class MainWindowViewModel : ObservableObject
                         break;
                     }
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to test connection for feed {FeedId}", feed.Id);
+                }
             }
 
             IsConnected = anyConnected;
@@ -326,8 +339,9 @@ public partial class MainWindowViewModel : ObservableObject
             IsConnected = false;
             StatusMessage = LocalizationManager.GetString("Status_Timeout");
         }
-        catch
+        catch (Exception ex)
         {
+            _logger.LogWarning(ex, "Unexpected error during connection check");
             IsConnected = false;
             StatusMessage = LocalizationManager.GetString("Status_Disconnected");
         }

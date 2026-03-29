@@ -1,6 +1,4 @@
-using System.Collections.Generic;
-
-namespace StorkDrop.Contracts;
+namespace StorkDrop.Contracts.Interfaces;
 
 /// <summary>
 /// Optional interface for plugins that support configuration validation.

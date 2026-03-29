@@ -11,6 +11,7 @@ using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Installer;
 using StorkDrop.Registry;
 
@@ -44,12 +45,7 @@ public static class AppHostBuilder
     /// <returns>The configured <see cref="IHost"/> instance.</returns>
     public static IHost Build()
     {
-        string logPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "StorkDrop",
-            "Logs",
-            "storkdrop-.log"
-        );
+        string logPath = StorkPaths.LogFile;
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
@@ -128,7 +124,7 @@ public static class AppHostBuilder
 
             try
             {
-                PluginLoadContext loadContext = new(dllPath);
+                PluginLoadContext loadContext = new PluginLoadContext(dllPath);
                 Assembly assembly = loadContext.LoadFromAssemblyPath(dllPath);
 
                 Type[] allTypes;

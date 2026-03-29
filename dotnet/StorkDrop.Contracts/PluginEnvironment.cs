@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.Contracts;
 

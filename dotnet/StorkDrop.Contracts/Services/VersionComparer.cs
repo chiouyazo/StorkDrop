@@ -2,7 +2,7 @@ namespace StorkDrop.Contracts.Services;
 
 public sealed class VersionComparer : IComparer<string>
 {
-    public static VersionComparer Instance { get; } = new();
+    public static VersionComparer Instance { get; } = new VersionComparer();
 
     public int Compare(string? x, string? y)
     {

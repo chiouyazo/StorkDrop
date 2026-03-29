@@ -1,8 +1,6 @@
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
@@ -17,19 +15,20 @@ public partial class SetupWizardViewModel : ObservableObject
 {
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
+    private readonly IFeedConnectionService _connectionService;
+    private readonly ILogger<SetupWizardViewModel> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="SetupWizardViewModel"/> class.
-    /// </summary>
-    /// <param name="configurationService">The configuration service for saving settings.</param>
-    /// <param name="encryptionService">The encryption service for securing passwords.</param>
     public SetupWizardViewModel(
         IConfigurationService configurationService,
-        IEncryptionService encryptionService
+        IEncryptionService encryptionService,
+        IFeedConnectionService connectionService,
+        ILogger<SetupWizardViewModel> logger
     )
     {
         _configurationService = configurationService;
         _encryptionService = encryptionService;
+        _connectionService = connectionService;
+        _logger = logger;
     }
 
     [ObservableProperty]
@@ -133,59 +132,19 @@ public partial class SetupWizardViewModel : ObservableObject
             IsConnectionTested = false;
             ConnectionTestMessage = LocalizationManager.GetString("Status_Connecting");
 
-            HttpClientHandler handler = new HttpClientHandler()
-            {
-                ServerCertificateCustomValidationCallback =
-                    HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-            };
-            using HttpClient testClient = new HttpClient(handler);
-            string baseUrl = FeedUrl.TrimEnd('/');
-            if (!string.IsNullOrEmpty(Username) && !string.IsNullOrEmpty(Password))
-            {
-                string credentials = Convert.ToBase64String(
-                    Encoding.ASCII.GetBytes($"{Username}:{Password}")
-                );
-                testClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                    "Basic",
-                    credentials
-                );
-            }
-
-            using CancellationTokenSource cts = new CancellationTokenSource(
-                TimeSpan.FromSeconds(15)
+            FeedConnectionResult result = await _connectionService.TestConnectionAsync(
+                FeedUrl,
+                Username,
+                Password
             );
-            HttpResponseMessage response = await testClient.GetAsync(
-                $"{baseUrl}/service/rest/v1/repositories",
-                cts.Token
-            );
-            IsConnectionValid = response.IsSuccessStatusCode;
 
-            if (IsConnectionValid)
-            {
-                try
-                {
-                    IReadOnlyList<NexusRepositoryInfo> repos =
-                        await NexusRegistryClient.ListRawHostedRepositoriesAsync(
-                            testClient,
-                            baseUrl,
-                            cts.Token
-                        );
-                    ConnectionTestMessage = LocalizationManager
-                        .GetString("Status_TestSuccess_WithRepos")
-                        .Replace("{0}", repos.Count.ToString());
-                }
-                catch
-                {
-                    ConnectionTestMessage = LocalizationManager.GetString("Status_TestSuccess");
-                }
-            }
-            else
-            {
-                ConnectionTestMessage =
-                    LocalizationManager.GetString("Error_ConnectionFailed")
-                    + $" (HTTP {(int)response.StatusCode})";
-            }
-
+            IsConnectionValid = result.Success;
+            ConnectionTestMessage = result.Success
+                ? LocalizationManager
+                    .GetString("Status_TestSuccess_WithRepos")
+                    .Replace("{0}", result.RepositoryCount.ToString())
+                : LocalizationManager.GetString("Error_ConnectionFailed")
+                    + $" (HTTP {result.HttpStatusCode})";
             IsConnectionTested = true;
         }
         catch (Exception ex)

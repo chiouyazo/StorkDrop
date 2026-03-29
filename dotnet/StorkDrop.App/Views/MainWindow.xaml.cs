@@ -26,20 +26,10 @@ public partial class MainWindow : Window
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        InstallationTracker tracker = App.Services.GetRequiredService<InstallationTracker>();
-        if (tracker.HasActiveInstallations)
+        if (ShouldCancelForActiveInstallations())
         {
-            MessageBoxResult result = MessageBox.Show(
-                $"There are {tracker.ActiveCount} installation(s) still running. Closing StorkDrop may leave them in an incomplete state.\n\nAre you sure you want to close?",
-                "Installations in progress",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning
-            );
-            if (result != MessageBoxResult.Yes)
-            {
-                e.Cancel = true;
-                return;
-            }
+            e.Cancel = true;
+            return;
         }
 
         IConfigurationService configService =
@@ -49,39 +39,10 @@ public partial class MainWindow : Window
             .GetAwaiter()
             .GetResult();
 
-        bool minimizeToTray = config?.AutoCheckForUpdates == true;
-
-        if (minimizeToTray)
+        if (config?.AutoCheckForUpdates == true)
         {
             e.Cancel = true;
-            Hide();
-
-            TrayIconService trayService = App.Services.GetRequiredService<TrayIconService>();
-            trayService.Show(
-                onOpen: () =>
-                {
-                    Show();
-                    WindowState = WindowState.Normal;
-                    Activate();
-                },
-                onExit: () =>
-                {
-                    trayService.Hide();
-                    Application.Current.Shutdown();
-                }
-            );
-
-            if (config is not null && !config.HasShownTrayToast)
-            {
-                trayService.ShowBalloon(
-                    LocalizationManager.GetString("Tray_Title"),
-                    LocalizationManager.GetString("Tray_FirstMinimize")
-                );
-
-                AppConfiguration updatedConfig = config with { HasShownTrayToast = true };
-                // Fire-and-forget; closing shouldn't block on saving the toast flag
-                _ = configService.SaveAsync(updatedConfig);
-            }
+            MinimizeToTray(config, configService);
         }
         else
         {
@@ -89,6 +50,58 @@ public partial class MainWindow : Window
         }
 
         base.OnClosing(e);
+    }
+
+    private static bool ShouldCancelForActiveInstallations()
+    {
+        InstallationTracker tracker = App.Services.GetRequiredService<InstallationTracker>();
+        if (!tracker.HasActiveInstallations)
+            return false;
+
+        string message = LocalizationManager
+            .GetString("Closing_ActiveInstallations")
+            .Replace("{0}", tracker.ActiveCount.ToString());
+        string title = LocalizationManager.GetString("Closing_ActiveInstallations_Title");
+
+        MessageBoxResult result = MessageBox.Show(
+            message,
+            title,
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning
+        );
+        return result != MessageBoxResult.Yes;
+    }
+
+    private void MinimizeToTray(AppConfiguration config, IConfigurationService configService)
+    {
+        Hide();
+
+        TrayIconService trayService = App.Services.GetRequiredService<TrayIconService>();
+        trayService.Show(
+            onOpen: () =>
+            {
+                Show();
+                WindowState = WindowState.Normal;
+                Activate();
+            },
+            onExit: () =>
+            {
+                trayService.Hide();
+                Application.Current.Shutdown();
+            }
+        );
+
+        if (!config.HasShownTrayToast)
+        {
+            trayService.ShowBalloon(
+                LocalizationManager.GetString("Tray_Title"),
+                LocalizationManager.GetString("Tray_FirstMinimize")
+            );
+
+            AppConfiguration updatedConfig = config with { HasShownTrayToast = true };
+            // Fire-and-forget; closing shouldn't block on saving the toast flag
+            _ = configService.SaveAsync(updatedConfig);
+        }
     }
 
     private void OnInstallationItemClick(object sender, MouseButtonEventArgs e)
@@ -100,7 +113,7 @@ public partial class MainWindow : Window
         {
             vm.SelectedInstallation = install;
 
-            Views.InstallLogWindow logWindow = new(install) { Owner = this };
+            Views.InstallLogWindow logWindow = new InstallLogWindow(install) { Owner = this };
             logWindow.Show();
         }
     }

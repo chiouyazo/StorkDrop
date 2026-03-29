@@ -1,16 +1,16 @@
 using FluentAssertions;
 using StorkDrop.Contracts.Models;
-using StorkDrop.Core.Services;
+using StorkDrop.Contracts.Services;
 using Xunit;
 
 namespace StorkDrop.Tests.Core;
 
 public sealed class ManifestValidatorTests
 {
-    private readonly ManifestValidator _validator = new();
+    private readonly ManifestValidator _validator = new ManifestValidator();
 
     private static ProductManifest CreateValidManifest() =>
-        new(
+        new ProductManifest(
             ProductId: "test-product",
             Title: "Test Product",
             Version: "1.0.0",
@@ -137,7 +137,7 @@ public sealed class ManifestValidatorTests
     [Fact]
     public void Validate_MultipleErrors_ShouldReturnAllErrors()
     {
-        ProductManifest manifest = new(
+        ProductManifest manifest = new ProductManifest(
             ProductId: "",
             Title: "",
             Version: "",

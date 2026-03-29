@@ -319,4 +319,12 @@
 
   <!-- Activity log -->
   <system:String x:Key="ActivityLog_ViewLogs">View Application Logs</system:String>
+
+  <!-- Closing confirmation -->
+  <system:String x:Key="Closing_ActiveInstallations"
+    >There are {0} installation(s) still running. Closing StorkDrop may leave them in an incomplete state.
+
+Are you sure you want to close?</system:String
+  >
+  <system:String x:Key="Closing_ActiveInstallations_Title">Installations in progress</system:String>
 </ResourceDictionary>

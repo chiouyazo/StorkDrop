@@ -1,8 +1,4 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace StorkDrop.Contracts;
+namespace StorkDrop.Contracts.Interfaces;
 
 /// <summary>
 /// Implement this in your product DLL. StorkDrop calls <see cref="GetConfigurationSchema"/>

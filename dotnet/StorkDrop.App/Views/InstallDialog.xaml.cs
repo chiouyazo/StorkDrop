@@ -1,10 +1,8 @@
-using System.IO;
 using System.Windows;
 using Microsoft.Win32;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
-using StorkDrop.Installer;
 
 namespace StorkDrop.App.Views;
 
@@ -71,7 +69,7 @@ public partial class InstallDialog : Window
     {
         if (_manifest?.DownloadSizeBytes is not null and > 0)
         {
-            DownloadSizeText.Text = FormatBytes(_manifest.DownloadSizeBytes.Value);
+            DownloadSizeText.Text = FormatHelper.FormatBytes(_manifest.DownloadSizeBytes.Value);
         }
         else
         {
@@ -95,49 +93,12 @@ public partial class InstallDialog : Window
     {
         try
         {
-            string path = PathBox.Text;
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                DiskSpaceText.Text = " - ";
-                return;
-            }
-
-            string? root = Path.GetPathRoot(path);
-            if (string.IsNullOrEmpty(root))
-            {
-                DiskSpaceText.Text = " - ";
-                return;
-            }
-
-            DriveInfo driveInfo = new DriveInfo(root);
-            if (driveInfo.IsReady)
-            {
-                DiskSpaceText.Text = FormatBytes(driveInfo.AvailableFreeSpace);
-            }
-            else
-            {
-                DiskSpaceText.Text = " - ";
-            }
+            DiskSpaceText.Text = FormatHelper.GetFormattedDiskSpace(PathBox.Text) ?? " - ";
         }
         catch
         {
             DiskSpaceText.Text = " - ";
         }
-    }
-
-    private static string FormatBytes(long bytes)
-    {
-        string[] suffixes = new string[] { "B", "KB", "MB", "GB", "TB" };
-        double size = bytes;
-        int suffixIndex = 0;
-
-        while (size >= 1024 && suffixIndex < suffixes.Length - 1)
-        {
-            size /= 1024;
-            suffixIndex++;
-        }
-
-        return $"{size:0.##} {suffixes[suffixIndex]}";
     }
 
     private void OnBrowseClick(object sender, RoutedEventArgs e)

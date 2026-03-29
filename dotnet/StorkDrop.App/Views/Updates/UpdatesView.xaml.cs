@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using StorkDrop.App.Localization;
 using StorkDrop.App.ViewModels;
 
 namespace StorkDrop.App.Views.Updates;
@@ -20,22 +19,9 @@ public partial class UpdatesView : UserControl
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
-        try
+        if (DataContext is UpdatesViewModel viewModel)
         {
-            if (DataContext is UpdatesViewModel viewModel)
-            {
-                await viewModel.LoadAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            if (DataContext is UpdatesViewModel viewModel)
-            {
-                viewModel.ErrorMessage = LocalizationManager.GetString(
-                    "Error_LoadFailed",
-                    ex.Message
-                );
-            }
+            await viewModel.LoadAsync();
         }
     }
 }

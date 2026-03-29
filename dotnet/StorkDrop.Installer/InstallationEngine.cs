@@ -154,773 +154,128 @@ public sealed class InstallationEngine : IInstallationEngine
             manifest.Version,
             options.TargetPath
         );
-        string tempDir = Path.Combine(Path.GetTempPath(), "StorkDrop", Guid.NewGuid().ToString());
+
+        // Phase 1: Check if elevation is needed before downloading anything
+        InstallResult? elevationResult = await TryElevateInstallAsync(
+            manifest,
+            options,
+            options.TargetPath,
+            progress,
+            cancellationToken
+        );
+        if (elevationResult is not null)
+            return elevationResult;
+
+        string tempDir = Path.Combine(StorkPaths.TempDir, Guid.NewGuid().ToString());
 
         try
         {
-            if (options.TargetPath.Contains('{'))
-            {
-                _logger.LogInformation(
-                    "Target path contains template variables, deferring elevation check until after resolution"
-                );
-            }
-            else if (
-                ElevationHelper.PathRequiresAdmin(options.TargetPath)
-                && !ElevationHelper.IsRunningAsAdmin()
-            )
-            {
-                _logger.LogInformation(
-                    "Elevation required, spawning elevated process for {ProductId}",
-                    manifest.ProductId
-                );
-                bool elevated = ElevationHelper.RunElevatedInstall(
-                    manifest.ProductId,
-                    manifest.Version,
-                    options.TargetPath,
-                    options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
-                );
-                if (!elevated)
-                {
-                    _logger.LogWarning(
-                        "Elevation denied by user for {ProductId}",
-                        manifest.ProductId
-                    );
-                    return new InstallResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Installation cancelled: administrator rights were denied.",
-                        FailedStep = "Elevation",
-                    };
-                }
-
-                InstalledProduct elevatedProduct = new InstalledProduct(
-                    ProductId: manifest.ProductId,
-                    Title: manifest.Title,
-                    Version: manifest.Version,
-                    InstalledPath: options.TargetPath,
-                    InstalledDate: DateTime.UtcNow,
-                    FeedId: options.FeedId,
-                    BackupPath: null
-                );
-                await _productRepository.AddAsync(elevatedProduct, cancellationToken);
-
-                await _activityLog.LogAsync(
-                    new ActivityLogEntry(
-                        Id: Guid.NewGuid().ToString(),
-                        Timestamp: DateTime.UtcNow,
-                        Action: "Install",
-                        ProductId: manifest.ProductId,
-                        Details: $"{manifest.Title} v{manifest.Version} installed to {options.TargetPath} (elevated)",
-                        Success: true
-                    ),
-                    cancellationToken
-                );
-
-                return new InstallResult { Success = true };
-            }
-
             Directory.CreateDirectory(tempDir);
 
+            // Phase 2: Download and extract
             cancellationToken.ThrowIfCancellationRequested();
-
-            _logger.LogInformation(
-                "Downloading product {ProductId} v{Version}",
-                manifest.ProductId,
-                manifest.Version
-            );
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Downloading,
-                    0,
-                    $"Downloading {manifest.Title} v{manifest.Version}..."
-                )
-            );
-            IRegistryClient registryClient = GetClientForFeed(options.FeedId);
-            using Stream downloadStream = await registryClient.DownloadProductAsync(
-                manifest.ProductId,
-                manifest.Version,
+            string extractPath = await DownloadAndExtractAsync(
+                manifest,
+                options,
+                tempDir,
+                progress,
                 cancellationToken
             );
-            string zipPath = Path.Combine(tempDir, $"{manifest.ProductId}-{manifest.Version}.zip");
-            await using (FileStream fileStream = File.Create(zipPath))
-            {
-                await downloadStream.CopyToAsync(fileStream, cancellationToken);
-            }
-            progress.Report(
-                new InstallProgress(InstallStage.Downloading, 100, "Download complete.")
-            );
-            _logger.LogInformation(
-                "Download complete for {ProductId} v{Version}, extracting to {TempDir}",
-                manifest.ProductId,
-                manifest.Version,
-                tempDir
-            );
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            progress.Report(new InstallProgress(InstallStage.Extracting, 0, "Extracting files..."));
-            string extractPath = Path.Combine(tempDir, "extracted");
-            try
-            {
-                ZipFile.ExtractToDirectory(zipPath, extractPath);
-
-                // Check for inner ZIP: if the extracted contents contain a single .zip file,
-                // extract it as the actual product contents (two-layer packaging)
-                string[] innerZips = Directory.GetFiles(extractPath, "*.zip");
-                if (innerZips.Length == 1)
-                {
-                    string innerZipPath = innerZips[0];
-                    string innerExtractPath = Path.Combine(tempDir, "inner-extracted");
-                    _logger.LogInformation(
-                        "Found inner ZIP {InnerZip}, extracting product contents",
-                        Path.GetFileName(innerZipPath)
-                    );
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Extracting,
-                            50,
-                            $"Extracting inner archive {Path.GetFileName(innerZipPath)}..."
-                        )
-                    );
-                    ZipFile.ExtractToDirectory(innerZipPath, innerExtractPath);
-
-                    File.Delete(innerZipPath);
-
-                    foreach (
-                        string file in Directory.GetFiles(
-                            innerExtractPath,
-                            "*",
-                            SearchOption.AllDirectories
-                        )
-                    )
-                    {
-                        string relativePath = Path.GetRelativePath(innerExtractPath, file);
-                        string targetFile = Path.Combine(extractPath, relativePath);
-                        string? targetDir = Path.GetDirectoryName(targetFile);
-                        if (targetDir is not null)
-                            Directory.CreateDirectory(targetDir);
-                        File.Move(file, targetFile, overwrite: true);
-                    }
-
-                    Directory.Delete(innerExtractPath, true);
-                    _logger.LogInformation("Inner ZIP extracted successfully");
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Installation failed at step Extracting: {Error}", ex.Message);
-                CleanupTempDirectory(tempDir);
+            if (extractPath is null)
                 return new InstallResult
                 {
                     Success = false,
-                    ErrorMessage = "Extraction failed: " + ex.Message,
+                    ErrorMessage = "Extraction failed.",
                     FailedStep = "Extracting",
-                    Exception = ex,
                 };
-            }
-            progress.Report(
-                new InstallProgress(InstallStage.Extracting, 100, "Extraction complete.")
-            );
-            _logger.LogInformation(
-                "Extraction complete, running pre-install plugins for {ProductId}",
-                manifest.ProductId
-            );
 
+            // Phase 3: Pre-install plugins
             cancellationToken.ThrowIfCancellationRequested();
-
             PluginContext pluginContext = await BuildPluginContextAsync(
                 manifest,
                 options,
                 cancellationToken
             );
-            PluginPhaseResult preInstallPhaseResult = await RunPluginPhaseAsync(
+            PluginPhaseResult preInstallResult = await RunPluginPhaseAsync(
                 manifest,
                 options,
                 pluginContext,
                 PluginPhase.PreInstall,
                 cancellationToken
             );
-            if (!preInstallPhaseResult.Success)
+            if (!preInstallResult.Success)
             {
                 _logger.LogError(
                     "Installation failed at step PreInstall: {Error}",
-                    preInstallPhaseResult.ErrorMessage
+                    preInstallResult.ErrorMessage
                 );
                 return new InstallResult
                 {
                     Success = false,
-                    ErrorMessage = preInstallPhaseResult.ErrorMessage,
+                    ErrorMessage = preInstallResult.ErrorMessage,
                     FailedStep = "PreInstall",
                 };
             }
-            _logger.LogInformation(
-                "Pre-install complete, handling custom file types for {ProductId}",
-                manifest.ProductId
-            );
 
+            // Phase 4: Handle custom file types (plugins claiming specific extensions)
             cancellationToken.ThrowIfCancellationRequested();
-
-            HashSet<string> handledFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            PluginContext? fileHandlerContext = null;
-
-            _logger.LogDebug(
-                "SkipFileHandlers={Skip}, FileTypeHandlers={Count}",
-                options.SkipFileHandlers,
-                _fileTypeHandlers.Count
-            );
-
-            if (options.SkipFileHandlers && _fileTypeHandlers.Count > 0)
-            {
-                foreach (IFileTypeHandler handler in _fileTypeHandlers)
-                {
-                    foreach (string ext in handler.HandledExtensions)
-                    {
-                        foreach (
-                            string file in Directory.GetFiles(
-                                extractPath,
-                                "*" + ext,
-                                SearchOption.AllDirectories
-                            )
-                        )
-                        {
-                            handledFiles.Add(file);
-                        }
-                    }
-                }
-                _logger.LogInformation(
-                    "Elevated install: excluded {Count} plugin-handled files from copy",
-                    handledFiles.Count
-                );
-            }
-
-            if (_fileTypeHandlers.Count > 0 && !options.SkipFileHandlers)
-            {
-                fileHandlerContext = await BuildPluginContextAsync(
-                    manifest,
-                    options,
-                    cancellationToken
-                );
-
-                foreach (IFileTypeHandler handler in _fileTypeHandlers)
-                {
-                    List<string> matchingFiles = new List<string>();
-                    foreach (string ext in handler.HandledExtensions)
-                    {
-                        foreach (
-                            string file in Directory.GetFiles(
-                                extractPath,
-                                "*" + ext,
-                                SearchOption.AllDirectories
-                            )
-                        )
-                        {
-                            matchingFiles.Add(file);
-                        }
-                    }
-
-                    if (matchingFiles.Count > 0)
-                    {
-                        string fileList = string.Join(", ", matchingFiles.Select(Path.GetFileName));
-                        _logger.LogInformation(
-                            "File handler claims {Count} files with extensions {Extensions}: {Files}",
-                            matchingFiles.Count,
-                            string.Join(", ", handler.HandledExtensions),
-                            fileList
-                        );
-                        progress.Report(
-                            new InstallProgress(
-                                InstallStage.RunningPlugins,
-                                0,
-                                $"Plugin found {matchingFiles.Count} file(s): {fileList}"
-                            )
-                        );
-
-                        // Ask handler if it needs user config for these files
-                        IReadOnlyList<PluginConfigField> handlerFields =
-                            handler.GetFileHandlerConfig(matchingFiles, fileHandlerContext);
-
-                        if (handlerFields.Count > 0 && OnFileHandlerConfigNeeded is not null)
-                        {
-                            progress.Report(
-                                new InstallProgress(
-                                    InstallStage.RunningPlugins,
-                                    0,
-                                    "Waiting for user configuration..."
-                                )
-                            );
-                            Dictionary<string, string>? userValues = OnFileHandlerConfigNeeded(
-                                handlerFields,
-                                fileHandlerContext.ConfigValues
-                            );
-
-                            if (userValues is null)
-                            {
-                                _logger.LogInformation(
-                                    "User cancelled file handler config dialog, aborting installation"
-                                );
-                                progress.Report(
-                                    new InstallProgress(
-                                        InstallStage.RunningPlugins,
-                                        0,
-                                        "Installation cancelled by user."
-                                    )
-                                );
-                                return new InstallResult
-                                {
-                                    Success = false,
-                                    ErrorMessage = "Installation cancelled by user.",
-                                    FailedStep = "FileHandlerConfig",
-                                };
-                            }
-
-                            foreach (KeyValuePair<string, string> kv in userValues)
-                            {
-                                _logger.LogDebug(
-                                    "File handler config: {Key} = {Value}",
-                                    kv.Key,
-                                    kv.Value
-                                );
-                                progress.Report(
-                                    new InstallProgress(
-                                        InstallStage.RunningPlugins,
-                                        0,
-                                        $"Config: {kv.Key} = {kv.Value}"
-                                    )
-                                );
-                                fileHandlerContext.ConfigValues[kv.Key] = kv.Value;
-                            }
-                        }
-
-                        progress.Report(
-                            new InstallProgress(
-                                InstallStage.RunningPlugins,
-                                0,
-                                "Processing files with plugin..."
-                            )
-                        );
-                        FileHandlerResult handlerResult = await handler.HandleFilesAsync(
-                            matchingFiles,
-                            fileHandlerContext,
-                            cancellationToken
-                        );
-
-                        // Report per-file results
-                        foreach (FileHandlerFileResult fr in handlerResult.FileResults)
-                        {
-                            string msg = fr.Success
-                                ? $"{Path.GetFileName(fr.FilePath)}: {fr.Action}"
-                                : $"{Path.GetFileName(fr.FilePath)}: FAILED - {fr.ErrorMessage}";
-                            progress.Report(
-                                new InstallProgress(InstallStage.RunningPlugins, 0, msg)
-                            );
-                        }
-
-                        if (!handlerResult.Success)
-                        {
-                            _logger.LogError(
-                                "File handler failed, aborting installation: {Error}",
-                                handlerResult.ErrorMessage
-                            );
-                            progress.Report(
-                                new InstallProgress(
-                                    InstallStage.RunningPlugins,
-                                    0,
-                                    $"Plugin processing failed: {handlerResult.ErrorMessage}"
-                                )
-                            );
-                            progress.Report(
-                                new InstallProgress(
-                                    InstallStage.RunningPlugins,
-                                    0,
-                                    "Installation aborted due to plugin failure. Cleaning up..."
-                                )
-                            );
-                            return new InstallResult
-                            {
-                                Success = false,
-                                ErrorMessage = handlerResult.ErrorMessage,
-                                FailedStep = "FileHandler",
-                            };
-                        }
-                        else
-                        {
-                            progress.Report(
-                                new InstallProgress(
-                                    InstallStage.RunningPlugins,
-                                    0,
-                                    "Plugin processing completed successfully"
-                                )
-                            );
-                        }
-
-                        foreach (string handled in matchingFiles)
-                        {
-                            handledFiles.Add(handled);
-                        }
-                    }
-                }
-            }
-
-            // Allow plugins to resolve templates in the target path (e.g. {ACMEPath})
-            string resolvedTargetPath = options.TargetPath;
-            if (OnResolveInstallPath is not null)
-            {
-                string? resolved = OnResolveInstallPath(resolvedTargetPath, fileHandlerContext);
-                if (resolved is not null && resolved != resolvedTargetPath)
-                {
-                    _logger.LogInformation(
-                        "Plugin resolved install path from {Original} to {Resolved}",
-                        resolvedTargetPath,
-                        resolved
-                    );
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Installing,
-                            0,
-                            $"Resolved install path: {resolved}"
-                        )
-                    );
-                    resolvedTargetPath = resolved;
-                }
-            }
-
-            // Check elevation for resolved path (the initial check used the raw template path)
-            if (
-                resolvedTargetPath != options.TargetPath
-                && ElevationHelper.PathRequiresAdmin(resolvedTargetPath)
-                && !ElevationHelper.IsRunningAsAdmin()
-            )
-            {
-                _logger.LogInformation(
-                    "Resolved path {Path} requires elevation, spawning elevated process",
-                    resolvedTargetPath
-                );
-                progress.Report(
-                    new InstallProgress(
-                        InstallStage.Installing,
-                        0,
-                        "Administrator privileges required for resolved path..."
-                    )
-                );
-                bool elevated = ElevationHelper.RunElevatedInstall(
-                    manifest.ProductId,
-                    manifest.Version,
-                    resolvedTargetPath,
-                    options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
-                );
-                if (!elevated)
-                {
-                    return new InstallResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Installation cancelled: administrator rights were denied.",
-                        FailedStep = "Elevation",
-                    };
-                }
-
-                InstalledProduct elevatedProduct = new InstalledProduct(
-                    ProductId: manifest.ProductId,
-                    Title: manifest.Title,
-                    Version: manifest.Version,
-                    InstalledPath: resolvedTargetPath,
-                    InstalledDate: DateTime.UtcNow,
-                    FeedId: options.FeedId,
-                    BackupPath: null
-                );
-                await _productRepository.AddAsync(elevatedProduct, cancellationToken);
-                progress.Report(
-                    new InstallProgress(
-                        InstallStage.Installing,
-                        100,
-                        $"Installation completed via elevated process."
-                    )
-                );
-                return new InstallResult { Success = true };
-            }
-
-            // Check for unresolved templates in the target path
-            if (resolvedTargetPath.Contains('{') && resolvedTargetPath.Contains('}'))
-            {
-                string msg =
-                    $"Install path contains unresolved template: {resolvedTargetPath}. "
-                    + "Configure the required plugin settings (e.g., Application paths) before installing.";
-                _logger.LogError(msg);
-                progress.Report(new InstallProgress(InstallStage.Installing, 0, msg));
-                return new InstallResult
-                {
-                    Success = false,
-                    ErrorMessage = msg,
-                    FailedStep = "PathResolution",
-                };
-            }
-
-            // Step: Copy files (excluding handled files)
-            _logger.LogInformation("Copying files to {TargetPath}", resolvedTargetPath);
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Installing,
-                    0,
-                    $"Copying files to {resolvedTargetPath}..."
-                )
-            );
-            Directory.CreateDirectory(resolvedTargetPath);
-            FileOperations fileOps = new FileOperations();
-            DeferredFileOps deferredOps = new DeferredFileOps();
-            List<string> deferredRenames = new List<string>();
-
-            try
-            {
-                await CopyDirectoryWithLockHandlingAsync(
-                    fileOps,
-                    deferredOps,
-                    extractPath,
-                    resolvedTargetPath,
-                    deferredRenames,
-                    handledFiles,
-                    new Progress<int>(pct =>
-                        progress.Report(
-                            new InstallProgress(InstallStage.Installing, pct, "Copying files...")
-                        )
-                    ),
-                    cancellationToken
-                );
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(
-                    ex,
-                    "Installation failed at step Installing (file copy): {Error}",
-                    ex.Message
-                );
-                RevertDeferredRenames(deferredRenames, resolvedTargetPath);
-                return new InstallResult
-                {
-                    Success = false,
-                    ErrorMessage = "File copy failed: " + ex.Message,
-                    FailedStep = "Installing",
-                    Exception = ex,
-                };
-            }
-            progress.Report(new InstallProgress(InstallStage.Installing, 100, "Files copied."));
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            // Step: Verify
-            progress.Report(
-                new InstallProgress(InstallStage.Verifying, 0, "Verifying installation...")
-            );
-
-            // 1. Target directory must exist and contain files
-            if (!Directory.Exists(resolvedTargetPath))
-            {
-                progress.Report(
-                    new InstallProgress(
-                        InstallStage.Verifying,
-                        0,
-                        "Verification failed: target directory does not exist."
-                    )
-                );
-                return new InstallResult
-                {
-                    Success = false,
-                    ErrorMessage = "Verification failed: target directory does not exist.",
-                    FailedStep = "Verifying",
-                };
-            }
-
-            string[] installedFiles = Directory.GetFiles(
-                resolvedTargetPath,
-                "*",
-                SearchOption.AllDirectories
-            );
-            if (installedFiles.Length == 0)
-            {
-                progress.Report(
-                    new InstallProgress(
-                        InstallStage.Verifying,
-                        0,
-                        "Verification failed: no files in target directory."
-                    )
-                );
-                return new InstallResult
-                {
-                    Success = false,
-                    ErrorMessage = "Verification failed: no files in target directory.",
-                    FailedStep = "Verifying",
-                };
-            }
-
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Verifying,
-                    25,
-                    $"Target directory contains {installedFiles.Length} file(s)."
-                )
-            );
-
-            // 2. Cross-check against extracted files (minus handled files)
-            if (Directory.Exists(tempDir))
-            {
-                string[] extractedFiles = Directory.GetFiles(
-                    tempDir,
-                    "*",
-                    SearchOption.AllDirectories
-                );
-                int expectedCount = extractedFiles.Length - handledFiles.Count;
-                if (expectedCount > 0 && installedFiles.Length < expectedCount)
-                {
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Verifying,
-                            50,
-                            $"Warning: expected at least {expectedCount} files but found {installedFiles.Length}."
-                        )
-                    );
-                    _logger.LogWarning(
-                        "Verification warning: expected {Expected} files, found {Actual}",
-                        expectedCount,
-                        installedFiles.Length
-                    );
-                }
-                else
-                {
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Verifying,
-                            50,
-                            $"File count verified: {installedFiles.Length} file(s) installed."
-                        )
-                    );
-                }
-            }
-
-            // 3. Check that key executables from shortcuts exist
-            if (manifest.Shortcuts is { Length: > 0 })
-            {
-                foreach (ShortcutInfo shortcut in manifest.Shortcuts)
-                {
-                    string exePath = Path.Combine(resolvedTargetPath, shortcut.ExeName);
-                    if (!File.Exists(exePath))
-                    {
-                        progress.Report(
-                            new InstallProgress(
-                                InstallStage.Verifying,
-                                75,
-                                $"Warning: shortcut target '{shortcut.ExeName}' not found in install directory."
-                            )
-                        );
-                        _logger.LogWarning(
-                            "Shortcut target missing after install: {ExeName}",
-                            shortcut.ExeName
-                        );
-                    }
-                }
-            }
-
-            // 4. Verify no zero-byte executables (corrupted copy)
-            foreach (string file in installedFiles)
-            {
-                if (
-                    (
-                        file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
-                        || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
-                    )
-                    && new FileInfo(file).Length == 0
-                )
-                {
-                    string fileName = Path.GetFileName(file);
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Verifying,
-                            75,
-                            $"Verification failed: '{fileName}' is 0 bytes (corrupted)."
-                        )
-                    );
-                    return new InstallResult
-                    {
-                        Success = false,
-                        ErrorMessage = $"Verification failed: '{fileName}' is 0 bytes.",
-                        FailedStep = "Verifying",
-                    };
-                }
-            }
-
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Verifying,
-                    100,
-                    "Verification complete - all checks passed."
-                )
-            );
-
-            // Step: PostInstall plugins
-            PluginPhaseResult postInstallPhaseResult = await RunPluginPhaseAsync(
+            (
+                HashSet<string> handledFiles,
+                PluginContext? fileHandlerContext,
+                InstallResult? fileHandlerError
+            ) = await HandleFileTypesAsync(
                 manifest,
                 options,
-                pluginContext,
-                PluginPhase.PostInstall,
+                extractPath,
+                progress,
                 cancellationToken
             );
-            if (!postInstallPhaseResult.Success)
-            {
-                _logger.LogWarning(
-                    "PostInstall plugin phase failed: {Error}",
-                    postInstallPhaseResult.ErrorMessage
+            if (fileHandlerError is not null)
+                return fileHandlerError;
+
+            // Phase 5: Resolve install path templates and check elevation for resolved path
+            (string resolvedPath, InstallResult? pathError) =
+                await ResolveAndValidateTargetPathAsync(
+                    manifest,
+                    options,
+                    fileHandlerContext,
+                    progress,
+                    cancellationToken
                 );
-            }
+            if (pathError is not null)
+                return pathError;
 
-            progress.Report(
-                new InstallProgress(InstallStage.Installing, 80, "Creating shortcuts...")
-            );
-            _logger.LogDebug("Creating shortcuts for {ProductId}", manifest.ProductId);
-            CreateShortcuts(manifest, resolvedTargetPath);
-
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Installing,
-                    85,
-                    "Applying environment variables..."
-                )
-            );
-            _logger.LogDebug("Applying environment variables for {ProductId}", manifest.ProductId);
-            await ApplyEnvironmentVariablesAsync(manifest, resolvedTargetPath, cancellationToken);
-
-            await SavePluginConfigValues(
-                manifest.ProductId,
-                options.PluginConfigValues,
+            // Phase 6: Copy files to target
+            cancellationToken.ThrowIfCancellationRequested();
+            InstallResult? copyError = await CopyFilesToTargetAsync(
+                extractPath,
+                resolvedPath,
+                handledFiles,
+                progress,
                 cancellationToken
             );
+            if (copyError is not null)
+                return copyError;
 
-            progress.Report(
-                new InstallProgress(InstallStage.Installing, 90, "Saving file manifest...")
+            // Phase 7: Verify installation
+            cancellationToken.ThrowIfCancellationRequested();
+            InstallResult? verifyError = await VerifyInstallationAsync(
+                manifest,
+                resolvedPath,
+                tempDir,
+                handledFiles,
+                progress
             );
-            _logger.LogDebug("Saving file manifest for {ProductId}", manifest.ProductId);
-            await SaveFileManifestAsync(manifest.ProductId, resolvedTargetPath, cancellationToken);
+            if (verifyError is not null)
+                return verifyError;
 
-            progress.Report(
-                new InstallProgress(InstallStage.Installing, 95, "Registering product...")
-            );
-            _logger.LogDebug("Registering installed product {ProductId}", manifest.ProductId);
-            InstalledProduct installed = new InstalledProduct(
-                ProductId: manifest.ProductId,
-                Title: manifest.Title,
-                Version: manifest.Version,
-                InstalledPath: resolvedTargetPath,
-                InstalledDate: DateTime.UtcNow,
-                FeedId: options.FeedId,
-                BackupPath: null
-            );
-            await _productRepository.AddAsync(installed, cancellationToken);
-
-            await _activityLog.LogAsync(
-                new ActivityLogEntry(
-                    Id: Guid.NewGuid().ToString(),
-                    Timestamp: DateTime.UtcNow,
-                    Action: "Install",
-                    ProductId: manifest.ProductId,
-                    Details: $"{manifest.Title} v{manifest.Version} installed to {resolvedTargetPath}",
-                    Success: true
-                ),
+            // Phase 8: Post-install, shortcuts, env vars, registration
+            await FinalizeInstallationAsync(
+                manifest,
+                options,
+                resolvedPath,
+                pluginContext,
+                progress,
                 cancellationToken
             );
 
@@ -980,38 +335,708 @@ public sealed class InstallationEngine : IInstallationEngine
         }
         finally
         {
-            try
+            CleanupTempDirectory(tempDir, progress);
+        }
+    }
+
+    private async Task<InstallResult?> TryElevateInstallAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        string targetPath,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        if (targetPath.Contains('{'))
+        {
+            _logger.LogInformation(
+                "Target path contains template variables, deferring elevation check"
+            );
+            return null;
+        }
+
+        if (!ElevationHelper.PathRequiresAdmin(targetPath) || ElevationHelper.IsRunningAsAdmin())
+            return null;
+
+        _logger.LogInformation(
+            "Elevation required, spawning elevated process for {ProductId}",
+            manifest.ProductId
+        );
+        bool elevated = ElevationHelper.RunElevatedInstall(
+            manifest.ProductId,
+            manifest.Version,
+            targetPath,
+            options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
+        );
+
+        if (!elevated)
+        {
+            _logger.LogWarning("Elevation denied by user for {ProductId}", manifest.ProductId);
+            return new InstallResult
             {
-                if (Directory.Exists(tempDir))
+                Success = false,
+                ErrorMessage = "Installation cancelled: administrator rights were denied.",
+                FailedStep = "Elevation",
+            };
+        }
+
+        await RegisterElevatedInstallAsync(
+            manifest,
+            targetPath,
+            options.FeedId,
+            "(elevated)",
+            cancellationToken
+        );
+        return new InstallResult { Success = true };
+    }
+
+    private async Task RegisterElevatedInstallAsync(
+        ProductManifest manifest,
+        string installPath,
+        string? feedId,
+        string suffix,
+        CancellationToken cancellationToken
+    )
+    {
+        InstalledProduct product = new InstalledProduct(
+            ProductId: manifest.ProductId,
+            Title: manifest.Title,
+            Version: manifest.Version,
+            InstalledPath: installPath,
+            InstalledDate: DateTime.UtcNow,
+            FeedId: feedId,
+            BackupPath: null
+        );
+        await _productRepository.AddAsync(product, cancellationToken);
+
+        await _activityLog.LogAsync(
+            new ActivityLogEntry(
+                Id: Guid.NewGuid().ToString(),
+                Timestamp: DateTime.UtcNow,
+                Action: "Install",
+                ProductId: manifest.ProductId,
+                Details: $"{manifest.Title} v{manifest.Version} installed to {installPath} {suffix}",
+                Success: true
+            ),
+            cancellationToken
+        );
+    }
+
+    private async Task<string?> DownloadAndExtractAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        string tempDir,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        _logger.LogInformation(
+            "Downloading product {ProductId} v{Version}",
+            manifest.ProductId,
+            manifest.Version
+        );
+        progress.Report(
+            new InstallProgress(
+                InstallStage.Downloading,
+                0,
+                $"Downloading {manifest.Title} v{manifest.Version}..."
+            )
+        );
+
+        IRegistryClient registryClient = GetClientForFeed(options.FeedId);
+        using Stream downloadStream = await registryClient.DownloadProductAsync(
+            manifest.ProductId,
+            manifest.Version,
+            cancellationToken
+        );
+        string zipPath = Path.Combine(tempDir, $"{manifest.ProductId}-{manifest.Version}.zip");
+        await using (FileStream fileStream = File.Create(zipPath))
+        {
+            await downloadStream.CopyToAsync(fileStream, cancellationToken);
+        }
+
+        progress.Report(new InstallProgress(InstallStage.Downloading, 100, "Download complete."));
+        _logger.LogInformation(
+            "Download complete for {ProductId} v{Version}",
+            manifest.ProductId,
+            manifest.Version
+        );
+
+        cancellationToken.ThrowIfCancellationRequested();
+        progress.Report(new InstallProgress(InstallStage.Extracting, 0, "Extracting files..."));
+        string extractPath = Path.Combine(tempDir, "extracted");
+
+        try
+        {
+            ZipFile.ExtractToDirectory(zipPath, extractPath);
+            await ExtractInnerZipIfPresentAsync(tempDir, extractPath, progress);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Installation failed at step Extracting: {Error}", ex.Message);
+            return null;
+        }
+
+        progress.Report(new InstallProgress(InstallStage.Extracting, 100, "Extraction complete."));
+        _logger.LogInformation("Extraction complete for {ProductId}", manifest.ProductId);
+        return extractPath;
+    }
+
+    private async Task ExtractInnerZipIfPresentAsync(
+        string tempDir,
+        string extractPath,
+        IProgress<InstallProgress> progress
+    )
+    {
+        string[] innerZips = Directory.GetFiles(extractPath, "*.zip");
+        if (innerZips.Length != 1)
+            return;
+
+        string innerZipPath = innerZips[0];
+        string innerExtractPath = Path.Combine(tempDir, "inner-extracted");
+        _logger.LogInformation(
+            "Found inner ZIP {InnerZip}, extracting product contents",
+            Path.GetFileName(innerZipPath)
+        );
+        progress.Report(
+            new InstallProgress(
+                InstallStage.Extracting,
+                50,
+                $"Extracting inner archive {Path.GetFileName(innerZipPath)}..."
+            )
+        );
+        ZipFile.ExtractToDirectory(innerZipPath, innerExtractPath);
+
+        File.Delete(innerZipPath);
+
+        foreach (
+            string file in Directory.GetFiles(innerExtractPath, "*", SearchOption.AllDirectories)
+        )
+        {
+            string relativePath = Path.GetRelativePath(innerExtractPath, file);
+            string targetFile = Path.Combine(extractPath, relativePath);
+            string? targetDir = Path.GetDirectoryName(targetFile);
+            if (targetDir is not null)
+                Directory.CreateDirectory(targetDir);
+            File.Move(file, targetFile, overwrite: true);
+        }
+
+        Directory.Delete(innerExtractPath, true);
+        _logger.LogInformation("Inner ZIP extracted successfully");
+        await Task.CompletedTask;
+    }
+
+    private async Task<(
+        HashSet<string> handledFiles,
+        PluginContext? fileHandlerContext,
+        InstallResult? error
+    )> HandleFileTypesAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        string extractPath,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        HashSet<string> handledFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        PluginContext? fileHandlerContext = null;
+
+        _logger.LogDebug(
+            "SkipFileHandlers={Skip}, FileTypeHandlers={Count}",
+            options.SkipFileHandlers,
+            _fileTypeHandlers.Count
+        );
+
+        if (options.SkipFileHandlers && _fileTypeHandlers.Count > 0)
+        {
+            CollectHandledFiles(extractPath, handledFiles);
+            _logger.LogInformation(
+                "Elevated install: excluded {Count} plugin-handled files from copy",
+                handledFiles.Count
+            );
+            return (handledFiles, null, null);
+        }
+
+        if (_fileTypeHandlers.Count == 0 || options.SkipFileHandlers)
+            return (handledFiles, null, null);
+
+        fileHandlerContext = await BuildPluginContextAsync(manifest, options, cancellationToken);
+
+        foreach (IFileTypeHandler handler in _fileTypeHandlers)
+        {
+            List<string> matchingFiles = FindMatchingFiles(extractPath, handler.HandledExtensions);
+            if (matchingFiles.Count == 0)
+                continue;
+
+            string fileList = string.Join(", ", matchingFiles.Select(Path.GetFileName));
+            _logger.LogInformation(
+                "File handler claims {Count} files: {Files}",
+                matchingFiles.Count,
+                fileList
+            );
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    0,
+                    $"Plugin found {matchingFiles.Count} file(s): {fileList}"
+                )
+            );
+
+            IReadOnlyList<PluginConfigField> handlerFields = handler.GetFileHandlerConfig(
+                matchingFiles,
+                fileHandlerContext
+            );
+            if (handlerFields.Count > 0 && OnFileHandlerConfigNeeded is not null)
+            {
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.RunningPlugins,
+                        0,
+                        "Waiting for user configuration..."
+                    )
+                );
+                Dictionary<string, string>? userValues = OnFileHandlerConfigNeeded(
+                    handlerFields,
+                    fileHandlerContext.ConfigValues
+                );
+
+                if (userValues is null)
                 {
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Installing,
-                            0,
-                            "Cleaning up temporary files..."
-                        )
+                    _logger.LogInformation(
+                        "User cancelled file handler config dialog, aborting installation"
                     );
-                    Directory.Delete(tempDir, true);
-                    progress.Report(
-                        new InstallProgress(InstallStage.Installing, 0, "Cleanup complete.")
+                    return (
+                        handledFiles,
+                        fileHandlerContext,
+                        new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = "Installation cancelled by user.",
+                            FailedStep = "FileHandlerConfig",
+                        }
                     );
                 }
+
+                foreach (KeyValuePair<string, string> kv in userValues)
+                {
+                    _logger.LogDebug("File handler config: {Key} = {Value}", kv.Key, kv.Value);
+                    fileHandlerContext.ConfigValues[kv.Key] = kv.Value;
+                }
             }
-            catch (Exception ex)
+
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    0,
+                    "Processing files with plugin..."
+                )
+            );
+            FileHandlerResult handlerResult = await handler.HandleFilesAsync(
+                matchingFiles,
+                fileHandlerContext,
+                cancellationToken
+            );
+
+            foreach (FileHandlerFileResult fr in handlerResult.FileResults)
             {
+                string msg = fr.Success
+                    ? $"{Path.GetFileName(fr.FilePath)}: {fr.Action}"
+                    : $"{Path.GetFileName(fr.FilePath)}: FAILED - {fr.ErrorMessage}";
+                progress.Report(new InstallProgress(InstallStage.RunningPlugins, 0, msg));
+            }
+
+            if (!handlerResult.Success)
+            {
+                _logger.LogError(
+                    "File handler failed, aborting installation: {Error}",
+                    handlerResult.ErrorMessage
+                );
+                return (
+                    handledFiles,
+                    fileHandlerContext,
+                    new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = handlerResult.ErrorMessage,
+                        FailedStep = "FileHandler",
+                    }
+                );
+            }
+
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    0,
+                    "Plugin processing completed successfully"
+                )
+            );
+            foreach (string handled in matchingFiles)
+                handledFiles.Add(handled);
+        }
+
+        return (handledFiles, fileHandlerContext, null);
+    }
+
+    private void CollectHandledFiles(string extractPath, HashSet<string> handledFiles)
+    {
+        foreach (IFileTypeHandler handler in _fileTypeHandlers)
+        foreach (string file in FindMatchingFiles(extractPath, handler.HandledExtensions))
+            handledFiles.Add(file);
+    }
+
+    private static List<string> FindMatchingFiles(
+        string directory,
+        IReadOnlyList<string> extensions
+    )
+    {
+        List<string> files = new List<string>();
+        foreach (string ext in extensions)
+            files.AddRange(Directory.GetFiles(directory, "*" + ext, SearchOption.AllDirectories));
+        return files;
+    }
+
+    private async Task<(
+        string resolvedPath,
+        InstallResult? error
+    )> ResolveAndValidateTargetPathAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        PluginContext? fileHandlerContext,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        string resolvedTargetPath = options.TargetPath;
+        if (OnResolveInstallPath is not null)
+        {
+            string? resolved = OnResolveInstallPath(resolvedTargetPath, fileHandlerContext);
+            if (resolved is not null && resolved != resolvedTargetPath)
+            {
+                _logger.LogInformation(
+                    "Plugin resolved install path from {Original} to {Resolved}",
+                    resolvedTargetPath,
+                    resolved
+                );
                 progress.Report(
                     new InstallProgress(
                         InstallStage.Installing,
                         0,
-                        $"Warning: temporary files could not be cleaned up: {ex.Message}"
+                        $"Resolved install path: {resolved}"
                     )
                 );
+                resolvedTargetPath = resolved;
+            }
+        }
+
+        // Check elevation for resolved path (the initial check used the raw template path)
+        if (
+            resolvedTargetPath != options.TargetPath
+            && ElevationHelper.PathRequiresAdmin(resolvedTargetPath)
+            && !ElevationHelper.IsRunningAsAdmin()
+        )
+        {
+            _logger.LogInformation("Resolved path {Path} requires elevation", resolvedTargetPath);
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    "Administrator privileges required for resolved path..."
+                )
+            );
+            bool elevated = ElevationHelper.RunElevatedInstall(
+                manifest.ProductId,
+                manifest.Version,
+                resolvedTargetPath,
+                options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
+            );
+            if (!elevated)
+                return (
+                    resolvedTargetPath,
+                    new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Installation cancelled: administrator rights were denied.",
+                        FailedStep = "Elevation",
+                    }
+                );
+
+            await RegisterElevatedInstallAsync(
+                manifest,
+                resolvedTargetPath,
+                options.FeedId,
+                "(elevated, resolved path)",
+                cancellationToken
+            );
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    100,
+                    "Installation completed via elevated process."
+                )
+            );
+            return (resolvedTargetPath, new InstallResult { Success = true });
+        }
+
+        if (resolvedTargetPath.Contains('{') && resolvedTargetPath.Contains('}'))
+        {
+            string msg =
+                $"Install path contains unresolved template: {resolvedTargetPath}. "
+                + "Configure the required plugin settings (e.g., Application paths) before installing.";
+            _logger.LogError(msg);
+            return (
+                resolvedTargetPath,
+                new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = msg,
+                    FailedStep = "PathResolution",
+                }
+            );
+        }
+
+        return (resolvedTargetPath, null);
+    }
+
+    private async Task<InstallResult?> CopyFilesToTargetAsync(
+        string extractPath,
+        string targetPath,
+        HashSet<string> handledFiles,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        _logger.LogInformation("Copying files to {TargetPath}", targetPath);
+        progress.Report(
+            new InstallProgress(InstallStage.Installing, 0, $"Copying files to {targetPath}...")
+        );
+        Directory.CreateDirectory(targetPath);
+
+        FileOperations fileOps = new FileOperations();
+        DeferredFileOps deferredOps = new DeferredFileOps();
+        List<string> deferredRenames = new List<string>();
+
+        try
+        {
+            await CopyDirectoryWithLockHandlingAsync(
+                fileOps,
+                deferredOps,
+                extractPath,
+                targetPath,
+                deferredRenames,
+                handledFiles,
+                new Progress<int>(pct =>
+                    progress.Report(
+                        new InstallProgress(InstallStage.Installing, pct, "Copying files...")
+                    )
+                ),
+                cancellationToken
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Installation failed at step Installing (file copy): {Error}",
+                ex.Message
+            );
+            RevertDeferredRenames(deferredRenames, targetPath);
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = "File copy failed: " + ex.Message,
+                FailedStep = "Installing",
+                Exception = ex,
+            };
+        }
+
+        progress.Report(new InstallProgress(InstallStage.Installing, 100, "Files copied."));
+        return null;
+    }
+
+    private Task<InstallResult?> VerifyInstallationAsync(
+        ProductManifest manifest,
+        string targetPath,
+        string tempDir,
+        HashSet<string> handledFiles,
+        IProgress<InstallProgress> progress
+    )
+    {
+        progress.Report(
+            new InstallProgress(InstallStage.Verifying, 0, "Verifying installation...")
+        );
+
+        if (!Directory.Exists(targetPath))
+            return Task.FromResult<InstallResult?>(
+                new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = "Verification failed: target directory does not exist.",
+                    FailedStep = "Verifying",
+                }
+            );
+
+        string[] installedFiles = Directory.GetFiles(targetPath, "*", SearchOption.AllDirectories);
+        if (installedFiles.Length == 0)
+            return Task.FromResult<InstallResult?>(
+                new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = "Verification failed: no files in target directory.",
+                    FailedStep = "Verifying",
+                }
+            );
+
+        progress.Report(
+            new InstallProgress(
+                InstallStage.Verifying,
+                25,
+                $"Target directory contains {installedFiles.Length} file(s)."
+            )
+        );
+
+        // Cross-check against extracted files
+        if (Directory.Exists(tempDir))
+        {
+            string[] extractedFiles = Directory.GetFiles(tempDir, "*", SearchOption.AllDirectories);
+            int expectedCount = extractedFiles.Length - handledFiles.Count;
+            if (expectedCount > 0 && installedFiles.Length < expectedCount)
+            {
                 _logger.LogWarning(
-                    ex,
-                    "Temporary directory could not be deleted: {TempDir}",
-                    tempDir
+                    "Verification warning: expected {Expected} files, found {Actual}",
+                    expectedCount,
+                    installedFiles.Length
                 );
             }
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Verifying,
+                    50,
+                    $"File count verified: {installedFiles.Length} file(s) installed."
+                )
+            );
+        }
+
+        // Check shortcut targets exist
+        if (manifest.Shortcuts is { Length: > 0 })
+        {
+            foreach (ShortcutInfo shortcut in manifest.Shortcuts)
+            {
+                string exePath = Path.Combine(targetPath, shortcut.ExeName);
+                if (!File.Exists(exePath))
+                    _logger.LogWarning(
+                        "Shortcut target missing after install: {ExeName}",
+                        shortcut.ExeName
+                    );
+            }
+        }
+
+        // Verify no zero-byte executables
+        foreach (string file in installedFiles)
+        {
+            if (
+                (
+                    file.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
+                    || file.EndsWith(".dll", StringComparison.OrdinalIgnoreCase)
+                )
+                && new FileInfo(file).Length == 0
+            )
+            {
+                string fileName = Path.GetFileName(file);
+                return Task.FromResult<InstallResult?>(
+                    new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Verification failed: '{fileName}' is 0 bytes.",
+                        FailedStep = "Verifying",
+                    }
+                );
+            }
+        }
+
+        progress.Report(
+            new InstallProgress(
+                InstallStage.Verifying,
+                100,
+                "Verification complete - all checks passed."
+            )
+        );
+        return Task.FromResult<InstallResult?>(null);
+    }
+
+    private async Task FinalizeInstallationAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        string resolvedPath,
+        PluginContext pluginContext,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        PluginPhaseResult postInstallResult = await RunPluginPhaseAsync(
+            manifest,
+            options,
+            pluginContext,
+            PluginPhase.PostInstall,
+            cancellationToken
+        );
+        if (!postInstallResult.Success)
+            _logger.LogWarning(
+                "PostInstall plugin phase failed: {Error}",
+                postInstallResult.ErrorMessage
+            );
+
+        progress.Report(new InstallProgress(InstallStage.Installing, 80, "Creating shortcuts..."));
+        CreateShortcuts(manifest, resolvedPath);
+
+        progress.Report(
+            new InstallProgress(InstallStage.Installing, 85, "Applying environment variables...")
+        );
+        await ApplyEnvironmentVariablesAsync(manifest, resolvedPath, cancellationToken);
+
+        await SavePluginConfigValues(
+            manifest.ProductId,
+            options.PluginConfigValues,
+            cancellationToken
+        );
+
+        progress.Report(
+            new InstallProgress(InstallStage.Installing, 90, "Saving file manifest...")
+        );
+        await SaveFileManifestAsync(manifest.ProductId, resolvedPath, cancellationToken);
+
+        progress.Report(new InstallProgress(InstallStage.Installing, 95, "Registering product..."));
+        await RegisterElevatedInstallAsync(
+            manifest,
+            resolvedPath,
+            options.FeedId,
+            "",
+            cancellationToken
+        );
+    }
+
+    private void CleanupTempDirectory(string tempDir, IProgress<InstallProgress>? progress = null)
+    {
+        try
+        {
+            if (!Directory.Exists(tempDir))
+                return;
+
+            progress?.Report(
+                new InstallProgress(InstallStage.Installing, 0, "Cleaning up temporary files...")
+            );
+            Directory.Delete(tempDir, true);
+            progress?.Report(new InstallProgress(InstallStage.Installing, 0, "Cleanup complete."));
+        }
+        catch (Exception ex)
+        {
+            progress?.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"Warning: temporary files could not be cleaned up: {ex.Message}"
+                )
+            );
+            _logger.LogWarning(ex, "Temporary directory could not be deleted: {TempDir}", tempDir);
         }
     }
 
@@ -1030,32 +1055,7 @@ public sealed class InstallationEngine : IInstallationEngine
             installed.Version,
             newManifest.Version
         );
-        if (Directory.Exists(installed.InstalledPath))
-        {
-            foreach (
-                string file in Directory.GetFiles(
-                    installed.InstalledPath,
-                    "*",
-                    SearchOption.AllDirectories
-                )
-            )
-            {
-                string ext = Path.GetExtension(file);
-                if (
-                    !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
-                    && !ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
-                )
-                    continue;
-
-                if (_fileLockDetector.IsFileLocked(file))
-                {
-                    IReadOnlyList<string> processes = _fileLockDetector.GetLockingProcesses(file);
-                    string processNames =
-                        processes.Count > 0 ? string.Join(", ", processes) : string.Empty;
-                    throw new FileLockedException(Path.GetFileName(file), processNames);
-                }
-            }
-        }
+        _fileLockDetector.ThrowIfAnyLocked(installed.InstalledPath);
 
         string? backupPath = null;
         if (options.CreateBackup && Directory.Exists(installed.InstalledPath))
@@ -1085,7 +1085,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     cancellationToken
                 );
                 if (oldEnvVars.Count > 0)
-                    _envVarService.Remove(oldEnvVars);
+                    await _envVarService.RemoveAsync(oldEnvVars);
                 _envVarService.DeleteTracking(installed.ProductId);
             }
             catch
@@ -1421,12 +1421,7 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
-        string tempDir = Path.Combine(
-            Path.GetTempPath(),
-            "StorkDrop",
-            "plugin-temp",
-            Guid.NewGuid().ToString()
-        );
+        string tempDir = Path.Combine(StorkPaths.PluginTempDir, Guid.NewGuid().ToString());
         Directory.CreateDirectory(tempDir);
 
         try
@@ -1552,12 +1547,7 @@ public sealed class InstallationEngine : IInstallationEngine
         };
     }
 
-    private static string GetStorkConfigDir() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "StorkDrop",
-            "Config"
-        );
+    private static string GetStorkConfigDir() => StorkPaths.ConfigDir;
 
     private async Task SavePluginConfigValues(
         string productId,
@@ -1623,7 +1613,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
         try
         {
-            List<AppliedEnvironmentVariable> applied = _envVarService.Apply(
+            List<AppliedEnvironmentVariable> applied = await _envVarService.ApplyAsync(
                 manifest.EnvironmentVariables,
                 installPath
             );

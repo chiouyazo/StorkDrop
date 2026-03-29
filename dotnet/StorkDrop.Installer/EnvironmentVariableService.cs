@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
@@ -9,9 +10,12 @@ namespace StorkDrop.Installer;
 /// </summary>
 public sealed class EnvironmentVariableService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
+    {
+        WriteIndented = true,
+    };
 
-    private static readonly SemaphoreSlim EnvVarLock = new(1, 1);
+    private static readonly SemaphoreSlim EnvVarLock = new SemaphoreSlim(1, 1);
     private readonly ILogger<EnvironmentVariableService> _logger;
 
     public EnvironmentVariableService(ILogger<EnvironmentVariableService> logger)
@@ -22,12 +26,12 @@ public sealed class EnvironmentVariableService
     /// <summary>
     /// Applies all environment variable declarations from the manifest.
     /// </summary>
-    public List<AppliedEnvironmentVariable> Apply(
+    public async Task<List<AppliedEnvironmentVariable>> ApplyAsync(
         EnvironmentVariableInfo[] declarations,
         string installPath
     )
     {
-        EnvVarLock.Wait();
+        await EnvVarLock.WaitAsync();
         try
         {
             return ApplyInternal(declarations, installPath);
@@ -149,9 +153,9 @@ public sealed class EnvironmentVariableService
     /// <summary>
     /// Removes all environment variable changes that were applied during installation.
     /// </summary>
-    public void Remove(List<AppliedEnvironmentVariable> appliedVars)
+    public async Task RemoveAsync(List<AppliedEnvironmentVariable> appliedVars)
     {
-        EnvVarLock.Wait();
+        await EnvVarLock.WaitAsync();
         try
         {
             RemoveInternal(appliedVars);
@@ -291,10 +295,5 @@ public sealed class EnvironmentVariableService
             ? EnvironmentVariableTarget.User
             : EnvironmentVariableTarget.Machine;
 
-    private static string GetStorkConfigDir() =>
-        Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "StorkDrop",
-            "Config"
-        );
+    private static string GetStorkConfigDir() => StorkPaths.ConfigDir;
 }

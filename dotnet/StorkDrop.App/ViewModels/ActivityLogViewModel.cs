@@ -1,9 +1,13 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -13,14 +17,17 @@ namespace StorkDrop.App.ViewModels;
 public partial class ActivityLogViewModel : ObservableObject
 {
     private readonly IActivityLog _activityLog;
+    private readonly ILogger<ActivityLogViewModel> _logger;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="ActivityLogViewModel"/> class.
     /// </summary>
     /// <param name="activityLog">The activity log service.</param>
-    public ActivityLogViewModel(IActivityLog activityLog)
+    /// <param name="logger">The logger instance.</param>
+    public ActivityLogViewModel(IActivityLog activityLog, ILogger<ActivityLogViewModel> logger)
     {
         _activityLog = activityLog;
+        _logger = logger;
     }
 
     [ObservableProperty]
@@ -75,5 +82,18 @@ public partial class ActivityLogViewModel : ObservableObject
     private async Task RefreshAsync()
     {
         await LoadAsync();
+    }
+
+    /// <summary>
+    /// Opens the log directory in the system file explorer.
+    /// </summary>
+    [RelayCommand]
+    private void OpenLogDirectory()
+    {
+        string logDir = StorkPaths.LogDir;
+        if (Directory.Exists(logDir))
+        {
+            Process.Start(new ProcessStartInfo(logDir) { UseShellExecute = true });
+        }
     }
 }

@@ -1,9 +1,8 @@
 using System.Diagnostics;
-using System.IO;
-using System.Threading;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using StorkDrop.App.ViewModels;
 using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
 using StorkDrop.Contracts;
@@ -14,7 +13,10 @@ namespace StorkDrop.App;
 
 public partial class App : Application
 {
-    private static readonly Mutex SingleInstanceMutex = new(true, "StorkDrop-SingleInstance-Mutex");
+    private static readonly Mutex SingleInstanceMutex = new Mutex(
+        true,
+        "StorkDrop-SingleInstance-Mutex"
+    );
     private IHost? _host;
 
     public static IServiceProvider Services { get; private set; } = null!;
@@ -98,8 +100,11 @@ public partial class App : Application
                 Dictionary<string, string>? result = null;
                 Dispatcher.Invoke(() =>
                 {
-                    ViewModels.PluginConfigDialogViewModel vm = new(fields, currentValues);
-                    Views.PluginConfigDialog dialog = new() { DataContext = vm };
+                    ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                        fields,
+                        currentValues
+                    );
+                    Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
                     dialog.Owner = MainWindow;
                     if (dialog.ShowDialog() == true)
                         result = vm.GetValues();
@@ -109,14 +114,14 @@ public partial class App : Application
 
             // Install path resolution via plugins (e.g., {ACMEPath} -> actual directory)
             IEnumerable<IStorkDropPlugin> allPlugins = Services.GetServices<IStorkDropPlugin>();
-            List<StorkDrop.Contracts.IInstallPathResolver> pathResolvers = allPlugins
-                .OfType<StorkDrop.Contracts.IInstallPathResolver>()
+            List<IInstallPathResolver> pathResolvers = allPlugins
+                .OfType<IInstallPathResolver>()
                 .ToList();
             if (pathResolvers.Count > 0)
             {
                 engine.OnResolveInstallPath = (targetPath, context) =>
                 {
-                    foreach (StorkDrop.Contracts.IInstallPathResolver resolver in pathResolvers)
+                    foreach (IInstallPathResolver resolver in pathResolvers)
                     {
                         string? resolved = resolver.ResolveInstallPath(targetPath, context);
                         if (resolved is not null)
@@ -141,94 +146,77 @@ public partial class App : Application
         }
     }
 
-    private async Task RunElevatedInstallAsync(string productId, string targetPath, string feedId)
+    private Task RunElevatedInstallAsync(string productId, string targetPath, string feedId)
     {
-        try
-        {
-            _host = AppHostBuilder.Build();
-            Services = _host.Services;
-            _host.Start();
-
-            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
-            await feedRegistry.ReloadAsync();
-            IRegistryClient registryClient = feedRegistry.GetClient(feedId);
-
-            IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
-
-            ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
-
-            if (manifest is not null)
+        return RunElevatedAsync(
+            "install",
+            async services =>
             {
-                InstallOptions options = new(
-                    TargetPath: targetPath,
-                    FeedId: feedId,
-                    SkipFileHandlers: true
-                );
-                Progress<InstallProgress> progress = new(_ => { });
-                await engine.InstallAsync(manifest, options, progress);
-            }
+                IFeedRegistry feedRegistry = services.GetRequiredService<IFeedRegistry>();
+                IRegistryClient registryClient = feedRegistry.GetClient(feedId);
+                IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
 
-            Environment.ExitCode = 0;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Elevated install failed: {ex.Message}");
-            Environment.ExitCode = 1;
-        }
-        finally
-        {
-            try
-            {
-                if (_host is not null)
-                    await _host.StopAsync(TimeSpan.FromSeconds(3));
-                _host?.Dispose();
+                ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
+                if (manifest is not null)
+                {
+                    InstallOptions options = new InstallOptions(
+                        TargetPath: targetPath,
+                        FeedId: feedId,
+                        SkipFileHandlers: true
+                    );
+                    Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
+                    await engine.InstallAsync(manifest, options, progress);
+                }
             }
-            catch { }
-        }
+        );
     }
 
-    private async Task RunElevatedUninstallAsync(string productId)
+    private Task RunElevatedUninstallAsync(string productId)
     {
-        try
-        {
-            _host = AppHostBuilder.Build();
-            Services = _host.Services;
-            _host.Start();
-
-            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
-            await feedRegistry.ReloadAsync();
-
-            IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
-            IProductRepository productRepository =
-                Services.GetRequiredService<IProductRepository>();
-
-            InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
-
-            if (installed is not null)
+        return RunElevatedAsync(
+            "uninstall",
+            async services =>
             {
-                await engine.UninstallAsync(installed);
-            }
+                IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
+                IProductRepository productRepository =
+                    services.GetRequiredService<IProductRepository>();
 
-            Environment.ExitCode = 0;
-        }
-        catch (Exception ex)
-        {
-            Debug.WriteLine($"Elevated uninstall failed: {ex.Message}");
-            Environment.ExitCode = 1;
-        }
-        finally
-        {
-            try
-            {
-                if (_host is not null)
-                    await _host.StopAsync(TimeSpan.FromSeconds(3));
-                _host?.Dispose();
+                InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
+                if (installed is not null)
+                    await engine.UninstallAsync(installed);
             }
-            catch { }
-        }
+        );
     }
 
-    private async Task RunElevatedUpdateAsync(string productId, string targetPath, string feedId)
+    private Task RunElevatedUpdateAsync(string productId, string targetPath, string feedId)
+    {
+        return RunElevatedAsync(
+            "update",
+            async services =>
+            {
+                IFeedRegistry feedRegistry = services.GetRequiredService<IFeedRegistry>();
+                IRegistryClient registryClient = feedRegistry.GetClient(feedId);
+                IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
+                IProductRepository productRepository =
+                    services.GetRequiredService<IProductRepository>();
+
+                InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
+                ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
+
+                if (installed is not null && manifest is not null)
+                {
+                    InstallOptions options = new InstallOptions(
+                        TargetPath: targetPath,
+                        FeedId: feedId
+                    );
+                    Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
+                    await engine.UpdateAsync(installed, manifest, options, progress);
+                }
+            }
+        );
+    }
+
+    private async Task RunElevatedAsync(string operation, Func<IServiceProvider, Task> action)
     {
         try
         {
@@ -238,28 +226,13 @@ public partial class App : Application
 
             IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
             await feedRegistry.ReloadAsync();
-            IRegistryClient registryClient = feedRegistry.GetClient(feedId);
 
-            IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
-            IProductRepository productRepository =
-                Services.GetRequiredService<IProductRepository>();
-
-            InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
-
-            ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
-
-            if (installed is not null && manifest is not null)
-            {
-                InstallOptions options = new(TargetPath: targetPath, FeedId: feedId);
-                Progress<InstallProgress> progress = new(_ => { });
-                await engine.UpdateAsync(installed, manifest, options, progress);
-            }
-
+            await action(Services);
             Environment.ExitCode = 0;
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Elevated update failed: {ex.Message}");
+            Debug.WriteLine($"Elevated {operation} failed: {ex.Message}");
             Environment.ExitCode = 1;
         }
         finally

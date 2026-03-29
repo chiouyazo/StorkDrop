@@ -1,11 +1,12 @@
 using System.Collections.ObjectModel;
-using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -19,7 +20,8 @@ public partial class PluginTabViewModel : ObservableObject
 {
     private readonly IStorkDropPlugin _plugin;
     private readonly DialogService _dialogService;
-    private readonly string _configPath;
+    private readonly IPluginSettingsStore _settingsStore;
+    private readonly ILogger<PluginTabViewModel> _logger;
 
     [ObservableProperty]
     private string _title = string.Empty;
@@ -33,19 +35,19 @@ public partial class PluginTabViewModel : ObservableObject
     [ObservableProperty]
     private string _statusMessage = string.Empty;
 
-    public PluginTabViewModel(IStorkDropPlugin plugin, DialogService dialogService)
+    public PluginTabViewModel(
+        IStorkDropPlugin plugin,
+        DialogService dialogService,
+        IPluginSettingsStore settingsStore,
+        ILogger<PluginTabViewModel> logger
+    )
     {
         _plugin = plugin;
         _dialogService = dialogService;
+        _settingsStore = settingsStore;
+        _logger = logger;
         Title = plugin.DisplayName;
         PluginId = plugin.PluginId;
-
-        _configPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "StorkDrop",
-            "Config",
-            $"plugin-settings-{plugin.PluginId}.json"
-        );
 
         LoadSections();
     }
@@ -58,7 +60,7 @@ public partial class PluginTabViewModel : ObservableObject
 
         foreach (PluginSettingsSection section in pluginSections)
         {
-            PluginSettingsSectionViewModel sectionVm = new()
+            PluginSettingsSectionViewModel sectionVm = new PluginSettingsSectionViewModel
             {
                 Title = section.Title,
                 SectionId = section.SectionId,
@@ -68,7 +70,7 @@ public partial class PluginTabViewModel : ObservableObject
             {
                 if (field.FieldType == PluginFieldType.Group)
                 {
-                    GroupFieldViewModel groupVm = new()
+                    GroupFieldViewModel groupVm = new GroupFieldViewModel
                     {
                         Key = field.Key,
                         Label = field.Label,
@@ -80,12 +82,12 @@ public partial class PluginTabViewModel : ObservableObject
                     {
                         try
                         {
-                            var items = JsonSerializer.Deserialize<
+                            List<Dictionary<string, string>>? items = JsonSerializer.Deserialize<
                                 List<Dictionary<string, string>>
                             >(groupJson);
                             if (items is not null)
                             {
-                                foreach (var item in items)
+                                foreach (Dictionary<string, string> item in items)
                                 {
                                     GroupInstanceViewModel instance = CreateGroupInstance(
                                         field.SubFields,
@@ -95,14 +97,22 @@ public partial class PluginTabViewModel : ObservableObject
                                 }
                             }
                         }
-                        catch { }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to deserialize group field {Key} for plugin {PluginId}",
+                                field.Key,
+                                _plugin.PluginId
+                            );
+                        }
                     }
 
                     sectionVm.GroupFields.Add(groupVm);
                 }
                 else
                 {
-                    PluginConfigFieldViewModel fieldVm = new()
+                    PluginConfigFieldViewModel fieldVm = new PluginConfigFieldViewModel
                     {
                         Key = field.Key,
                         Label = field.Label,
@@ -134,10 +144,10 @@ public partial class PluginTabViewModel : ObservableObject
         Dictionary<string, string>? values = null
     )
     {
-        GroupInstanceViewModel instance = new();
+        GroupInstanceViewModel instance = new GroupInstanceViewModel();
         foreach (PluginConfigField tmpl in templates)
         {
-            PluginConfigFieldViewModel fieldVm = new()
+            PluginConfigFieldViewModel fieldVm = new PluginConfigFieldViewModel
             {
                 Key = tmpl.Key,
                 Label = tmpl.Label,
@@ -181,43 +191,47 @@ public partial class PluginTabViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Save()
+    private async Task SaveAsync()
     {
         try
         {
-            Dictionary<string, string> values = [];
-
-            foreach (PluginSettingsSectionViewModel section in Sections)
-            {
-                foreach (PluginConfigFieldViewModel field in section.Fields)
-                    values[field.Key] = field.Value;
-
-                foreach (GroupFieldViewModel group in section.GroupFields)
-                {
-                    List<Dictionary<string, string>> items = [];
-                    foreach (GroupInstanceViewModel instance in group.Instances)
-                    {
-                        Dictionary<string, string> item = [];
-                        foreach (PluginConfigFieldViewModel field in instance.Fields)
-                            item[field.Key] = field.Value;
-                        items.Add(item);
-                    }
-                    values[group.Key] = JsonSerializer.Serialize(items);
-                }
-            }
-
-            Directory.CreateDirectory(Path.GetDirectoryName(_configPath)!);
-            string json = JsonSerializer.Serialize(
-                values,
-                new JsonSerializerOptions { WriteIndented = true }
-            );
-            File.WriteAllText(_configPath, json);
+            Dictionary<string, string> values = CollectValues();
+            await _settingsStore.SaveAsync(_plugin.PluginId, values);
             StatusMessage = LocalizationManager.GetString("Status_TestSuccess");
         }
         catch (Exception ex)
         {
+            _logger.LogWarning(
+                ex,
+                "Failed to save plugin settings for {PluginId}",
+                _plugin.PluginId
+            );
             StatusMessage = LocalizationManager.GetString("Error_SaveFailed") + ": " + ex.Message;
         }
+    }
+
+    private Dictionary<string, string> CollectValues()
+    {
+        Dictionary<string, string> values = [];
+        foreach (PluginSettingsSectionViewModel section in Sections)
+        {
+            foreach (PluginConfigFieldViewModel field in section.Fields)
+                values[field.Key] = field.Value;
+
+            foreach (GroupFieldViewModel group in section.GroupFields)
+            {
+                List<Dictionary<string, string>> items = [];
+                foreach (GroupInstanceViewModel instance in group.Instances)
+                {
+                    Dictionary<string, string> item = [];
+                    foreach (PluginConfigFieldViewModel field in instance.Fields)
+                        item[field.Key] = field.Value;
+                    items.Add(item);
+                }
+                values[group.Key] = JsonSerializer.Serialize(items);
+            }
+        }
+        return values;
     }
 
     [RelayCommand]
@@ -231,13 +245,16 @@ public partial class PluginTabViewModel : ObservableObject
     {
         try
         {
-            if (File.Exists(_configPath))
-            {
-                string json = File.ReadAllText(_configPath);
-                return JsonSerializer.Deserialize<Dictionary<string, string>>(json) ?? [];
-            }
+            return Task.Run(() => _settingsStore.LoadAsync(_plugin.PluginId)).Result;
         }
-        catch { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to load saved config values for plugin {PluginId}",
+                _plugin.PluginId
+            );
+        }
         return [];
     }
 }
