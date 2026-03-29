@@ -83,6 +83,40 @@ public sealed class FileLockDetector : IFileLockDetector
         return processes;
     }
 
+    public void ThrowIfAnyLocked(string directory)
+    {
+        if (!Directory.Exists(directory))
+            return;
+
+        string[] files;
+        try
+        {
+            files = Directory.GetFiles(directory, "*", SearchOption.AllDirectories);
+        }
+        catch (DirectoryNotFoundException)
+        {
+            return;
+        }
+
+        foreach (string file in files)
+        {
+            string ext = Path.GetExtension(file);
+            if (
+                !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                && !ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
+            )
+                continue;
+
+            if (IsFileLocked(file))
+            {
+                IReadOnlyList<string> processes = GetLockingProcesses(file);
+                string processNames =
+                    processes.Count > 0 ? string.Join(", ", processes) : string.Empty;
+                throw new FileLockedException(Path.GetFileName(file), processNames);
+            }
+        }
+    }
+
     public bool IsFileLocked(string filePath)
     {
         if (!File.Exists(filePath))

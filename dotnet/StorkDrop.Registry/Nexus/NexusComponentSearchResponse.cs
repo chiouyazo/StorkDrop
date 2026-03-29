@@ -1,17 +1,17 @@
 using System.Text.Json.Serialization;
 
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 /// <summary>
-/// Response from the Nexus asset search API.
+/// Response from the Nexus component search API.
 /// </summary>
-public sealed class NexusSearchResponse
+public sealed class NexusComponentSearchResponse
 {
     /// <summary>
-    /// Gets or sets the assets returned by the search.
+    /// Gets or sets the components returned by the search.
     /// </summary>
     [JsonPropertyName("items")]
-    public NexusAsset[] Items { get; set; } = [];
+    public NexusComponent[] Items { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the continuation token for paginated results.

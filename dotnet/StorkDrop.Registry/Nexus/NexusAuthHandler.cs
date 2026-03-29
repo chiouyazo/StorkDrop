@@ -4,7 +4,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StorkDrop.Contracts.Models;
 
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 public sealed class NexusAuthHandler(
     IOptions<NexusOptions> options,

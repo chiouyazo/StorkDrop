@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -8,14 +10,20 @@ public partial class PluginsViewModel : ObservableObject
 {
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
     private readonly PluginLoadStatus _loadStatus;
+    private readonly ILogger<PluginsViewModel> _logger;
 
     [ObservableProperty]
     private ObservableCollection<PluginInfoViewModel> _loadedPlugins = [];
 
-    public PluginsViewModel(IEnumerable<IStorkDropPlugin> plugins, PluginLoadStatus loadStatus)
+    public PluginsViewModel(
+        IEnumerable<IStorkDropPlugin> plugins,
+        PluginLoadStatus loadStatus,
+        ILogger<PluginsViewModel> logger
+    )
     {
         _plugins = plugins;
         _loadStatus = loadStatus;
+        _logger = logger;
         LoadPlugins();
     }
 

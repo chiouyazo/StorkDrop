@@ -8,7 +8,7 @@ public static class ElevationHelper
     public static bool IsRunningAsAdmin()
     {
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
-        WindowsPrincipal principal = new(identity);
+        WindowsPrincipal principal = new WindowsPrincipal(identity);
         return principal.IsInRole(WindowsBuiltInRole.Administrator);
     }
 
@@ -41,13 +41,12 @@ public static class ElevationHelper
         {
             string exePath =
                 Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName
-                ?? string.Empty;
+                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
             string pluginDirArgs = GetPluginDirArgs();
-            ProcessStartInfo startInfo = new()
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
@@ -75,12 +74,11 @@ public static class ElevationHelper
         {
             string exePath =
                 Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName
-                ?? string.Empty;
+                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
-            ProcessStartInfo startInfo = new()
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
@@ -107,12 +105,11 @@ public static class ElevationHelper
         {
             string exePath =
                 Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName
-                ?? string.Empty;
+                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
-            ProcessStartInfo startInfo = new()
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
@@ -140,12 +137,11 @@ public static class ElevationHelper
         {
             string exePath =
                 Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName
-                ?? string.Empty;
+                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
-            ProcessStartInfo startInfo = new()
+            ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,

@@ -1,4 +1,4 @@
-namespace StorkDrop.Core.Services;
+namespace StorkDrop.Contracts.Services;
 
 public sealed class PathResolver
 {

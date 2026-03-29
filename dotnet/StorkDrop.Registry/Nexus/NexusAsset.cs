@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 /// <summary>
 /// Represents a single asset in a Nexus repository.

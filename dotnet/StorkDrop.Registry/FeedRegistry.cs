@@ -1,9 +1,8 @@
-using System.Net.Http.Headers;
-using System.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Registry.Nexus;
 
 namespace StorkDrop.Registry;
 
@@ -14,22 +13,25 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
 {
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
+    private readonly IFeedConnectionService _connectionService;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ILogger<FeedRegistry> _logger;
-    private readonly object _lock = new();
+    private readonly object _lock = new object();
 
-    private Dictionary<string, FeedEntry> _feeds = new();
+    private Dictionary<string, FeedEntry> _feeds = new Dictionary<string, FeedEntry>();
 
     private sealed record FeedEntry(FeedInfo Info, IRegistryClient Client, HttpClient HttpClient);
 
     public FeedRegistry(
         IConfigurationService configurationService,
         IEncryptionService encryptionService,
+        IFeedConnectionService connectionService,
         ILoggerFactory loggerFactory
     )
     {
         _configurationService = configurationService;
         _encryptionService = encryptionService;
+        _connectionService = connectionService;
         _loggerFactory = loggerFactory;
         _logger = loggerFactory.CreateLogger<FeedRegistry>();
     }
@@ -91,14 +93,18 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         FeedConfiguration[] feedConfigs = config?.Feeds ?? [];
         _logger.LogInformation("Found {Count} feed configurations", feedConfigs.Length);
 
-        Dictionary<string, FeedEntry> newFeeds = new();
+        Dictionary<string, FeedEntry> newFeeds = new Dictionary<string, FeedEntry>();
 
         foreach (FeedConfiguration fc in feedConfigs)
         {
             _logger.LogDebug("Loading feed {FeedName} ({FeedId}) at {Url}", fc.Name, fc.Id, fc.Url);
             string password = DecryptPassword(fc);
 
-            HttpClient baseHttpClient = CreateHttpClient(fc.Url, fc.Username, password);
+            HttpClient baseHttpClient = _connectionService.CreateAuthenticatedClient(
+                fc.Url,
+                fc.Username,
+                password
+            );
 
             if (!string.IsNullOrWhiteSpace(fc.Repository))
             {
@@ -136,7 +142,11 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
                         string feedName = $"{fc.Name} / {repo.Name}";
 
                         // Each discovered repo needs its own HttpClient (same auth)
-                        HttpClient repoHttpClient = CreateHttpClient(fc.Url, fc.Username, password);
+                        HttpClient repoHttpClient = _connectionService.CreateAuthenticatedClient(
+                            fc.Url,
+                            fc.Username,
+                            password
+                        );
 
                         FeedEntry entry = CreateFeedEntry(
                             feedId,
@@ -198,34 +208,6 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         }
     }
 
-    private static HttpClient CreateHttpClient(string baseUrl, string? username, string password)
-    {
-        HttpClientHandler handler = new()
-        {
-            ServerCertificateCustomValidationCallback =
-                HttpClientHandler.DangerousAcceptAnyServerCertificateValidator,
-        };
-
-        HttpClient httpClient = new(handler)
-        {
-            BaseAddress = new Uri(baseUrl),
-            Timeout = TimeSpan.FromSeconds(30),
-        };
-
-        if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
-        {
-            string creds = Convert.ToBase64String(
-                Encoding.ASCII.GetBytes($"{username}:{password}")
-            );
-            httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
-                "Basic",
-                creds
-            );
-        }
-
-        return httpClient;
-    }
-
     private FeedEntry CreateFeedEntry(
         string feedId,
         string feedName,
@@ -234,10 +216,14 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         HttpClient httpClient
     )
     {
-        NexusOptions opts = new() { BaseUrl = baseUrl, Repository = repository };
+        NexusOptions opts = new NexusOptions { BaseUrl = baseUrl, Repository = repository };
 
         ILogger<NexusRegistryClient> logger = _loggerFactory.CreateLogger<NexusRegistryClient>();
-        NexusRegistryClient client = new(httpClient, Options.Create(opts), logger);
+        NexusRegistryClient client = new NexusRegistryClient(
+            httpClient,
+            Options.Create(opts),
+            logger
+        );
 
         return new FeedEntry(new FeedInfo(feedId, feedName), client, httpClient);
     }

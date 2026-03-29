@@ -1,8 +1,4 @@
-using System.Collections.Generic;
-using System.Threading;
-using System.Threading.Tasks;
-
-namespace StorkDrop.Contracts;
+namespace StorkDrop.Contracts.Interfaces;
 
 /// <summary>
 /// Implement this interface to create a StorkDrop plugin that extends

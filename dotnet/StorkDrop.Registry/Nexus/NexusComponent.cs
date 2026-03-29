@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 /// <summary>
 /// Represents a single component in a Nexus repository.

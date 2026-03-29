@@ -1,9 +1,5 @@
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 using StorkDrop.Contracts;
+using StorkDrop.Contracts.Interfaces;
 
 namespace ExampleProduct;
 

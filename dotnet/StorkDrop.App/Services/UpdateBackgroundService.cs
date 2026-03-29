@@ -3,7 +3,6 @@ using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
-using StorkDrop.Core.Services;
 
 namespace StorkDrop.App.Services;
 

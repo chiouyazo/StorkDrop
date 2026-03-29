@@ -1,7 +1,6 @@
 using StorkDrop.Contracts.Models;
-using StorkDrop.Contracts.Services;
 
-namespace StorkDrop.Core.Services;
+namespace StorkDrop.Contracts.Services;
 
 public sealed class ManifestValidator
 {

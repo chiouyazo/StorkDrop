@@ -22,7 +22,7 @@ public sealed partial class InstallationTracker : ObservableObject
     public TrackedInstallation StartInstallation(string productId, string title)
     {
         ShowPanel = true;
-        TrackedInstallation install = new()
+        TrackedInstallation install = new TrackedInstallation
         {
             ProductId = productId,
             Title = title,
@@ -73,7 +73,7 @@ public sealed partial class TrackedInstallation : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _logEntries = [];
 
-    public CancellationTokenSource Cts { get; } = new();
+    public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
 
     public void Cancel()
     {

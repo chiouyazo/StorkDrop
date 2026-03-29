@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
@@ -14,16 +15,19 @@ public partial class UpdatesViewModel : ObservableObject
     private readonly IFeedRegistry _feedRegistry;
     private readonly IProductRepository _productRepository;
     private readonly InstallationCoordinator _coordinator;
+    private readonly ILogger<UpdatesViewModel> _logger;
 
     public UpdatesViewModel(
         IFeedRegistry feedRegistry,
         IProductRepository productRepository,
-        InstallationCoordinator coordinator
+        InstallationCoordinator coordinator,
+        ILogger<UpdatesViewModel> logger
     )
     {
         _feedRegistry = feedRegistry;
         _productRepository = productRepository;
         _coordinator = coordinator;
+        _logger = logger;
     }
 
     [ObservableProperty]
@@ -56,7 +60,8 @@ public partial class UpdatesViewModel : ObservableObject
                 cancellationToken
             );
 
-            Dictionary<string, (ProductManifest Manifest, string FeedId)> latestByProduct = new();
+            Dictionary<string, (ProductManifest Manifest, string FeedId)> latestByProduct =
+                new Dictionary<string, (ProductManifest Manifest, string FeedId)>();
             foreach (FeedInfo feed in _feedRegistry.GetFeeds())
             {
                 try
@@ -68,15 +73,20 @@ public partial class UpdatesViewModel : ObservableObject
                     foreach (ProductManifest m in available)
                         latestByProduct[m.ProductId] = (m, feed.Id);
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to load products from feed {FeedId}", feed.Id);
+                }
             }
 
             List<UpdateItemViewModel> updateItems = [];
             foreach (InstalledProduct product in installed)
             {
                 if (
-                    latestByProduct.TryGetValue(product.ProductId, out var latest)
-                    && VersionComparer.IsNewer(latest.Manifest.Version, product.Version)
+                    latestByProduct.TryGetValue(
+                        product.ProductId,
+                        out (ProductManifest Manifest, string FeedId) latest
+                    ) && VersionComparer.IsNewer(latest.Manifest.Version, product.Version)
                 )
                 {
                     updateItems.Add(

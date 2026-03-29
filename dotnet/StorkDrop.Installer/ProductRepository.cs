@@ -3,18 +3,19 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
 public sealed class ProductRepository : IProductRepository, IDisposable
 {
     private readonly string _filePath;
-    private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
     private readonly ILogger<ProductRepository> _logger;
     private List<InstalledProduct> _products = [];
     private bool _initialized;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
@@ -22,16 +23,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
     };
 
     public ProductRepository(ILogger<ProductRepository> logger)
-        : this(
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "StorkDrop",
-                "Stork",
-                "Config",
-                "installed-products.json"
-            ),
-            logger
-        ) { }
+        : this(StorkPaths.InstalledProductsFile, logger) { }
 
     public ProductRepository(string filePath, ILogger<ProductRepository> logger)
     {
@@ -212,24 +204,9 @@ public sealed class ProductRepository : IProductRepository, IDisposable
     {
         _logger.LogDebug("Saving product repository ({Count} products)", _products.Count);
         string json = JsonSerializer.Serialize(_products, JsonOptions);
-        string tempPath = _filePath + ".tmp";
-        try
-        {
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-            File.Move(tempPath, _filePath, overwrite: true);
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best effort cleanup of temp file
-            }
-        }
+        await SafeFileWriter
+            .WriteAtomicAsync(_filePath, json, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     private static void ValidateNoDuplicateProductIds(List<InstalledProduct> products)

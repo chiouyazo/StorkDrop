@@ -347,4 +347,14 @@
 
   <!-- Activity log -->
   <system:String x:Key="ActivityLog_ViewLogs">Anwendungsprotokolle anzeigen</system:String>
+
+  <!-- Closing confirmation -->
+  <system:String x:Key="Closing_ActiveInstallations"
+    >Es laufen noch {0} Installation(en). Das Schlie&#223;en von StorkDrop kann diese in einem unvollst&#228;ndigen Zustand hinterlassen.
+
+M&#246;chten Sie wirklich schlie&#223;en?</system:String
+  >
+  <system:String x:Key="Closing_ActiveInstallations_Title"
+    >Installationen in Bearbeitung</system:String
+  >
 </ResourceDictionary>

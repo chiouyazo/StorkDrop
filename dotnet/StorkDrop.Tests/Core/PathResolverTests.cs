@@ -1,12 +1,12 @@
 using FluentAssertions;
-using StorkDrop.Core.Services;
+using StorkDrop.Contracts.Services;
 using Xunit;
 
 namespace StorkDrop.Tests.Core;
 
 public sealed class PathResolverTests
 {
-    private readonly PathResolver _resolver = new();
+    private readonly PathResolver _resolver = new PathResolver();
 
     [Fact]
     public void Resolve_AbsolutePath_ShouldReturnSamePath()

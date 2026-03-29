@@ -1,4 +1,4 @@
-namespace StorkDrop.Contracts;
+namespace StorkDrop.Contracts.Interfaces;
 
 /// <summary>
 /// Optional interface that plugins can implement to resolve template variables

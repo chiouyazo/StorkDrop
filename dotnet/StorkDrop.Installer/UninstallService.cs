@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
@@ -51,43 +52,7 @@ public sealed class UninstallService
             product.InstalledPath
         );
 
-        // Check for file locks (only .exe and .dll — these are the files that actually get locked
-        // by running processes; checking all files causes false positives from transient OS handles)
-        if (Directory.Exists(product.InstalledPath))
-        {
-            _logger.LogDebug("Checking file locks in {InstalledPath}", product.InstalledPath);
-            string[] files;
-            try
-            {
-                files = Directory.GetFiles(product.InstalledPath, "*", SearchOption.AllDirectories);
-            }
-            catch (DirectoryNotFoundException)
-            {
-                files = Array.Empty<string>();
-            }
-
-            foreach (string file in files)
-            {
-                string ext = Path.GetExtension(file);
-                if (
-                    !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
-                    && !ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
-                )
-                    continue;
-
-                if (_fileLockDetector.IsFileLocked(file))
-                {
-                    IReadOnlyList<string> lockingProcesses = _fileLockDetector.GetLockingProcesses(
-                        file
-                    );
-                    string processNames =
-                        lockingProcesses.Count > 0
-                            ? string.Join(", ", lockingProcesses)
-                            : string.Empty;
-                    throw new FileLockedException(Path.GetFileName(file), processNames);
-                }
-            }
-        }
+        _fileLockDetector.ThrowIfAnyLocked(product.InstalledPath);
 
         _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
         await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
@@ -159,12 +124,7 @@ public sealed class UninstallService
         CancellationToken cancellationToken
     )
     {
-        string configDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "StorkDrop",
-            "Config"
-        );
-        string manifestPath = Path.Combine(configDir, $"{productId}.files.json");
+        string manifestPath = Path.Combine(StorkPaths.ConfigDir, $"{productId}.files.json");
 
         if (!File.Exists(manifestPath))
             return null;
@@ -184,12 +144,7 @@ public sealed class UninstallService
     {
         try
         {
-            string configDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "StorkDrop",
-                "Config"
-            );
-            string manifestPath = Path.Combine(configDir, $"{productId}.files.json");
+            string manifestPath = Path.Combine(StorkPaths.ConfigDir, $"{productId}.files.json");
             if (File.Exists(manifestPath))
                 File.Delete(manifestPath);
         }
@@ -328,7 +283,7 @@ public sealed class UninstallService
             );
 
             if (applied.Count > 0)
-                _envVarService.Remove(applied);
+                await _envVarService.RemoveAsync(applied);
 
             _envVarService.DeleteTracking(productId);
         }

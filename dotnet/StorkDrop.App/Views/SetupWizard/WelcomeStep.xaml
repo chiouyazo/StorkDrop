@@ -45,7 +45,8 @@
     >
       This wizard will guide you through the initial setup. You will configure
       your feed connection to start downloading and installing products.
-    </TextBlock>
+    </TextBlock
+    >
 
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,24,0,0">
       <TextBlock

@@ -3,6 +3,7 @@ using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.Contracts;
@@ -23,13 +24,15 @@ public partial class MarketplaceViewModel : ObservableObject
     private readonly InstallationCoordinator _coordinator;
     private readonly InstallationTracker _tracker;
     private readonly INotificationService _notificationService;
+    private readonly ILogger<MarketplaceViewModel> _logger;
 
     public MarketplaceViewModel(
         IFeedRegistry feedRegistry,
         IProductRepository productRepository,
         InstallationCoordinator coordinator,
         InstallationTracker tracker,
-        INotificationService notificationService
+        INotificationService notificationService,
+        ILogger<MarketplaceViewModel> logger
     )
     {
         _feedRegistry = feedRegistry;
@@ -37,6 +40,7 @@ public partial class MarketplaceViewModel : ObservableObject
         _tracker = tracker;
         _coordinator = coordinator;
         _notificationService = notificationService;
+        _logger = logger;
     }
 
     [ObservableProperty]
@@ -131,11 +135,7 @@ public partial class MarketplaceViewModel : ObservableObject
 
             string defaultPath =
                 manifest.RecommendedInstallPath
-                ?? Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-                    "StorkDrop",
-                    product.Title
-                );
+                ?? Path.Combine(StorkPaths.DefaultInstallRoot, product.Title);
 
             bool hasFileTypeHandlers = App
                 .Services.GetServices<IStorkDropPlugin>()
@@ -203,7 +203,14 @@ public partial class MarketplaceViewModel : ObservableObject
                         "Click the installation indicator in the status bar to view details."
                     );
                 }
-                catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to show error notification for {ProductTitle}",
+                        product.Title
+                    );
+                }
                 return;
             }
 
@@ -216,7 +223,14 @@ public partial class MarketplaceViewModel : ObservableObject
                     $"Version {product.Version} has been installed."
                 );
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to show success notification for {ProductTitle}",
+                    product.Title
+                );
+            }
             product.IsInstalled = true;
             product.IsInstalling = false;
         }
@@ -255,7 +269,7 @@ public partial class MarketplaceViewModel : ObservableObject
 
             // Load products from all configured feeds
             _allProducts = [];
-            ObservableCollection<string> feedFilters = new([
+            ObservableCollection<string> feedFilters = new ObservableCollection<string>([
                 LocalizationManager.GetString("Filter_AllFeeds"),
             ]);
 
@@ -273,9 +287,13 @@ public partial class MarketplaceViewModel : ObservableObject
                     if (!feedFilters.Contains(feed.Name))
                         feedFilters.Add(feed.Name);
                 }
-                catch
+                catch (Exception ex)
                 {
-                    // Feed unavailable, skip
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to load products from feed {FeedName}",
+                        feed.Name
+                    );
                 }
             }
 
@@ -347,7 +365,6 @@ public partial class MarketplaceViewModel : ObservableObject
             );
         }
 
-        // Feed filter
         if (
             SelectedFeedFilter is not null
             && SelectedFeedFilter != LocalizationManager.GetString("Filter_AllFeeds")
@@ -356,7 +373,6 @@ public partial class MarketplaceViewModel : ObservableObject
             filtered = filtered.Where(p => p.FeedName == SelectedFeedFilter);
         }
 
-        // Type filter
         if (
             SelectedFilterName is not null
             && SelectedFilterName != LocalizationManager.GetString("Filter_AllTypes")
@@ -370,7 +386,6 @@ public partial class MarketplaceViewModel : ObservableObject
             filtered = filtered.Where(p => p.Manifest.InstallType == filterType);
         }
 
-        // Publisher filter
         if (
             SelectedPublisherFilter is not null
             && SelectedPublisherFilter != LocalizationManager.GetString("Filter_AllPublishers")

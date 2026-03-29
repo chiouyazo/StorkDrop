@@ -13,7 +13,8 @@ public sealed class InstallationCoordinator
 {
     private readonly IInstallationEngine _engine;
     private readonly ILogger<InstallationCoordinator> _logger;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _productLocks = new();
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _productLocks =
+        new ConcurrentDictionary<string, SemaphoreSlim>();
 
     public InstallationCoordinator(
         IInstallationEngine engine,

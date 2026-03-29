@@ -1,4 +1,4 @@
-namespace StorkDrop.Registry;
+namespace StorkDrop.Registry.Nexus;
 
 /// <summary>
 /// Represents a repository returned by the Nexus /service/rest/v1/repositories endpoint.

@@ -2,17 +2,18 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
 public sealed class ActivityLogStore : IActivityLog, IDisposable
 {
     private readonly string _filePath;
-    private readonly SemaphoreSlim _lock = new(1, 1);
+    private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
     private List<ActivityLogEntry>? _entries;
     private const int MaxEntries = 1000;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
@@ -20,15 +21,7 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
     };
 
     public ActivityLogStore()
-        : this(
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "StorkDrop",
-                "Stork",
-                "Config",
-                "activity-log.json"
-            )
-        ) { }
+        : this(StorkPaths.ActivityLogFile) { }
 
     public ActivityLogStore(string filePath)
     {
@@ -146,24 +139,9 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
     private async Task SaveAsync(CancellationToken cancellationToken)
     {
         string json = JsonSerializer.Serialize(_entries, JsonOptions);
-        string tempPath = _filePath + ".tmp";
-        try
-        {
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-            File.Move(tempPath, _filePath, overwrite: true);
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best-effort cleanup of temp file
-            }
-        }
+        await SafeFileWriter
+            .WriteAtomicAsync(_filePath, json, cancellationToken)
+            .ConfigureAwait(false);
     }
 
     public void Dispose()

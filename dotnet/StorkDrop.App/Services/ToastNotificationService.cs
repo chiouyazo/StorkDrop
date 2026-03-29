@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Toolkit.Uwp.Notifications;
 using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.App.Services;
@@ -35,7 +36,8 @@ public sealed class ToastNotificationService : INotificationService
 
                 if (compatType is not null)
                 {
-                    Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder builder = new();
+                    Microsoft.Toolkit.Uwp.Notifications.ToastContentBuilder builder =
+                        new ToastContentBuilder();
                     builder.AddText(title);
                     builder.AddText(message);
 

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
@@ -10,10 +11,10 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
 {
     private readonly string _configDir;
     private readonly string _configFilePath;
-    private readonly SemaphoreSlim _saveLock = new(1, 1);
+    private readonly SemaphoreSlim _saveLock = new SemaphoreSlim(1, 1);
     private readonly ILogger<ConfigurationService> _logger;
 
-    private static readonly JsonSerializerOptions JsonOptions = new()
+    private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         WriteIndented = true,
         PropertyNameCaseInsensitive = true,
@@ -21,14 +22,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
     };
 
     public ConfigurationService(ILogger<ConfigurationService> logger)
-        : this(
-            Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "StorkDrop",
-                "Config"
-            ),
-            logger
-        ) { }
+        : this(StorkPaths.ConfigDir, logger) { }
 
     public ConfigurationService(string configDir, ILogger<ConfigurationService> logger)
     {
@@ -67,35 +61,22 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
     {
         _logger.LogInformation("Saving configuration to {Path}", _configFilePath);
         await _saveLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        string tempPath = _configFilePath + ".tmp";
         try
         {
             string json = JsonSerializer.Serialize(configuration, JsonOptions);
-            string backupPath = _configFilePath + ".bak";
-
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
 
             if (File.Exists(_configFilePath))
             {
+                string backupPath = _configFilePath + ".bak";
                 File.Copy(_configFilePath, backupPath, overwrite: true);
-                File.Move(tempPath, _configFilePath, overwrite: true);
             }
-            else
-            {
-                File.Move(tempPath, _configFilePath);
-            }
+
+            await SafeFileWriter
+                .WriteAtomicAsync(_configFilePath, json, cancellationToken)
+                .ConfigureAwait(false);
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best effort cleanup of temp file
-            }
             _saveLock.Release();
         }
     }
@@ -128,31 +109,21 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
         ValidateConfiguration(config);
 
         await _saveLock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        string tempPath = _configFilePath + ".tmp";
         try
         {
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-
             if (File.Exists(_configFilePath))
             {
                 string backupPath = _configFilePath + ".bak";
                 File.Copy(_configFilePath, backupPath, overwrite: true);
             }
 
-            File.Move(tempPath, _configFilePath, overwrite: true);
+            await SafeFileWriter
+                .WriteAtomicAsync(_configFilePath, json, cancellationToken)
+                .ConfigureAwait(false);
             _logger.LogInformation("Configuration imported successfully from {Path}", filePath);
         }
         finally
         {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best effort cleanup of temp file
-            }
             _saveLock.Release();
         }
     }
