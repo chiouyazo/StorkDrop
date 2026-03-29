@@ -14,6 +14,7 @@ public static class ElevationHelper
 
     public static bool PathRequiresAdmin(string path)
     {
+        // Quick check for well-known protected paths
         string normalizedPath = Path.GetFullPath(path).ToLowerInvariant();
         string programFiles = Environment
             .GetFolderPath(Environment.SpecialFolder.ProgramFiles)
@@ -25,9 +26,37 @@ public static class ElevationHelper
             .GetFolderPath(Environment.SpecialFolder.Windows)
             .ToLowerInvariant();
 
-        return normalizedPath.StartsWith(programFiles)
+        if (
+            normalizedPath.StartsWith(programFiles)
             || normalizedPath.StartsWith(programFilesX86)
-            || normalizedPath.StartsWith(windows);
+            || normalizedPath.StartsWith(windows)
+        )
+            return true;
+
+        // Probe actual write access -> handles e.g. C:\Users\Default, ACL-restricted folders, etc.
+        try
+        {
+            // Find the deepest existing directory in the path
+            string? testDir = Path.GetFullPath(path);
+            while (testDir is not null && !Directory.Exists(testDir))
+                testDir = Path.GetDirectoryName(testDir);
+
+            if (testDir is null)
+                return true;
+
+            string testFile = Path.Combine(testDir, $".storkdrop-write-test-{Guid.NewGuid()}");
+            using (File.Create(testFile)) { }
+            File.Delete(testFile);
+            return false;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return true;
+        }
+        catch (IOException)
+        {
+            return true;
+        }
     }
 
     public static bool RunElevatedInstall(

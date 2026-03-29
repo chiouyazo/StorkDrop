@@ -839,6 +839,9 @@ public sealed class InstallationEngine : IInstallationEngine
                 "Installation failed at step Installing (file copy): {Error}",
                 ex.Message
             );
+            progress.Report(
+                new InstallProgress(InstallStage.Installing, 0, $"File copy failed: {ex.Message}")
+            );
             RevertDeferredRenames(deferredRenames, targetPath);
             return new InstallResult
             {
