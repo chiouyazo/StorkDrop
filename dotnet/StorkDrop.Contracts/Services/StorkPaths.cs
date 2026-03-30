@@ -32,6 +32,9 @@ public static class StorkPaths
     public static string PluginTempDir { get; } =
         Path.Combine(Path.GetTempPath(), "StorkDrop", "plugin-temp");
 
+    public static string PluginsDirectory { get; } =
+        Path.Combine(AppContext.BaseDirectory, "plugins");
+
     public static string DefaultInstallRoot { get; } =
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),

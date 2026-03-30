@@ -20,6 +20,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<EnvironmentVariableService>();
         services.AddSingleton<InstallationCoordinator>();
         services.AddSingleton<IPluginSettingsStore, PluginSettingsStore>();
+        services.AddSingleton<ISelfUpdateChecker, GitHubUpdateChecker>();
 
         return services;
     }

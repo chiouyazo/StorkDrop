@@ -327,4 +327,16 @@
 Are you sure you want to close?</system:String
   >
   <system:String x:Key="Closing_ActiveInstallations_Title">Installations in progress</system:String>
+
+  <!-- StorkDrop self-update -->
+  <system:String x:Key="Settings_StorkDropUpdates">StorkDrop Updates</system:String>
+  <system:String x:Key="Settings_CheckForUpdates">Check for StorkDrop updates</system:String>
+  <system:String x:Key="Settings_IncludeDevVersions">Include development versions</system:String>
+  <system:String x:Key="Update_Available_Title">Update Available</system:String>
+  <system:String x:Key="Update_Available_Message"
+    >StorkDrop {0} is available. Would you like to download and install it?</system:String
+  >
+  <system:String x:Key="Update_Now">Update Now</system:String>
+  <system:String x:Key="Update_Later">Later</system:String>
+  <system:String x:Key="Update_ReleaseNotes">Release Notes</system:String>
 </ResourceDictionary>

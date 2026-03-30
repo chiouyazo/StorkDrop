@@ -11,5 +11,7 @@ public sealed record AppConfiguration(
     ProxySettings? ProxySettings = null,
     string Language = "en",
     string? LogLevel = "Information",
-    bool HasShownTrayToast = false
+    bool HasShownTrayToast = false,
+    bool CheckForStorkDropUpdates = true,
+    bool IncludeDevVersions = false
 );

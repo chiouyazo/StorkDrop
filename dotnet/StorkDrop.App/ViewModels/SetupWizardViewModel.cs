@@ -65,6 +65,9 @@ public partial class SetupWizardViewModel : ObservableObject
     private bool _autoCheckForUpdates = true;
 
     [ObservableProperty]
+    private bool _checkForStorkDropUpdates = true;
+
+    [ObservableProperty]
     private string _proxyHost = string.Empty;
 
     [ObservableProperty]
@@ -185,7 +188,8 @@ public partial class SetupWizardViewModel : ObservableObject
             AutoCheckForUpdates: AutoCheckForUpdates,
             CheckInterval: TimeSpan.FromHours(4),
             ProxySettings: proxy,
-            Language: LocalizationManager.Language
+            Language: LocalizationManager.Language,
+            CheckForStorkDropUpdates: CheckForStorkDropUpdates
         );
 
         await _configurationService.SaveAsync(config);

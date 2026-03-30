@@ -706,7 +706,23 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
-        string resolvedTargetPath = options.TargetPath;
+        // Resolve built-in {StorkPath} template (points to StorkDrop's own install directory)
+        string resolvedTargetPath = options.TargetPath.Replace(
+            "{StorkPath}",
+            AppContext.BaseDirectory.TrimEnd(
+                Path.DirectorySeparatorChar,
+                Path.AltDirectorySeparatorChar
+            )
+        );
+        if (resolvedTargetPath != options.TargetPath)
+        {
+            _logger.LogInformation(
+                "Resolved {{StorkPath}} in install path: {Resolved}",
+                resolvedTargetPath
+            );
+        }
+
+        // Allow plugins to resolve additional templates
         if (OnResolveInstallPath is not null)
         {
             string? resolved = OnResolveInstallPath(resolvedTargetPath, fileHandlerContext);

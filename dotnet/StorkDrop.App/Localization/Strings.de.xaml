@@ -357,4 +357,18 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
   <system:String x:Key="Closing_ActiveInstallations_Title"
     >Installationen in Bearbeitung</system:String
   >
+
+  <!-- StorkDrop self-update -->
+  <system:String x:Key="Settings_StorkDropUpdates">StorkDrop-Updates</system:String>
+  <system:String x:Key="Settings_CheckForUpdates">Nach StorkDrop-Updates suchen</system:String>
+  <system:String x:Key="Settings_IncludeDevVersions"
+    >Entwicklungsversionen einschlie&#223;en</system:String
+  >
+  <system:String x:Key="Update_Available_Title">Update verf&#252;gbar</system:String>
+  <system:String x:Key="Update_Available_Message"
+    >StorkDrop {0} ist verf&#252;gbar. M&#246;chten Sie es herunterladen und installieren?</system:String
+  >
+  <system:String x:Key="Update_Now">Jetzt aktualisieren</system:String>
+  <system:String x:Key="Update_Later">Sp&#228;ter</system:String>
+  <system:String x:Key="Update_ReleaseNotes">&#196;nderungen</system:String>
 </ResourceDictionary>

@@ -314,6 +314,30 @@
         </StackPanel>
       </Border>
 
+      <!-- StorkDrop Updates -->
+      <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
+        <StackPanel>
+          <TextBlock
+            Text="{DynamicResource Settings_StorkDropUpdates}"
+            Style="{DynamicResource HeadingSmall}"
+            Margin="0,0,0,12"
+          />
+
+          <CheckBox
+            Content="{DynamicResource Settings_CheckForUpdates}"
+            IsChecked="{Binding CheckForStorkDropUpdates}"
+            Margin="0,0,0,8"
+          />
+
+          <CheckBox
+            Content="{DynamicResource Settings_IncludeDevVersions}"
+            IsChecked="{Binding IncludeDevVersions}"
+            IsEnabled="{Binding CheckForStorkDropUpdates}"
+            Margin="0,0,0,8"
+          />
+        </StackPanel>
+      </Border>
+
       <!-- Proxy Settings -->
       <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
         <StackPanel>
