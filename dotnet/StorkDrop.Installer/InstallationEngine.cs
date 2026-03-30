@@ -1074,7 +1074,28 @@ public sealed class InstallationEngine : IInstallationEngine
             installed.Version,
             newManifest.Version
         );
-        _fileLockDetector.ThrowIfAnyLocked(installed.InstalledPath);
+        // Don't throw on locked files -> InstallAsync handles them via rename + deferred delete.
+        // Only warn so the user knows a reboot may be needed.
+        try
+        {
+            _fileLockDetector.ThrowIfAnyLocked(installed.InstalledPath);
+        }
+        catch (FileLockedException ex)
+        {
+            _logger.LogWarning(
+                "Locked files detected during update of {ProductId}: {File} (used by {Processes}). Files will be replaced on next reboot.",
+                installed.ProductId,
+                ex.FileName,
+                ex.ProcessNames
+            );
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"Warning: {ex.FileName} is in use. It will be updated on next reboot."
+                )
+            );
+        }
 
         string? backupPath = null;
         if (options.CreateBackup && Directory.Exists(installed.InstalledPath))
@@ -1112,12 +1133,28 @@ public sealed class InstallationEngine : IInstallationEngine
                 // Best-effort
             }
 
-            _logger.LogDebug(
-                "Deleting old installation at {InstalledPath}",
-                installed.InstalledPath
-            );
+            // Try to clean old installation, but don't fail if files are locked
+            // InstallAsync's CopyDirectoryWithLockHandlingAsync will handle locked files
+            // via rename + deferred delete on reboot.
             if (Directory.Exists(installed.InstalledPath))
-                Directory.Delete(installed.InstalledPath, true);
+            {
+                _logger.LogDebug(
+                    "Cleaning old installation at {InstalledPath}",
+                    installed.InstalledPath
+                );
+                try
+                {
+                    Directory.Delete(installed.InstalledPath, true);
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Could not fully delete old installation at {Path}, will overwrite in place",
+                        installed.InstalledPath
+                    );
+                }
+            }
 
             _logger.LogDebug(
                 "Running InstallAsync for new version {NewVersion}",
@@ -1355,18 +1392,48 @@ public sealed class InstallationEngine : IInstallationEngine
 
             if (File.Exists(targetPath) && _fileLockDetector.IsFileLocked(targetPath))
             {
-                // File-in-use handling: rename locked file, place new file, schedule delete
-                string delFileName = $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(targetPath)}";
-                string delPath = Path.Combine(Path.GetDirectoryName(targetPath)!, delFileName);
-                File.Move(targetPath, delPath);
-                deferredRenames.Add(delPath);
-
+                _logger.LogInformation(
+                    "File {File} is locked, deferring replacement",
+                    Path.GetFileName(targetPath)
+                );
+                DeferLockedFile(
+                    fileOps,
+                    deferredOps,
+                    deferredRenames,
+                    file.FullName,
+                    targetPath,
+                    cancellationToken
+                );
                 await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
-                deferredOps.ScheduleDeleteOnReboot(delPath);
             }
             else
             {
-                await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
+                try
+                {
+                    await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
+                }
+                catch (Exception ex)
+                    when (File.Exists(targetPath)
+                        && (ex is IOException or UnauthorizedAccessException)
+                    )
+                {
+                    // Copy failed because the file is in use (lock check was too lenient).
+                    // Fall back to rename + deferred delete.
+                    _logger.LogWarning(
+                        "Copy failed for {File}, falling back to deferred replace: {Error}",
+                        Path.GetFileName(targetPath),
+                        ex.Message
+                    );
+                    DeferLockedFile(
+                        fileOps,
+                        deferredOps,
+                        deferredRenames,
+                        file.FullName,
+                        targetPath,
+                        cancellationToken
+                    );
+                    await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
+                }
             }
 
             processedFiles++;
@@ -1374,6 +1441,22 @@ public sealed class InstallationEngine : IInstallationEngine
                 totalFiles > 0 ? (int)((double)processedFiles / totalFiles * 100) : 100;
             progress?.Report(percentage);
         }
+    }
+
+    private static void DeferLockedFile(
+        FileOperations fileOps,
+        DeferredFileOps deferredOps,
+        List<string> deferredRenames,
+        string sourceFile,
+        string targetPath,
+        CancellationToken cancellationToken
+    )
+    {
+        string delFileName = $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(targetPath)}";
+        string delPath = Path.Combine(Path.GetDirectoryName(targetPath)!, delFileName);
+        File.Move(targetPath, delPath);
+        deferredRenames.Add(delPath);
+        deferredOps.ScheduleDeleteOnReboot(delPath);
     }
 
     private static void RevertDeferredRenames(List<string> deferredRenames, string targetDir)
