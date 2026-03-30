@@ -156,7 +156,30 @@ public partial class InstalledViewModel : ObservableObject
             );
             if (installed is not null)
             {
-                await _coordinator.UninstallWithIsolationAsync(installed, cancellationToken);
+                try
+                {
+                    await _coordinator.UninstallWithIsolationAsync(installed, cancellationToken);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Access denied -> retry with elevation
+                    _logger.LogInformation(
+                        "Uninstall of {ProductId} failed with access denied, retrying elevated",
+                        product.ProductId
+                    );
+                    bool elevated = await Task.Run(() =>
+                        ElevationHelper.RunElevatedUninstall(product.ProductId)
+                    );
+                    if (!elevated)
+                    {
+                        _dialogService.ShowError(
+                            LocalizationManager.GetString("Error_AdminDenied_Uninstall")
+                        );
+                        return;
+                    }
+                    await _productRepository.ReloadAsync();
+                }
+
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
                 OnPropertyChanged(nameof(HasNoProducts));
