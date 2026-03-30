@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using StorkDrop.App.Services;
 using StorkDrop.App.ViewModels;
 using StorkDrop.App.Views;
 using StorkDrop.App.Views.SetupWizard;
@@ -133,6 +134,9 @@ public partial class App : Application
 
             MainWindow mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
+
+            // Fire-and-forget self-update check
+            _ = CheckForSelfUpdateAsync(mainWindow);
         }
         catch (Exception ex)
         {
@@ -143,6 +147,45 @@ public partial class App : Application
                 MessageBoxImage.Error
             );
             Shutdown();
+        }
+    }
+
+    private async Task CheckForSelfUpdateAsync(Window owner)
+    {
+        try
+        {
+            IConfigurationService configService =
+                Services.GetRequiredService<IConfigurationService>();
+            AppConfiguration? config = await configService.LoadAsync();
+            if (config is null || !config.CheckForStorkDropUpdates)
+                return;
+
+            ISelfUpdateChecker checker = Services.GetRequiredService<ISelfUpdateChecker>();
+            UpdateInfo? update = await checker.CheckForUpdateAsync(config.IncludeDevVersions);
+            if (update is null)
+                return;
+
+            bool shouldUpdate = Dispatcher.Invoke(() =>
+            {
+                Views.UpdateNotificationDialog dialog = new(
+                    update.Version,
+                    update.ReleaseNotes ?? ""
+                )
+                {
+                    Owner = owner,
+                };
+                return dialog.ShowDialog() == true;
+            });
+
+            if (shouldUpdate)
+            {
+                SelfUpdateService updateService = Services.GetRequiredService<SelfUpdateService>();
+                await updateService.DownloadAndLaunchInstallerAsync(update);
+            }
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Self-update check failed: {ex.Message}");
         }
     }
 

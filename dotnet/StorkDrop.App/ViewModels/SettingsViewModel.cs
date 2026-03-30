@@ -70,6 +70,12 @@ public partial class SettingsViewModel : ObservableObject
     private string _selectedLogLevel = "Information";
 
     [ObservableProperty]
+    private bool _checkForStorkDropUpdates = true;
+
+    [ObservableProperty]
+    private bool _includeDevVersions;
+
+    [ObservableProperty]
     private string _errorMessage = string.Empty;
 
     [ObservableProperty]
@@ -149,6 +155,9 @@ public partial class SettingsViewModel : ObservableObject
             AutoStart = config.AutoStart;
             AutoCheckForUpdates = config.AutoCheckForUpdates;
             CheckIntervalHours = (int)config.CheckInterval.TotalHours;
+
+            CheckForStorkDropUpdates = config.CheckForStorkDropUpdates;
+            IncludeDevVersions = config.IncludeDevVersions;
 
             SelectedLanguage = config.Language;
             SelectedLogLevel = config.LogLevel ?? "Information";
@@ -279,7 +288,9 @@ public partial class SettingsViewModel : ObservableObject
                 CheckInterval: TimeSpan.FromHours(CheckIntervalHours),
                 ProxySettings: proxy,
                 Language: SelectedLanguage,
-                LogLevel: SelectedLogLevel
+                LogLevel: SelectedLogLevel,
+                CheckForStorkDropUpdates: CheckForStorkDropUpdates,
+                IncludeDevVersions: IncludeDevVersions
             );
 
             await _configurationService.SaveAsync(config);
