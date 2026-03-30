@@ -18,25 +18,21 @@ public partial class InstalledViewModel : ObservableObject
 {
     private readonly IProductRepository _productRepository;
     private readonly InstallationCoordinator _coordinator;
+    private readonly UninstallService _uninstallService;
     private readonly DialogService _dialogService;
     private readonly ILogger<InstalledViewModel> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="InstalledViewModel"/> class.
-    /// </summary>
-    /// <param name="productRepository">The repository for installed products.</param>
-    /// <param name="coordinator">The installation coordinator for isolated operations.</param>
-    /// <param name="dialogService">The dialog service for user confirmations.</param>
-    /// <param name="logger">The logger instance.</param>
     public InstalledViewModel(
         IProductRepository productRepository,
         InstallationCoordinator coordinator,
+        UninstallService uninstallService,
         DialogService dialogService,
         ILogger<InstalledViewModel> logger
     )
     {
         _productRepository = productRepository;
         _coordinator = coordinator;
+        _uninstallService = uninstallService;
         _dialogService = dialogService;
         _logger = logger;
     }
@@ -162,7 +158,6 @@ public partial class InstalledViewModel : ObservableObject
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    // Access denied -> retry with elevation
                     _logger.LogInformation(
                         "Uninstall of {ProductId} failed with access denied, retrying elevated",
                         product.ProductId
@@ -183,11 +178,15 @@ public partial class InstalledViewModel : ObservableObject
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
                 OnPropertyChanged(nameof(HasNoProducts));
-                _dialogService.ShowInfo(
-                    LocalizationManager
-                        .GetString("Info_UninstallSuccess")
+
+                string message = _uninstallService.RequiresReboot
+                    ? LocalizationManager
+                        .GetString("Info_UninstallNeedsReboot")
                         .Replace("{0}", product.Title)
-                );
+                    : LocalizationManager
+                        .GetString("Info_UninstallSuccess")
+                        .Replace("{0}", product.Title);
+                _dialogService.ShowInfo(message);
             }
         }
         catch (FileLockedException ex)
