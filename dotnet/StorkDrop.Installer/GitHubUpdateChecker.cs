@@ -127,7 +127,7 @@ public sealed class GitHubUpdateChecker : ISelfUpdateChecker
         CancellationToken ct
     )
     {
-        string url = $"{GitHubApiBase}/repos/{GitHubRepo}/releases?per_page=1";
+        string url = $"{GitHubApiBase}/repos/{GitHubRepo}/releases?per_page=10";
         HttpResponseMessage response = await client.GetAsync(url, ct);
 
         if (!response.IsSuccessStatusCode)
@@ -137,7 +137,11 @@ public sealed class GitHubUpdateChecker : ISelfUpdateChecker
             JsonOptions,
             ct
         );
-        return releases?.FirstOrDefault();
+
+        if (releases is null or { Length: 0 })
+            return null;
+
+        return releases.OrderByDescending(r => r.PublishedAt).First();
     }
 
     private sealed class GitHubRelease
