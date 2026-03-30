@@ -187,6 +187,9 @@
 
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} wurde deinstalliert.</system:String>
+  <system:String x:Key="Info_UninstallNeedsReboot"
+    >{0} wurde deinstalliert. Einige Dateien sind noch in Verwendung und werden beim nächsten Neustart entfernt.</system:String
+  >
   <system:String x:Key="Info_InstallSuccess">{0} wurde erfolgreich installiert.</system:String>
 
   <!-- File operations -->

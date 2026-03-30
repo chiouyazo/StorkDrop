@@ -18,13 +18,20 @@ public sealed class UninstallService
     private readonly IActivityLog _activityLog;
     private readonly IFileLockDetector _fileLockDetector;
     private readonly EnvironmentVariableService _envVarService;
+    private readonly DeferredFileOps _deferredFileOps;
     private readonly ILogger<UninstallService> _logger;
+
+    /// <summary>
+    /// Set to true after an uninstall deferred locked files for reboot deletion.
+    /// </summary>
+    public bool RequiresReboot { get; private set; }
 
     public UninstallService(
         IProductRepository productRepository,
         IActivityLog activityLog,
         IFileLockDetector fileLockDetector,
         EnvironmentVariableService envVarService,
+        DeferredFileOps deferredFileOps,
         ILogger<UninstallService> logger
     )
     {
@@ -32,6 +39,7 @@ public sealed class UninstallService
         _activityLog = activityLog;
         _fileLockDetector = fileLockDetector;
         _envVarService = envVarService;
+        _deferredFileOps = deferredFileOps;
         _logger = logger;
     }
 
@@ -52,7 +60,7 @@ public sealed class UninstallService
             product.InstalledPath
         );
 
-        _fileLockDetector.ThrowIfAnyLocked(product.InstalledPath);
+        RequiresReboot = false;
 
         _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
         await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
@@ -247,7 +255,7 @@ public sealed class UninstallService
         }
     }
 
-    private static async Task DeleteFileWithRetryAsync(
+    private async Task DeleteFileWithRetryAsync(
         string filePath,
         CancellationToken cancellationToken
     )
@@ -259,13 +267,35 @@ public sealed class UninstallService
                 File.Delete(filePath);
                 return;
             }
-            catch (IOException) when (attempt < MaxRetries)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                await Task.Delay(RetryDelay, cancellationToken);
-            }
-            catch (UnauthorizedAccessException) when (attempt < MaxRetries)
-            {
-                await Task.Delay(RetryDelay, cancellationToken);
+                if (attempt < MaxRetries)
+                {
+                    await Task.Delay(RetryDelay, cancellationToken);
+                    continue;
+                }
+
+                // All retries exhausted -> defer deletion to reboot
+                _logger.LogWarning(
+                    "Cannot delete {File}, scheduling for removal on reboot",
+                    Path.GetFileName(filePath)
+                );
+                try
+                {
+                    string delName = $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(filePath)}";
+                    string delPath = Path.Combine(Path.GetDirectoryName(filePath)!, delName);
+                    File.Move(filePath, delPath);
+                    _deferredFileOps.ScheduleDeleteOnReboot(delPath);
+                    RequiresReboot = true;
+                }
+                catch (Exception renameEx)
+                {
+                    _logger.LogWarning(
+                        renameEx,
+                        "Could not defer delete for {File}, skipping",
+                        Path.GetFileName(filePath)
+                    );
+                }
             }
         }
     }
@@ -293,26 +323,34 @@ public sealed class UninstallService
         }
     }
 
-    private static async Task DeleteDirectoryWithRetryAsync(
+    private async Task DeleteDirectoryWithRetryAsync(
         string path,
         CancellationToken cancellationToken
     )
     {
-        for (int attempt = 1; attempt <= MaxRetries; attempt++)
+        // Delete files individually (with deferred fallback for locked ones)
+        if (Directory.Exists(path))
         {
-            try
+            foreach (string file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
             {
+                await DeleteFileWithRetryAsync(file, cancellationToken);
+            }
+
+            CleanupEmptyDirectories(path);
+        }
+
+        // Try to remove the root directory if it's now empty
+        try
+        {
+            if (Directory.Exists(path))
                 Directory.Delete(path, recursive: true);
-                return;
-            }
-            catch (IOException) when (attempt < MaxRetries)
-            {
-                await Task.Delay(RetryDelay, cancellationToken);
-            }
-            catch (UnauthorizedAccessException) when (attempt < MaxRetries)
-            {
-                await Task.Delay(RetryDelay, cancellationToken);
-            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            _logger.LogWarning(
+                "Directory {Path} could not be fully removed (locked files deferred to reboot)",
+                path
+            );
         }
     }
 }

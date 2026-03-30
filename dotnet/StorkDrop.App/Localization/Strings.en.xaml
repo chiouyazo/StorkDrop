@@ -165,6 +165,9 @@
 
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} has been uninstalled.</system:String>
+  <system:String x:Key="Info_UninstallNeedsReboot"
+    >{0} has been uninstalled. Some files are still in use and will be removed on next restart.</system:String
+  >
   <system:String x:Key="Info_InstallSuccess">{0} has been installed successfully.</system:String>
 
   <!-- File operations -->
