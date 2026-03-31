@@ -325,6 +325,10 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
 
 ## Plugin system
 
+See the full plugin guides:
+- [App-Level Plugins](docs/app-level-plugins.md) - Extend StorkDrop with custom file handlers, settings pages, and path resolvers
+- [Product-Level Plugins](docs/product-level-plugins.md) - Ship pre/post install logic with your product (database setup, validation, config generation)
+
 ### App-level plugins (`IStorkDropPlugin`)
 
 Drop a DLL in the `plugins/` directory next to StorkDrop. It's discovered and loaded automatically at startup. Plugins can:
@@ -401,6 +405,57 @@ public class MyInstaller : IStorkPlugin
     }
 }
 ```
+
+### How product plugins are loaded
+
+When a product manifest references a plugin, StorkDrop loads it from the extracted package at install time:
+
+1. The package ZIP is downloaded and extracted to a temp directory
+2. StorkDrop reads the `plugins` array from the manifest
+3. For each plugin entry, it loads the assembly from the temp directory
+4. Each plugin DLL gets its own `AssemblyLoadContext` that resolves dependencies in this order:
+   - First, the plugin's own directory (for dependencies the plugin ships, like `Microsoft.Data.SqlClient`)
+   - Then, the host application (for shared types like `StorkDrop.Contracts`)
+5. The plugin type is instantiated and its methods are called during the install lifecycle
+
+This means product plugins can bring their own NuGet dependencies without conflicting with StorkDrop or other plugins. To include dependencies, use `dotnet publish` for the plugin project so all runtime DLLs are output, then package them alongside the product.
+
+**Packaging a product with a plugin:**
+
+```
+my-product-1.0.0.zip           (outer ZIP)
+  contents.zip                  (inner ZIP - product files for install dir)
+    MyApp.exe
+    MyApp.dll
+  MyProduct.Installer.dll       (loose - plugin assembly)
+  Microsoft.Data.SqlClient.dll  (loose - plugin dependency)
+  update.sql                    (loose - handled by app-level file type handler)
+```
+
+The manifest references the plugin by assembly name and type:
+
+```json
+{
+  "plugins": [{
+    "assembly": "MyProduct.Installer.dll",
+    "typeName": "MyProduct.Installer.MyInstallerPlugin"
+  }]
+}
+```
+
+StorkDrop finds `MyProduct.Installer.dll` in the extraction directory, loads it with its dependencies, calls `GetConfigurationSchema` to show the UI, then `PreInstallAsync`/`PostInstallAsync` around the file copy step.
+
+### Built-in path templates
+
+StorkDrop resolves `{StorkPath}` in install paths automatically (no plugin needed). This points to StorkDrop's own installation directory, useful for installing StorkDrop plugins:
+
+```json
+{
+  "recommendedInstallPath": "{StorkPath}/plugins"
+}
+```
+
+Additional templates like `{StepsPath}` are resolved by app-level plugins implementing `IInstallPathResolver`.
 
 ### Configuration field types
 

@@ -1587,9 +1587,8 @@ public sealed class InstallationEngine : IInstallationEngine
         if (!File.Exists(assemblyPath))
             throw new FileNotFoundException($"Plugin assembly not found: {pluginInfo.Assembly}");
 
-        System.Reflection.Assembly assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(
-            assemblyPath
-        );
+        ProductPluginLoadContext loadContext = new(Path.GetDirectoryName(assemblyPath)!);
+        System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
         Type? pluginType =
             assembly.GetType(pluginInfo.TypeName)
             ?? throw new TypeLoadException($"Type not found: {pluginInfo.TypeName}");
