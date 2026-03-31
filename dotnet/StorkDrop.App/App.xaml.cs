@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using StorkDrop.App.Services;
 using StorkDrop.App.ViewModels;
 using StorkDrop.App.Views;
@@ -248,7 +249,15 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Self-update check failed: {ex.Message}");
+            Debug.WriteLine($"Self-update check failed: {ex}");
+            try
+            {
+                var logger = Services
+                    ?.GetService<Microsoft.Extensions.Logging.ILoggerFactory>()
+                    ?.CreateLogger<App>();
+                logger?.LogError(ex, "Self-update check failed");
+            }
+            catch { }
         }
     }
 
