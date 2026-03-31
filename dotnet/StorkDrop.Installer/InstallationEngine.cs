@@ -361,6 +361,20 @@ public sealed class InstallationEngine : IInstallationEngine
             if (copyError is not null)
                 return copyError;
 
+            // Unload plugin contexts from PreInstall phase before copying to .stork/
+            // (the DLLs may already exist from a previous install and be locked)
+            foreach (ProductPluginLoadContext ctx in _activePluginContexts)
+            {
+                try
+                {
+                    ctx.Unload();
+                }
+                catch { }
+            }
+            _activePluginContexts.Clear();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
             // Copy plugin directory to .stork/plugins/ and save manifest for uninstall
             string pluginsExtractDir = Path.Combine(extractPath, "plugins");
             if (Directory.Exists(pluginsExtractDir))
@@ -382,7 +396,35 @@ public sealed class InstallationEngine : IInstallationEngine
                     string? targetDir = Path.GetDirectoryName(targetFile);
                     if (targetDir is not null)
                         Directory.CreateDirectory(targetDir);
-                    await pluginCopyOps.CopyFileAsync(file, targetFile, cancellationToken);
+
+                    try
+                    {
+                        await pluginCopyOps.CopyFileAsync(file, targetFile, cancellationToken);
+                    }
+                    catch (IOException)
+                    {
+                        // File still locked after context unload - use deferred replace
+                        if (File.Exists(targetFile))
+                        {
+                            string delName =
+                                $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(targetFile)}";
+                            string delPath = Path.Combine(
+                                Path.GetDirectoryName(targetFile)!,
+                                delName
+                            );
+                            File.Move(targetFile, delPath);
+                            new DeferredFileOps().ScheduleDeleteOnReboot(delPath);
+                            await pluginCopyOps.CopyFileAsync(file, targetFile, cancellationToken);
+                            _logger.LogWarning(
+                                "Plugin file {File} was locked, deferred old version for reboot delete",
+                                Path.GetFileName(targetFile)
+                            );
+                        }
+                        else
+                        {
+                            throw;
+                        }
+                    }
                 }
             }
 
@@ -1219,9 +1261,14 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
+        // Use resolvedPath (not options.TargetPath which may still have {StepsPath} template)
+        InstallOptions resolvedOptions = options with
+        {
+            TargetPath = resolvedPath,
+        };
         PluginPhaseResult postInstallResult = await RunPluginPhaseAsync(
             manifest,
-            options,
+            resolvedOptions,
             pluginContext,
             PluginPhase.PostInstall,
             cancellationToken
@@ -1673,10 +1720,10 @@ public sealed class InstallationEngine : IInstallationEngine
                     false,
                     cancellationToken
                 );
-                if (phase == PluginPhase.PreInstall || phase == PluginPhase.PreUninstall)
-                {
-                    return new PluginPhaseResult { Success = false, ErrorMessage = ex.Message };
-                }
+                if (phase == PluginPhase.PostUninstall)
+                    continue;
+
+                return new PluginPhaseResult { Success = false, ErrorMessage = ex.Message };
             }
         }
 
@@ -1928,7 +1975,9 @@ public sealed class InstallationEngine : IInstallationEngine
     {
         string assemblyPath = Path.GetFullPath(Path.Combine(basePath, pluginInfo.Assembly));
         if (!File.Exists(assemblyPath))
-            throw new FileNotFoundException($"Plugin assembly not found: {pluginInfo.Assembly}");
+            throw new FileNotFoundException(
+                $"Plugin assembly not found: {pluginInfo.Assembly} (searched at: {assemblyPath})"
+            );
 
         string pluginDir = Path.GetDirectoryName(assemblyPath)!;
         ProductPluginLoadContext loadContext = new(pluginDir);

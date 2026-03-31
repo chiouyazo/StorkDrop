@@ -595,6 +595,8 @@ Logs in `%APPDATA%/StorkDrop/Logs/` (Serilog, rolling daily, 30-day retention).
 - **Rollback history** - keep multiple backup versions with a UI to restore any previous state
 - **Dependency resolution** - declare dependencies between products and install them in the correct order
 - **Signed manifests** - GPG/Authenticode signing for manifests and packages with verification on install
+- **Plugin logging** - pass an `ILogger` to product plugins via `PluginContext` so plugins can write to the install log window
+- **Reduce file copy log spam** - report copy progress as percentage instead of per-file "Copying files..." entries
 - **Linux support** - extend beyond Windows with systemd service management and package integration
 - **Additional languages** - expand localization beyond English and German
 
