@@ -520,10 +520,31 @@
                     <TextBlock
                       Text="{Binding StatusMessage}"
                       FontSize="11"
-                      Foreground="#999999"
                       Margin="0,2,0,0"
                       TextTrimming="CharacterEllipsis"
-                    />
+                    >
+                      <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                          <Setter Property="Foreground" Value="#999999" />
+                          <Style.Triggers>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsCompleted}" Value="True" />
+                                <Condition Binding="{Binding IsSuccess}" Value="True" />
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Foreground" Value="#2E7D32" />
+                            </MultiDataTrigger>
+                            <MultiDataTrigger>
+                              <MultiDataTrigger.Conditions>
+                                <Condition Binding="{Binding IsCompleted}" Value="True" />
+                                <Condition Binding="{Binding IsSuccess}" Value="False" />
+                              </MultiDataTrigger.Conditions>
+                              <Setter Property="Foreground" Value="#D32F2F" />
+                            </MultiDataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </TextBlock.Style>
+                    </TextBlock>
                     <!-- Progress bar (only when active) -->
                     <ProgressBar
                       Value="{Binding Percentage}"
