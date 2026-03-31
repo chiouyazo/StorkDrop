@@ -180,7 +180,31 @@ public partial class App : Application
             if (shouldUpdate)
             {
                 SelfUpdateService updateService = Services.GetRequiredService<SelfUpdateService>();
-                await updateService.DownloadAndLaunchInstallerAsync(update);
+
+                await Dispatcher.InvokeAsync(() =>
+                {
+                    owner.IsEnabled = false;
+                    owner.Title = $"StorkDrop - Downloading update v{update.Version}...";
+                });
+
+                try
+                {
+                    await updateService.DownloadAndLaunchInstallerAsync(update);
+                }
+                catch (Exception dlEx)
+                {
+                    await Dispatcher.InvokeAsync(() =>
+                    {
+                        owner.IsEnabled = true;
+                        owner.Title = "StorkDrop";
+                        MessageBox.Show(
+                            $"Update download failed: {dlEx.Message}",
+                            "Update Error",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error
+                        );
+                    });
+                }
             }
         }
         catch (Exception ex)
