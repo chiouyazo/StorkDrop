@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -97,6 +98,23 @@ public partial class App : Application
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
 
             engine.OnFileHandlerConfigNeeded = (fields, currentValues) =>
+            {
+                Dictionary<string, string>? result = null;
+                Dispatcher.Invoke(() =>
+                {
+                    ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                        fields,
+                        currentValues
+                    );
+                    Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
+                    dialog.Owner = MainWindow;
+                    if (dialog.ShowDialog() == true)
+                        result = vm.GetValues();
+                });
+                return result;
+            };
+
+            engine.OnPluginConfigNeeded = (fields, currentValues) =>
             {
                 Dictionary<string, string>? result = null;
                 Dispatcher.Invoke(() =>
@@ -215,6 +233,8 @@ public partial class App : Application
 
     private Task RunElevatedInstallAsync(string productId, string targetPath, string feedId)
     {
+        Dictionary<string, string>? configValues = LoadElevationConfigFile();
+
         return RunElevatedAsync(
             "install",
             async services =>
@@ -229,7 +249,8 @@ public partial class App : Application
                     InstallOptions options = new InstallOptions(
                         TargetPath: targetPath,
                         FeedId: feedId,
-                        SkipFileHandlers: true
+                        SkipFileHandlers: true,
+                        PluginConfigValues: configValues
                     );
                     Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
                     await engine.InstallAsync(manifest, options, progress);
@@ -312,6 +333,32 @@ public partial class App : Application
             }
             catch { }
         }
+    }
+
+    private static Dictionary<string, string>? LoadElevationConfigFile()
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--config-file")
+            {
+                string path = args[i + 1];
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        string json = File.ReadAllText(path);
+                        File.Delete(path);
+                        return System.Text.Json.JsonSerializer.Deserialize<
+                            Dictionary<string, string>
+                        >(json);
+                    }
+                }
+                catch { }
+                break;
+            }
+        }
+        return null;
     }
 
     protected override void OnExit(ExitEventArgs e)

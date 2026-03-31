@@ -63,7 +63,8 @@ public static class ElevationHelper
         string productId,
         string version,
         string targetPath,
-        string feedId
+        string feedId,
+        string? configFilePath = null
     )
     {
         try
@@ -75,13 +76,16 @@ public static class ElevationHelper
                 return false;
 
             string pluginDirArgs = GetPluginDirArgs();
+            string configFileArg = configFilePath is not null
+                ? $"--config-file \"{configFilePath}\""
+                : "";
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments =
-                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" {pluginDirArgs}",
+                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" {pluginDirArgs} {configFileArg}".Trim(),
             };
 
             Process? process = Process.Start(startInfo);
@@ -128,7 +132,12 @@ public static class ElevationHelper
         }
     }
 
-    public static bool RunElevatedUpdate(string productId, string targetPath, string feedId)
+    public static bool RunElevatedUpdate(
+        string productId,
+        string targetPath,
+        string feedId,
+        string? configFilePath = null
+    )
     {
         try
         {
@@ -138,13 +147,16 @@ public static class ElevationHelper
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
+            string configFileArg = configFilePath is not null
+                ? $"--config-file \"{configFilePath}\""
+                : "";
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments =
-                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" {GetPluginDirArgs()}",
+                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
             };
 
             Process? process = Process.Start(startInfo);
