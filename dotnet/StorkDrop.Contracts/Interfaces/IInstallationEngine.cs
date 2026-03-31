@@ -40,6 +40,13 @@ public interface IInstallationEngine
     FileHandlerConfigCallback? OnFileHandlerConfigNeeded { get; set; }
 
     /// <summary>
+    /// Set by the UI layer to show product plugin configuration dialogs.
+    /// Called after extraction, before PreInstall, when a product has IStorkPlugin with config fields.
+    /// Returns null if the user cancels.
+    /// </summary>
+    FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
+
+    /// <summary>
     /// Gets the plugin configuration schema for the specified product manifest.
     /// </summary>
     /// <param name="manifest">The product manifest to get configuration for.</param>
@@ -47,6 +54,7 @@ public interface IInstallationEngine
     /// <returns>A list of plugin configuration fields.</returns>
     Task<IReadOnlyList<PluginConfigField>> GetPluginConfigurationAsync(
         ProductManifest manifest,
+        string? feedId = null,
         CancellationToken cancellationToken = default
     );
 

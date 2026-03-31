@@ -33,6 +33,9 @@ public sealed class InstallationEngine : IInstallationEngine
     /// <inheritdoc />
     public FileHandlerConfigCallback? OnFileHandlerConfigNeeded { get; set; }
 
+    /// <inheritdoc />
+    public FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
+
     private static readonly JsonSerializerOptions FileManifestJsonOptions =
         new JsonSerializerOptions { WriteIndented = true };
 
@@ -87,11 +90,21 @@ public sealed class InstallationEngine : IInstallationEngine
     /// <inheritdoc />
     public async Task<IReadOnlyList<PluginConfigField>> GetPluginConfigurationAsync(
         ProductManifest manifest,
+        string? feedId = null,
         CancellationToken cancellationToken = default
     )
     {
         if (manifest.Plugins is not { Length: > 0 })
+        {
+            _logger.LogDebug("No plugins defined for {ProductId}", manifest.ProductId);
             return Array.Empty<PluginConfigField>();
+        }
+
+        _logger.LogInformation(
+            "Loading plugin configuration for {ProductId} ({PluginCount} plugins)",
+            manifest.ProductId,
+            manifest.Plugins.Length
+        );
 
         PluginEnvironment environment = await BuildPluginEnvironmentAsync(
             manifest,
@@ -108,7 +121,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 IStorkPlugin? plugin = await DownloadAndLoadPluginAsync(
                     manifest,
                     pluginInfo,
-                    cancellationToken
+                    cancellationToken,
+                    feedId
                 );
                 if (plugin is null)
                 {
@@ -124,10 +138,21 @@ public sealed class InstallationEngine : IInstallationEngine
                 IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
                     environment
                 );
+                _logger.LogInformation(
+                    "Plugin {TypeName} returned {FieldCount} config fields",
+                    pluginInfo.TypeName,
+                    fields.Count
+                );
                 allFields.AddRange(fields);
             }
             catch (Exception ex)
             {
+                _logger.LogError(
+                    ex,
+                    "Failed to load plugin config schema from {TypeName} for {ProductId}",
+                    pluginInfo.TypeName,
+                    manifest.ProductId
+                );
                 await LogPluginResult(
                     manifest.ProductId,
                     $"Failed to load config schema from {pluginInfo.TypeName}: {ex.Message}",
@@ -172,7 +197,7 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             Directory.CreateDirectory(tempDir);
 
-            // Phase 2: Download and extract
+            // Download & Extraction
             cancellationToken.ThrowIfCancellationRequested();
             string extractPath = await DownloadAndExtractAsync(
                 manifest,
@@ -189,7 +214,77 @@ public sealed class InstallationEngine : IInstallationEngine
                     FailedStep = "Extracting",
                 };
 
-            // Phase 3: Pre-install plugins
+            // StorkDrop level Plugins
+            cancellationToken.ThrowIfCancellationRequested();
+            (
+                HashSet<string> handledFiles,
+                PluginContext? fileHandlerContext,
+                InstallResult? fileHandlerError
+            ) = await HandleFileTypesAsync(
+                manifest,
+                options,
+                extractPath,
+                progress,
+                cancellationToken
+            );
+            if (fileHandlerError is not null)
+                return fileHandlerError;
+
+            // Product Plugins
+            if (
+                manifest.Plugins is { Length: > 0 }
+                && options.PluginConfigValues is null
+                && OnPluginConfigNeeded is not null
+            )
+            {
+                List<PluginConfigField> allFields = [];
+                PluginEnvironment env = await BuildPluginEnvironmentAsync(
+                    manifest,
+                    cancellationToken
+                );
+
+                foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+                {
+                    try
+                    {
+                        IStorkPlugin? plugin = LoadPlugin(extractPath, pluginInfo);
+                        if (plugin is null)
+                            continue;
+
+                        IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                            env
+                        );
+                        allFields.AddRange(fields);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Could not load plugin config from {TypeName}",
+                            pluginInfo.TypeName
+                        );
+                    }
+                }
+
+                if (allFields.Count > 0)
+                {
+                    Dictionary<string, string>? userValues = OnPluginConfigNeeded(
+                        allFields,
+                        new Dictionary<string, string>()
+                    );
+                    if (userValues is null)
+                    {
+                        return new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = "Installation cancelled by user.",
+                            FailedStep = "PluginConfig",
+                        };
+                    }
+                    options = options with { PluginConfigValues = userValues };
+                }
+            }
+
             cancellationToken.ThrowIfCancellationRequested();
             PluginContext pluginContext = await BuildPluginContextAsync(
                 manifest,
@@ -210,6 +305,13 @@ public sealed class InstallationEngine : IInstallationEngine
                     "Installation failed at step PreInstall: {Error}",
                     preInstallResult.ErrorMessage
                 );
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        $"Installation failed at step PreInstall: {preInstallResult.ErrorMessage}"
+                    )
+                );
                 return new InstallResult
                 {
                     Success = false,
@@ -218,23 +320,6 @@ public sealed class InstallationEngine : IInstallationEngine
                 };
             }
 
-            // Phase 4: Handle custom file types (plugins claiming specific extensions)
-            cancellationToken.ThrowIfCancellationRequested();
-            (
-                HashSet<string> handledFiles,
-                PluginContext? fileHandlerContext,
-                InstallResult? fileHandlerError
-            ) = await HandleFileTypesAsync(
-                manifest,
-                options,
-                extractPath,
-                progress,
-                cancellationToken
-            );
-            if (fileHandlerError is not null)
-                return fileHandlerError;
-
-            // Phase 5: Resolve install path templates and check elevation for resolved path
             (string resolvedPath, InstallResult? pathError) =
                 await ResolveAndValidateTargetPathAsync(
                     manifest,
@@ -246,7 +331,6 @@ public sealed class InstallationEngine : IInstallationEngine
             if (pathError is not null)
                 return pathError;
 
-            // Phase 6: Copy files to target
             cancellationToken.ThrowIfCancellationRequested();
             InstallResult? copyError = await CopyFilesToTargetAsync(
                 extractPath,
@@ -258,7 +342,6 @@ public sealed class InstallationEngine : IInstallationEngine
             if (copyError is not null)
                 return copyError;
 
-            // Phase 7: Verify installation
             cancellationToken.ThrowIfCancellationRequested();
             InstallResult? verifyError = await VerifyInstallationAsync(
                 manifest,
@@ -270,7 +353,6 @@ public sealed class InstallationEngine : IInstallationEngine
             if (verifyError is not null)
                 return verifyError;
 
-            // Phase 8: Post-install, shortcuts, env vars, registration
             await FinalizeInstallationAsync(
                 manifest,
                 options,
@@ -363,32 +445,71 @@ public sealed class InstallationEngine : IInstallationEngine
             "Elevation required, spawning elevated process for {ProductId}",
             manifest.ProductId
         );
-        bool elevated = ElevationHelper.RunElevatedInstall(
-            manifest.ProductId,
-            manifest.Version,
-            targetPath,
-            options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
-        );
 
-        if (!elevated)
+        string? configFilePath = null;
+        try
         {
-            _logger.LogWarning("Elevation denied by user for {ProductId}", manifest.ProductId);
-            return new InstallResult
+            if (options.PluginConfigValues is { Count: > 0 })
             {
-                Success = false,
-                ErrorMessage = "Installation cancelled: administrator rights were denied.",
-                FailedStep = "Elevation",
-            };
-        }
+                configFilePath = Path.Combine(
+                    StorkPaths.TempDir,
+                    $"elevation-config-{Guid.NewGuid()}.json"
+                );
+                Directory.CreateDirectory(StorkPaths.TempDir);
+                string json = System.Text.Json.JsonSerializer.Serialize(options.PluginConfigValues);
+                await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
+                _logger.LogDebug(
+                    "Saved plugin config to {Path} for elevated process",
+                    configFilePath
+                );
+            }
 
-        await RegisterElevatedInstallAsync(
-            manifest,
-            targetPath,
-            options.FeedId,
-            "(elevated)",
-            cancellationToken
-        );
-        return new InstallResult { Success = true };
+            bool elevated = ElevationHelper.RunElevatedInstall(
+                manifest.ProductId,
+                manifest.Version,
+                targetPath,
+                options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
+                configFilePath
+            );
+
+            if (!elevated)
+            {
+                _logger.LogWarning("Elevation denied by user for {ProductId}", manifest.ProductId);
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        $"Warning: Elevation denied by user for {manifest.ProductId}"
+                    )
+                );
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = "Installation cancelled: administrator rights were denied.",
+                    FailedStep = "Elevation",
+                };
+            }
+
+            await RegisterElevatedInstallAsync(
+                manifest,
+                targetPath,
+                options.FeedId,
+                "(elevated)",
+                cancellationToken
+            );
+            return new InstallResult { Success = true };
+        }
+        finally
+        {
+            if (configFilePath is not null)
+            {
+                try
+                {
+                    File.Delete(configFilePath);
+                }
+                catch { }
+            }
+        }
     }
 
     private async Task RegisterElevatedInstallAsync(
@@ -475,6 +596,9 @@ public sealed class InstallationEngine : IInstallationEngine
         catch (Exception ex)
         {
             _logger.LogError(ex, "Installation failed at step Extracting: {Error}", ex.Message);
+            progress.Report(
+                new InstallProgress(InstallStage.Extracting, 0, $"Extraction failed: {ex.Message}")
+            );
             return null;
         }
 
@@ -519,12 +643,50 @@ public sealed class InstallationEngine : IInstallationEngine
             string? targetDir = Path.GetDirectoryName(targetFile);
             if (targetDir is not null)
                 Directory.CreateDirectory(targetDir);
-            File.Move(file, targetFile, overwrite: true);
+
+            for (int attempt = 1; attempt <= 3; attempt++)
+            {
+                try
+                {
+                    // Clear read-only on target if it exists (ZIPs can preserve this attribute)
+                    if (File.Exists(targetFile))
+                    {
+                        FileAttributes attrs = File.GetAttributes(targetFile);
+                        if (attrs.HasFlag(FileAttributes.ReadOnly))
+                            File.SetAttributes(targetFile, attrs & ~FileAttributes.ReadOnly);
+                    }
+
+                    File.Move(file, targetFile, overwrite: true);
+                    break;
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    if (attempt < 3)
+                    {
+                        _logger.LogDebug(
+                            "File move retry {Attempt}/3 for {File}: {Error}",
+                            attempt,
+                            Path.GetFileName(file),
+                            ex.Message
+                        );
+                        await Task.Delay(500);
+                    }
+                    else
+                    {
+                        _logger.LogError(
+                            "Failed to move {Source} to {Target} after 3 attempts: {Error}",
+                            file,
+                            targetFile,
+                            ex.Message
+                        );
+                        throw;
+                    }
+                }
+            }
         }
 
         Directory.Delete(innerExtractPath, true);
         _logger.LogInformation("Inner ZIP extracted successfully");
-        await Task.CompletedTask;
     }
 
     private async Task<(
@@ -760,22 +922,53 @@ public sealed class InstallationEngine : IInstallationEngine
                     "Administrator privileges required for resolved path..."
                 )
             );
-            bool elevated = ElevationHelper.RunElevatedInstall(
-                manifest.ProductId,
-                manifest.Version,
-                resolvedTargetPath,
-                options.FeedId ?? _feedRegistry.GetFeeds()[0].Id
-            );
-            if (!elevated)
-                return (
+
+            string? configFilePath = null;
+            try
+            {
+                if (options.PluginConfigValues is { Count: > 0 })
+                {
+                    configFilePath = Path.Combine(
+                        StorkPaths.TempDir,
+                        $"elevation-config-{Guid.NewGuid()}.json"
+                    );
+                    Directory.CreateDirectory(StorkPaths.TempDir);
+                    string configJson = System.Text.Json.JsonSerializer.Serialize(
+                        options.PluginConfigValues
+                    );
+                    await File.WriteAllTextAsync(configFilePath, configJson, cancellationToken);
+                }
+
+                bool elevated = ElevationHelper.RunElevatedInstall(
+                    manifest.ProductId,
+                    manifest.Version,
                     resolvedTargetPath,
-                    new InstallResult
-                    {
-                        Success = false,
-                        ErrorMessage = "Installation cancelled: administrator rights were denied.",
-                        FailedStep = "Elevation",
-                    }
+                    options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
+                    configFilePath
                 );
+                if (!elevated)
+                    return (
+                        resolvedTargetPath,
+                        new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage =
+                                "Installation cancelled: administrator rights were denied.",
+                            FailedStep = "Elevation",
+                        }
+                    );
+            }
+            finally
+            {
+                if (configFilePath is not null)
+                {
+                    try
+                    {
+                        File.Delete(configFilePath);
+                    }
+                    catch { }
+                }
+            }
 
             await RegisterElevatedInstallAsync(
                 manifest,
@@ -800,6 +993,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 $"Install path contains unresolved template: {resolvedTargetPath}. "
                 + "Configure the required plugin settings (e.g., Application paths) before installing.";
             _logger.LogError(msg);
+            progress.Report(new InstallProgress(InstallStage.Installing, 0, msg));
             return (
                 resolvedTargetPath,
                 new InstallResult
@@ -926,14 +1120,24 @@ public sealed class InstallationEngine : IInstallationEngine
                     expectedCount,
                     installedFiles.Length
                 );
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Verifying,
+                        50,
+                        $"Warning: Verification warning: expected {expectedCount} files, found {installedFiles.Length}"
+                    )
+                );
             }
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Verifying,
-                    50,
-                    $"File count verified: {installedFiles.Length} file(s) installed."
-                )
-            );
+            else
+            {
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Verifying,
+                        50,
+                        $"File count verified: {installedFiles.Length} file(s) installed."
+                    )
+                );
+            }
         }
 
         // Check shortcut targets exist
@@ -943,10 +1147,19 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 string exePath = Path.Combine(targetPath, shortcut.ExeName);
                 if (!File.Exists(exePath))
+                {
                     _logger.LogWarning(
                         "Shortcut target missing after install: {ExeName}",
                         shortcut.ExeName
                     );
+                    progress.Report(
+                        new InstallProgress(
+                            InstallStage.Verifying,
+                            50,
+                            $"Warning: Shortcut target missing after install: {shortcut.ExeName}"
+                        )
+                    );
+                }
             }
         }
 
@@ -1000,10 +1213,19 @@ public sealed class InstallationEngine : IInstallationEngine
             cancellationToken
         );
         if (!postInstallResult.Success)
+        {
             _logger.LogWarning(
                 "PostInstall plugin phase failed: {Error}",
                 postInstallResult.ErrorMessage
             );
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"Warning: PostInstall plugin phase failed: {postInstallResult.ErrorMessage}"
+                )
+            );
+        }
 
         progress.Report(new InstallProgress(InstallStage.Installing, 80, "Creating shortcuts..."));
         CreateShortcuts(manifest, resolvedPath);
@@ -1154,6 +1376,13 @@ public sealed class InstallationEngine : IInstallationEngine
                         "Could not fully delete old installation at {Path}, will overwrite in place",
                         installed.InstalledPath
                     );
+                    progress.Report(
+                        new InstallProgress(
+                            InstallStage.Installing,
+                            0,
+                            $"Warning: Could not fully delete old installation at {installed.InstalledPath}, will overwrite in place"
+                        )
+                    );
                 }
             }
 
@@ -1201,6 +1430,13 @@ public sealed class InstallationEngine : IInstallationEngine
                 ex,
                 "Update failed for {ProductId}, restoring backup",
                 installed.ProductId
+            );
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"Update failed for {installed.ProductId}, restoring backup"
+                )
             );
             if (backupPath is not null)
                 await _backupService.RestoreBackupAsync(
@@ -1528,7 +1764,8 @@ public sealed class InstallationEngine : IInstallationEngine
     private async Task<IStorkPlugin?> DownloadAndLoadPluginAsync(
         ProductManifest manifest,
         StorkPluginInfo pluginInfo,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? feedId = null
     )
     {
         string tempDir = Path.Combine(StorkPaths.PluginTempDir, Guid.NewGuid().ToString());
@@ -1538,7 +1775,7 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             cancellationToken.ThrowIfCancellationRequested();
 
-            IRegistryClient registryClient = GetClientForFeed(null);
+            IRegistryClient registryClient = GetClientForFeed(feedId);
             using Stream downloadStream = await registryClient.DownloadProductAsync(
                 manifest.ProductId,
                 manifest.Version,
@@ -1698,6 +1935,11 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
+        if (success)
+            _logger.LogInformation("Plugin result for {ProductId}: {Details}", productId, details);
+        else
+            _logger.LogWarning("Plugin result for {ProductId}: {Details}", productId, details);
+
         await _activityLog.LogAsync(
             new ActivityLogEntry(
                 Id: Guid.NewGuid().ToString(),

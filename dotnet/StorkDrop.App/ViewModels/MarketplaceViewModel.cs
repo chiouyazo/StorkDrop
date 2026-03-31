@@ -154,9 +154,10 @@ public partial class MarketplaceViewModel : ObservableObject
             if (result != true || !dialog.Confirmed)
                 return;
 
+            string targetPath = dialog.SelectedPath;
+
             product.IsInstalling = true;
             product.InstallPercentage = 0;
-            string targetPath = dialog.SelectedPath;
 
             TrackedInstallation tracked = _tracker.StartInstallation(
                 product.ProductId,
