@@ -336,6 +336,21 @@ public sealed class InstallationEngine : IInstallationEngine
                 return pathError;
 
             cancellationToken.ThrowIfCancellationRequested();
+
+            // Exclude plugins/ directory from the main product copy (they go to .stork/)
+            string pluginsSourceDir = Path.Combine(copySourcePath, "plugins");
+            if (Directory.Exists(pluginsSourceDir))
+            {
+                foreach (
+                    string pf in Directory.GetFiles(
+                        pluginsSourceDir,
+                        "*",
+                        SearchOption.AllDirectories
+                    )
+                )
+                    handledFiles.Add(pf);
+            }
+
             InstallResult? copyError = await CopyFilesToTargetAsync(
                 copySourcePath,
                 resolvedPath,
@@ -345,6 +360,48 @@ public sealed class InstallationEngine : IInstallationEngine
             );
             if (copyError is not null)
                 return copyError;
+
+            // Copy plugin directory to .stork/plugins/ and save manifest for uninstall
+            string pluginsExtractDir = Path.Combine(extractPath, "plugins");
+            if (Directory.Exists(pluginsExtractDir))
+            {
+                string storkPluginsDir = Path.Combine(resolvedPath, ".stork", "plugins");
+                _logger.LogInformation("Copying product plugins to {Dir}", storkPluginsDir);
+                ReportProgress(InstallStage.Installing, 0, "Copying product plugins...");
+                FileOperations pluginCopyOps = new();
+                foreach (
+                    string file in Directory.GetFiles(
+                        pluginsExtractDir,
+                        "*",
+                        SearchOption.AllDirectories
+                    )
+                )
+                {
+                    string relativePath = Path.GetRelativePath(pluginsExtractDir, file);
+                    string targetFile = Path.Combine(storkPluginsDir, relativePath);
+                    string? targetDir = Path.GetDirectoryName(targetFile);
+                    if (targetDir is not null)
+                        Directory.CreateDirectory(targetDir);
+                    await pluginCopyOps.CopyFileAsync(file, targetFile, cancellationToken);
+                }
+            }
+
+            // Save manifest for uninstall plugin loading
+            if (manifest.Plugins is { Length: > 0 })
+            {
+                string storkDir = Path.Combine(resolvedPath, ".stork");
+                Directory.CreateDirectory(storkDir);
+                string manifestJson = System.Text.Json.JsonSerializer.Serialize(
+                    manifest,
+                    new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
+                );
+                await File.WriteAllTextAsync(
+                    Path.Combine(storkDir, "manifest.json"),
+                    manifestJson,
+                    cancellationToken
+                );
+                _logger.LogDebug("Saved product manifest to .stork/manifest.json");
+            }
 
             cancellationToken.ThrowIfCancellationRequested();
             InstallResult? verifyError = await VerifyInstallationAsync(
@@ -1171,16 +1228,17 @@ public sealed class InstallationEngine : IInstallationEngine
         );
         if (!postInstallResult.Success)
         {
-            _logger.LogWarning(
+            _logger.LogError(
                 "PostInstall plugin phase failed: {Error}",
                 postInstallResult.ErrorMessage
             );
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Installing,
-                    0,
-                    $"Warning: PostInstall plugin phase failed: {postInstallResult.ErrorMessage}"
-                )
+            ReportProgress(
+                InstallStage.Installing,
+                0,
+                $"PostInstall failed: {postInstallResult.ErrorMessage}"
+            );
+            throw new InvalidOperationException(
+                $"PostInstall failed: {postInstallResult.ErrorMessage}"
             );
         }
 
@@ -1355,26 +1413,46 @@ public sealed class InstallationEngine : IInstallationEngine
                 // Best-effort
             }
 
-            // Try to clean old installation, but don't fail if files are locked
-            // InstallAsync's CopyDirectoryWithLockHandlingAsync will handle locked files
-            // via rename + deferred delete on reboot.
+            // Delete only tracked files from the previous installation (preserves user-created files)
             if (Directory.Exists(installed.InstalledPath))
             {
                 _logger.LogDebug(
-                    "Cleaning old installation at {InstalledPath}",
+                    "Removing tracked files from old installation at {InstalledPath}",
                     installed.InstalledPath
                 );
+
+                List<string>? trackedFiles = await LoadFileManifest(
+                    installed.ProductId,
+                    cancellationToken
+                );
+
+                if (trackedFiles is not null)
+                {
+                    foreach (string relativePath in trackedFiles)
+                    {
+                        string fullPath = Path.Combine(installed.InstalledPath, relativePath);
+                        try
+                        {
+                            if (File.Exists(fullPath))
+                                File.Delete(fullPath);
+                        }
+                        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                        {
+                            _logger.LogDebug("Could not delete {File}, will overwrite", fullPath);
+                        }
+                    }
+                }
+
+                // Also clean .stork/ from previous install (will be recreated)
+                string oldStorkDir = Path.Combine(installed.InstalledPath, ".stork");
                 try
                 {
-                    Directory.Delete(installed.InstalledPath, true);
+                    if (Directory.Exists(oldStorkDir))
+                        Directory.Delete(oldStorkDir, true);
                 }
                 catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
                 {
-                    _logger.LogWarning(
-                        ex,
-                        "Could not fully delete old installation at {Path}, will overwrite in place",
-                        installed.InstalledPath
-                    );
+                    _logger.LogWarning(ex, "Could not delete old .stork directory");
                     progress.Report(
                         new InstallProgress(
                             InstallStage.Installing,
@@ -1493,11 +1571,12 @@ public sealed class InstallationEngine : IInstallationEngine
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // PreInstall: plugin DLL is in the extraction dir (not yet copied to target)
-                // PostInstall/Uninstall: plugin DLL is in the target dir
-                string pluginSearchPath =
-                    (phase == PluginPhase.PreInstall && extractPath is not null)
-                        ? extractPath
-                        : options.TargetPath;
+                // PostInstall/Uninstall: plugin DLL is in .stork/ under the target dir
+                string pluginSearchPath;
+                if (phase == PluginPhase.PreInstall && extractPath is not null)
+                    pluginSearchPath = extractPath;
+                else
+                    pluginSearchPath = Path.Combine(options.TargetPath, ".stork");
                 IStorkPlugin? plugin = LoadPlugin(
                     pluginSearchPath,
                     pluginInfo,
@@ -1944,6 +2023,19 @@ public sealed class InstallationEngine : IInstallationEngine
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
         );
         await File.WriteAllTextAsync(filePath, json, cancellationToken);
+    }
+
+    private static async Task<List<string>?> LoadFileManifest(
+        string productId,
+        CancellationToken cancellationToken
+    )
+    {
+        string path = Path.Combine(StorkPaths.ConfigDir, $"{productId}.files.json");
+        if (!File.Exists(path))
+            return null;
+
+        string json = await File.ReadAllTextAsync(path, cancellationToken);
+        return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json);
     }
 
     private void ReportProgress(InstallStage stage, int percentage, string message)

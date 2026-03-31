@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
@@ -62,6 +63,9 @@ public sealed class UninstallService
 
         RequiresReboot = false;
 
+        // Run PreUninstall plugin hooks if manifest is available
+        await RunUninstallPluginPhaseAsync(product, "PreUninstall", cancellationToken);
+
         _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
         await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
 
@@ -120,11 +124,133 @@ public sealed class UninstallService
         );
         await _activityLog.LogAsync(entry, cancellationToken);
 
+        // Run PostUninstall plugin hooks
+        await RunUninstallPluginPhaseAsync(product, "PostUninstall", cancellationToken);
+
+        // Clean up .stork/ directory (plugins + manifest) last
+        string storkDir = Path.Combine(product.InstalledPath, ".stork");
+        if (Directory.Exists(storkDir))
+        {
+            try
+            {
+                Directory.Delete(storkDir, true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete .stork directory");
+            }
+        }
+
         _logger.LogInformation(
             "Uninstall of {ProductId} v{Version} complete",
             product.ProductId,
             product.Version
         );
+    }
+
+    private async Task RunUninstallPluginPhaseAsync(
+        InstalledProduct product,
+        string phase,
+        CancellationToken cancellationToken
+    )
+    {
+        string manifestPath = Path.Combine(product.InstalledPath, ".stork", "manifest.json");
+        if (!File.Exists(manifestPath))
+            return;
+
+        try
+        {
+            string json = await File.ReadAllTextAsync(manifestPath, cancellationToken);
+            ProductManifest? manifest =
+                System.Text.Json.JsonSerializer.Deserialize<ProductManifest>(
+                    json,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                    }
+                );
+
+            if (manifest?.Plugins is not { Length: > 0 })
+                return;
+
+            string storkPluginsDir = Path.Combine(product.InstalledPath, ".stork");
+            PluginContext context = new()
+            {
+                ProductId = product.ProductId,
+                Version = product.Version,
+                InstallPath = product.InstalledPath,
+                StorkConfigDirectory = StorkPaths.ConfigDir,
+                ConfigValues = new Dictionary<string, string>(),
+            };
+
+            foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+            {
+                try
+                {
+                    string assemblyPath = Path.GetFullPath(
+                        Path.Combine(storkPluginsDir, pluginInfo.Assembly)
+                    );
+                    if (!File.Exists(assemblyPath))
+                    {
+                        _logger.LogWarning(
+                            "{Phase}: Plugin assembly not found at {Path}",
+                            phase,
+                            assemblyPath
+                        );
+                        continue;
+                    }
+
+                    ProductPluginLoadContext loadContext = new(
+                        Path.GetDirectoryName(assemblyPath)!
+                    );
+                    System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(
+                        assemblyPath
+                    );
+                    Type? pluginType = assembly.GetType(pluginInfo.TypeName, throwOnError: true);
+
+                    if (
+                        pluginType is null
+                        || Activator.CreateInstance(pluginType) is not IStorkPlugin plugin
+                    )
+                        continue;
+
+                    _logger.LogInformation(
+                        "Running {Phase} for {TypeName}",
+                        phase,
+                        pluginInfo.TypeName
+                    );
+
+                    if (phase == "PreUninstall")
+                    {
+                        PluginPreInstallResult result = await plugin.PreUninstallAsync(
+                            context,
+                            cancellationToken
+                        );
+                        if (!result.Success)
+                            _logger.LogWarning("{Phase} failed: {Message}", phase, result.Message);
+                    }
+                    else if (phase == "PostUninstall")
+                    {
+                        await plugin.PostUninstallAsync(context, cancellationToken);
+                    }
+
+                    loadContext.Unload();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "{Phase} failed for {TypeName}",
+                        phase,
+                        pluginInfo.TypeName
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not run {Phase} plugins", phase);
+        }
     }
 
     private static async Task<List<string>?> LoadFileManifestAsync(
