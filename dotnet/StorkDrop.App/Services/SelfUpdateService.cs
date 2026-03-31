@@ -31,17 +31,35 @@ public sealed class SelfUpdateService
             update.DownloadUrl
         );
 
-        using HttpClient client = new();
-        client.Timeout = TimeSpan.FromMinutes(5);
+        using HttpClientHandler handler = new() { AllowAutoRedirect = true };
+        using HttpClient client = new(handler) { Timeout = TimeSpan.FromMinutes(5) };
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("StorkDrop-SelfUpdate");
 
-        await using Stream downloadStream = await client.GetStreamAsync(
+        using HttpResponseMessage response = await client.GetAsync(
             update.DownloadUrl,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken
+        );
+        response.EnsureSuccessStatusCode();
+
+        long? totalBytes = response.Content.Headers.ContentLength;
+        _logger.LogInformation(
+            "Download started ({Size} bytes)",
+            totalBytes?.ToString() ?? "unknown"
+        );
+
+        await using Stream downloadStream = await response.Content.ReadAsStreamAsync(
             cancellationToken
         );
         await using FileStream fileStream = File.Create(installerPath);
         await downloadStream.CopyToAsync(fileStream, cancellationToken);
+        await fileStream.FlushAsync(cancellationToken);
 
-        _logger.LogInformation("Download complete, launching installer: {Path}", installerPath);
+        _logger.LogInformation(
+            "Download complete ({Bytes} bytes), launching installer: {Path}",
+            new FileInfo(installerPath).Length,
+            installerPath
+        );
 
         Process.Start(new ProcessStartInfo(installerPath) { UseShellExecute = true });
 
