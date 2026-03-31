@@ -201,7 +201,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 options,
                 pluginContext,
                 PluginPhase.PreInstall,
-                cancellationToken
+                cancellationToken,
+                extractPath
             );
             if (!preInstallResult.Success)
             {
@@ -1243,7 +1244,8 @@ public sealed class InstallationEngine : IInstallationEngine
         InstallOptions options,
         PluginContext context,
         PluginPhase phase,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string? extractPath = null
     )
     {
         if (manifest.Plugins is not { Length: > 0 })
@@ -1255,7 +1257,13 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                IStorkPlugin? plugin = LoadPlugin(options.TargetPath, pluginInfo);
+                // PreInstall: plugin DLL is in the extraction dir (not yet copied to target)
+                // PostInstall/Uninstall: plugin DLL is in the target dir
+                string pluginSearchPath =
+                    (phase == PluginPhase.PreInstall && extractPath is not null)
+                        ? extractPath
+                        : options.TargetPath;
+                IStorkPlugin? plugin = LoadPlugin(pluginSearchPath, pluginInfo);
                 if (plugin is null)
                 {
                     await LogPluginResult(
