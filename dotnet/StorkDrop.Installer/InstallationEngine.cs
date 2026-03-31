@@ -25,6 +25,7 @@ public sealed class InstallationEngine : IInstallationEngine
     private readonly EnvironmentVariableService _envVarService;
     private readonly UninstallService _uninstallService;
     private readonly List<IFileTypeHandler> _fileTypeHandlers;
+    private IProgress<InstallProgress>? _currentProgress;
 
     /// <inheritdoc />
     /// <inheritdoc />
@@ -173,6 +174,7 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
+        _currentProgress = progress;
         _logger.LogInformation(
             "Starting installation of {ProductId} v{Version} to {TargetPath}",
             manifest.ProductId,
@@ -199,7 +201,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
             // Download & Extraction
             cancellationToken.ThrowIfCancellationRequested();
-            string extractPath = await DownloadAndExtractAsync(
+            (string? extractPath, string? productContentPath) = await DownloadAndExtractAsync(
                 manifest,
                 options,
                 tempDir,
@@ -213,6 +215,9 @@ public sealed class InstallationEngine : IInstallationEngine
                     ErrorMessage = "Extraction failed.",
                     FailedStep = "Extracting",
                 };
+
+            // For file copy: use productContentPath (inner ZIP) if two-layer, else extractPath
+            string copySourcePath = productContentPath ?? extractPath;
 
             // StorkDrop level Plugins
             cancellationToken.ThrowIfCancellationRequested();
@@ -245,25 +250,24 @@ public sealed class InstallationEngine : IInstallationEngine
 
                 foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
                 {
-                    try
+                    IStorkPlugin? plugin = LoadPlugin(
+                        extractPath,
+                        pluginInfo,
+                        _activePluginContexts
+                    );
+                    if (plugin is null)
                     {
-                        IStorkPlugin? plugin = LoadPlugin(extractPath, pluginInfo);
-                        if (plugin is null)
-                            continue;
+                        _logger.LogError("Could not load plugin {TypeName}", pluginInfo.TypeName);
+                        return new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = $"Plugin {pluginInfo.TypeName} could not be loaded.",
+                            FailedStep = "PluginConfig",
+                        };
+                    }
 
-                        IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
-                            env
-                        );
-                        allFields.AddRange(fields);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(
-                            ex,
-                            "Could not load plugin config from {TypeName}",
-                            pluginInfo.TypeName
-                        );
-                    }
+                    IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(env);
+                    allFields.AddRange(fields);
                 }
 
                 if (allFields.Count > 0)
@@ -333,7 +337,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
             cancellationToken.ThrowIfCancellationRequested();
             InstallResult? copyError = await CopyFilesToTargetAsync(
-                extractPath,
+                copySourcePath,
                 resolvedPath,
                 handledFiles,
                 progress,
@@ -346,7 +350,7 @@ public sealed class InstallationEngine : IInstallationEngine
             InstallResult? verifyError = await VerifyInstallationAsync(
                 manifest,
                 resolvedPath,
-                tempDir,
+                copySourcePath,
                 handledFiles,
                 progress
             );
@@ -399,7 +403,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 new InstallProgress(
                     InstallStage.Installing,
                     0,
-                    $"Installation failed: {ex.Message}. Cleaning up..."
+                    $"Installation failed: {ex}. Cleaning up..."
                 )
             );
             _logger.LogError(
@@ -544,7 +548,7 @@ public sealed class InstallationEngine : IInstallationEngine
         );
     }
 
-    private async Task<string?> DownloadAndExtractAsync(
+    private async Task<(string? extractPath, string? productContentPath)> DownloadAndExtractAsync(
         ProductManifest manifest,
         InstallOptions options,
         string tempDir,
@@ -591,23 +595,28 @@ public sealed class InstallationEngine : IInstallationEngine
         try
         {
             ZipFile.ExtractToDirectory(zipPath, extractPath);
-            await ExtractInnerZipIfPresentAsync(tempDir, extractPath, progress);
+            string? productContentPath = ExtractInnerZipIfPresent(tempDir, extractPath, progress);
+
+            progress.Report(
+                new InstallProgress(InstallStage.Extracting, 100, "Extraction complete.")
+            );
+            _logger.LogInformation("Extraction complete for {ProductId}", manifest.ProductId);
+
+            // If two-layer: extractPath has loose files (plugins, SIDs), productContentPath has product binaries
+            // If single-layer: extractPath has everything, productContentPath is null
+            return (extractPath, productContentPath);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Installation failed at step Extracting: {Error}", ex.Message);
             progress.Report(
-                new InstallProgress(InstallStage.Extracting, 0, $"Extraction failed: {ex.Message}")
+                new InstallProgress(InstallStage.Extracting, 0, $"Extraction failed: {ex}")
             );
-            return null;
+            return (null, null);
         }
-
-        progress.Report(new InstallProgress(InstallStage.Extracting, 100, "Extraction complete."));
-        _logger.LogInformation("Extraction complete for {ProductId}", manifest.ProductId);
-        return extractPath;
     }
 
-    private async Task ExtractInnerZipIfPresentAsync(
+    private string? ExtractInnerZipIfPresent(
         string tempDir,
         string extractPath,
         IProgress<InstallProgress> progress
@@ -615,10 +624,10 @@ public sealed class InstallationEngine : IInstallationEngine
     {
         string[] innerZips = Directory.GetFiles(extractPath, "*.zip");
         if (innerZips.Length != 1)
-            return;
+            return null;
 
         string innerZipPath = innerZips[0];
-        string innerExtractPath = Path.Combine(tempDir, "inner-extracted");
+        string productContentPath = Path.Combine(tempDir, "product-contents");
         _logger.LogInformation(
             "Found inner ZIP {InnerZip}, extracting product contents",
             Path.GetFileName(innerZipPath)
@@ -630,63 +639,11 @@ public sealed class InstallationEngine : IInstallationEngine
                 $"Extracting inner archive {Path.GetFileName(innerZipPath)}..."
             )
         );
-        ZipFile.ExtractToDirectory(innerZipPath, innerExtractPath);
-
+        ZipFile.ExtractToDirectory(innerZipPath, productContentPath);
         File.Delete(innerZipPath);
 
-        foreach (
-            string file in Directory.GetFiles(innerExtractPath, "*", SearchOption.AllDirectories)
-        )
-        {
-            string relativePath = Path.GetRelativePath(innerExtractPath, file);
-            string targetFile = Path.Combine(extractPath, relativePath);
-            string? targetDir = Path.GetDirectoryName(targetFile);
-            if (targetDir is not null)
-                Directory.CreateDirectory(targetDir);
-
-            for (int attempt = 1; attempt <= 3; attempt++)
-            {
-                try
-                {
-                    // Clear read-only on target if it exists (ZIPs can preserve this attribute)
-                    if (File.Exists(targetFile))
-                    {
-                        FileAttributes attrs = File.GetAttributes(targetFile);
-                        if (attrs.HasFlag(FileAttributes.ReadOnly))
-                            File.SetAttributes(targetFile, attrs & ~FileAttributes.ReadOnly);
-                    }
-
-                    File.Move(file, targetFile, overwrite: true);
-                    break;
-                }
-                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-                {
-                    if (attempt < 3)
-                    {
-                        _logger.LogDebug(
-                            "File move retry {Attempt}/3 for {File}: {Error}",
-                            attempt,
-                            Path.GetFileName(file),
-                            ex.Message
-                        );
-                        await Task.Delay(500);
-                    }
-                    else
-                    {
-                        _logger.LogError(
-                            "Failed to move {Source} to {Target} after 3 attempts: {Error}",
-                            file,
-                            targetFile,
-                            ex.Message
-                        );
-                        throw;
-                    }
-                }
-            }
-        }
-
-        Directory.Delete(innerExtractPath, true);
-        _logger.LogInformation("Inner ZIP extracted successfully");
+        _logger.LogInformation("Inner ZIP extracted to separate directory");
+        return productContentPath;
     }
 
     private async Task<(
@@ -1051,7 +1008,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 ex.Message
             );
             progress.Report(
-                new InstallProgress(InstallStage.Installing, 0, $"File copy failed: {ex.Message}")
+                new InstallProgress(InstallStage.Installing, 0, $"File copy failed: {ex}")
             );
             RevertDeferredRenames(deferredRenames, targetPath);
             return new InstallResult
@@ -1263,11 +1220,53 @@ public sealed class InstallationEngine : IInstallationEngine
             if (!Directory.Exists(tempDir))
                 return;
 
+            foreach (ProductPluginLoadContext ctx in _activePluginContexts)
+            {
+                try
+                {
+                    ctx.Unload();
+                }
+                catch { }
+            }
+            _activePluginContexts.Clear();
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+
             progress?.Report(
                 new InstallProgress(InstallStage.Installing, 0, "Cleaning up temporary files...")
             );
-            Directory.Delete(tempDir, true);
-            progress?.Report(new InstallProgress(InstallStage.Installing, 0, "Cleanup complete."));
+
+            try
+            {
+                Directory.Delete(tempDir, true);
+                progress?.Report(
+                    new InstallProgress(InstallStage.Installing, 0, "Cleanup complete.")
+                );
+                return;
+            }
+            catch (Exception) when (Directory.Exists(tempDir))
+            {
+                // Native DLLs (like SNI) can't be unloaded until process exit.
+                // Delete what we can, leave the rest for next startup cleanup.
+                foreach (
+                    string file in Directory.GetFiles(tempDir, "*", SearchOption.AllDirectories)
+                )
+                {
+                    try
+                    {
+                        File.Delete(file);
+                    }
+                    catch { }
+                }
+                progress?.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        "Cleanup partially complete. Remaining files will be cleaned on next startup."
+                    )
+                );
+                return;
+            }
         }
         catch (Exception ex)
         {
@@ -1499,7 +1498,11 @@ public sealed class InstallationEngine : IInstallationEngine
                     (phase == PluginPhase.PreInstall && extractPath is not null)
                         ? extractPath
                         : options.TargetPath;
-                IStorkPlugin? plugin = LoadPlugin(pluginSearchPath, pluginInfo);
+                IStorkPlugin? plugin = LoadPlugin(
+                    pluginSearchPath,
+                    pluginInfo,
+                    _activePluginContexts
+                );
                 if (plugin is null)
                 {
                     await LogPluginResult(
@@ -1668,6 +1671,11 @@ public sealed class InstallationEngine : IInstallationEngine
                         Path.GetFileName(targetPath),
                         ex.Message
                     );
+                    ReportProgress(
+                        InstallStage.Installing,
+                        0,
+                        $"Warning: {Path.GetFileName(targetPath)} is in use, will be replaced on restart"
+                    );
                     DeferLockedFile(
                         fileOps,
                         deferredOps,
@@ -1758,6 +1766,11 @@ public sealed class InstallationEngine : IInstallationEngine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not save file manifest for {ProductId}", productId);
+            ReportProgress(
+                InstallStage.Installing,
+                0,
+                $"Warning: Could not save file manifest: {ex.Message}"
+            );
         }
     }
 
@@ -1826,17 +1839,36 @@ public sealed class InstallationEngine : IInstallationEngine
         }
     }
 
-    private static IStorkPlugin? LoadPlugin(string basePath, StorkPluginInfo pluginInfo)
+    private readonly List<ProductPluginLoadContext> _activePluginContexts = [];
+
+    private static IStorkPlugin? LoadPlugin(
+        string basePath,
+        StorkPluginInfo pluginInfo,
+        List<ProductPluginLoadContext>? trackContexts = null
+    )
     {
         string assemblyPath = Path.GetFullPath(Path.Combine(basePath, pluginInfo.Assembly));
         if (!File.Exists(assemblyPath))
             throw new FileNotFoundException($"Plugin assembly not found: {pluginInfo.Assembly}");
 
-        ProductPluginLoadContext loadContext = new(Path.GetDirectoryName(assemblyPath)!);
+        string pluginDir = Path.GetDirectoryName(assemblyPath)!;
+        ProductPluginLoadContext loadContext = new(pluginDir);
+        trackContexts?.Add(loadContext);
         System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
-        Type? pluginType =
-            assembly.GetType(pluginInfo.TypeName)
-            ?? throw new TypeLoadException($"Type not found: {pluginInfo.TypeName}");
+
+        // Use throwOnError: true to surface the actual dependency issue rather than getting null
+        Type? pluginType;
+        try
+        {
+            pluginType = assembly.GetType(pluginInfo.TypeName, throwOnError: true);
+        }
+        catch (Exception ex)
+        {
+            throw new TypeLoadException(
+                $"Type '{pluginInfo.TypeName}' could not be loaded from {pluginInfo.Assembly}: {ex.Message}",
+                ex
+            );
+        }
 
         if (!typeof(IStorkPlugin).IsAssignableFrom(pluginType))
             throw new InvalidCastException(
@@ -1914,6 +1946,11 @@ public sealed class InstallationEngine : IInstallationEngine
         await File.WriteAllTextAsync(filePath, json, cancellationToken);
     }
 
+    private void ReportProgress(InstallStage stage, int percentage, string message)
+    {
+        _currentProgress?.Report(new InstallProgress(stage, percentage, message));
+    }
+
     private async Task<Dictionary<string, string>> LoadPluginConfigValues(
         string productId,
         CancellationToken cancellationToken
@@ -1939,6 +1976,8 @@ public sealed class InstallationEngine : IInstallationEngine
             _logger.LogInformation("Plugin result for {ProductId}: {Details}", productId, details);
         else
             _logger.LogWarning("Plugin result for {ProductId}: {Details}", productId, details);
+
+        ReportProgress(InstallStage.RunningPlugins, 0, success ? details : $"Warning: {details}");
 
         await _activityLog.LogAsync(
             new ActivityLogEntry(
@@ -1973,6 +2012,11 @@ public sealed class InstallationEngine : IInstallationEngine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Environment variables could not be applied");
+            ReportProgress(
+                InstallStage.Installing,
+                0,
+                $"Warning: Environment variables could not be applied: {ex.Message}"
+            );
         }
     }
 
@@ -2022,6 +2066,11 @@ public sealed class InstallationEngine : IInstallationEngine
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Shortcuts could not be created");
+            ReportProgress(
+                InstallStage.Installing,
+                0,
+                $"Warning: Shortcuts could not be created: {ex.Message}"
+            );
         }
     }
 }

@@ -153,6 +153,27 @@ public partial class App : Application
             MainWindow mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
 
+            // Clean up leftover temp directories from previous installs (native DLLs prevent deletion during install)
+            _ = Task.Run(() =>
+            {
+                try
+                {
+                    string tempDir = StorkDrop.Contracts.Services.StorkPaths.TempDir;
+                    if (Directory.Exists(tempDir))
+                    {
+                        foreach (string dir in Directory.GetDirectories(tempDir))
+                        {
+                            try
+                            {
+                                Directory.Delete(dir, true);
+                            }
+                            catch { }
+                        }
+                    }
+                }
+                catch { }
+            });
+
             // Fire-and-forget self-update check
             _ = CheckForSelfUpdateAsync(mainWindow);
         }
