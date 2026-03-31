@@ -225,7 +225,7 @@ my-product-1.0.0.zip                    (outer ZIP)
 StorkDrop loads the plugin in an isolated `AssemblyLoadContext` that resolves dependencies from the plugin's directory first, then falls back to the host. This means:
 
 - Your plugin can use any NuGet package without conflicting with StorkDrop
-- `StorkDrop.Contracts` is resolved from the host (do not bundle it)
+- `StorkDrop.Contracts` is always resolved from the host, even if the published output contains it. This prevents type identity issues between the plugin and host.
 - All other dependencies must be in the same directory as the plugin DLL
 
 ### Pipeline example (Bitbucket)

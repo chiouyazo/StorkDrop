@@ -228,6 +228,7 @@ my-product/
 - The ZIP filename must be `{productId}-{version}.zip` (e.g., `my-product-1.0.0.zip`)
 - The root `manifest.json` should always be a copy of the latest version's manifest
 - Each version gets its own subfolder under `versions/`
+- **Upload the ZIP before the manifest.** StorkDrop discovers products by scanning for `manifest.json`. If the manifest is uploaded first, users can attempt to download the product before the ZIP is available. Always upload the artifact ZIP first, then the version manifest, then the root manifest.
 
 ### How the ZIP is processed
 
