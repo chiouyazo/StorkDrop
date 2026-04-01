@@ -255,6 +255,8 @@ public partial class MarketplaceViewModel : ObservableObject
                 );
             }
             product.IsInstalled = true;
+            product.HasUpdate = false;
+            product.InstalledVersion = product.Version;
             product.IsInstalling = false;
 
             // If installed to StorkDrop's own directory, prompt for restart

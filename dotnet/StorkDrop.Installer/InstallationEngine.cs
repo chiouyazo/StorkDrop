@@ -470,6 +470,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 options,
                 resolvedPath,
                 pluginContext,
+                extractPath,
                 progress,
                 cancellationToken
             );
@@ -1266,6 +1267,7 @@ public sealed class InstallationEngine : IInstallationEngine
         InstallOptions options,
         string resolvedPath,
         PluginContext pluginContext,
+        string extractPath,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken
     )
@@ -1280,7 +1282,8 @@ public sealed class InstallationEngine : IInstallationEngine
             resolvedOptions,
             pluginContext,
             PluginPhase.PostInstall,
-            cancellationToken
+            cancellationToken,
+            extractPath
         );
         if (!postInstallResult.Success)
         {
@@ -1626,10 +1629,13 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 cancellationToken.ThrowIfCancellationRequested();
 
-                // PreInstall: plugin DLL is in the extraction dir (not yet copied to target)
-                // PostInstall/Uninstall: plugin DLL is in .stork/ under the target dir
+                // PreInstall/PostInstall: use extraction dir if available (guarantees fresh DLL)
+                // Uninstall: use .stork/ under the target dir (extraction dir no longer exists)
                 string pluginSearchPath;
-                if (phase == PluginPhase.PreInstall && extractPath is not null)
+                if (
+                    extractPath is not null
+                    && (phase == PluginPhase.PreInstall || phase == PluginPhase.PostInstall)
+                )
                     pluginSearchPath = extractPath;
                 else
                     pluginSearchPath = Path.Combine(options.TargetPath, ".stork");
