@@ -256,6 +256,37 @@ public partial class MarketplaceViewModel : ObservableObject
             }
             product.IsInstalled = true;
             product.IsInstalling = false;
+
+            // If installed to StorkDrop's own directory, prompt for restart
+            if (manifest.RecommendedInstallPath?.Contains("{StorkPath}") == true)
+            {
+                System.Windows.MessageBoxResult restartResult = System.Windows.MessageBox.Show(
+                    Localization
+                        .LocalizationManager.GetString("Restart_PluginInstalled")
+                        .Replace("{0}", product.Title),
+                    "StorkDrop",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question
+                );
+                if (restartResult == System.Windows.MessageBoxResult.Yes)
+                {
+                    string? exePath = System.Environment.ProcessPath;
+                    if (!string.IsNullOrEmpty(exePath))
+                    {
+                        // Use cmd /c with a delay so the current process exits and releases the mutex first
+                        System.Diagnostics.Process.Start(
+                            new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "cmd.exe",
+                                Arguments = $"/c timeout /t 2 /nobreak >nul & \"{exePath}\"",
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                            }
+                        );
+                    }
+                    System.Windows.Application.Current.Shutdown();
+                }
+            }
         }
         catch (OperationCanceledException)
         {

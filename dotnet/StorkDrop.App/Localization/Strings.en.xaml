@@ -171,6 +171,11 @@
   <system:String x:Key="RequiredComponents_Proceed">Install Anyway</system:String>
   <system:String x:Key="RequiredComponents_Cancel">Cancel</system:String>
 
+  <!-- Restart -->
+  <system:String x:Key="Restart_PluginInstalled"
+    >{0} has been installed. StorkDrop needs to restart to load the new plugin. Restart now?</system:String
+  >
+
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} has been uninstalled.</system:String>
   <system:String x:Key="Info_UninstallNeedsReboot"

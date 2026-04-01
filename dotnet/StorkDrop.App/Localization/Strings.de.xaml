@@ -193,6 +193,11 @@
   <system:String x:Key="RequiredComponents_Proceed">Trotzdem installieren</system:String>
   <system:String x:Key="RequiredComponents_Cancel">Abbrechen</system:String>
 
+  <!-- Restart -->
+  <system:String x:Key="Restart_PluginInstalled"
+    >{0} wurde installiert. StorkDrop muss neu gestartet werden, um das neue Plugin zu laden. Jetzt neu starten?</system:String
+  >
+
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} wurde deinstalliert.</system:String>
   <system:String x:Key="Info_UninstallNeedsReboot"
