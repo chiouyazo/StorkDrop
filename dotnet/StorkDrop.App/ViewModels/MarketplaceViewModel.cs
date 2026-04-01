@@ -156,6 +156,28 @@ public partial class MarketplaceViewModel : ObservableObject
 
             string targetPath = dialog.SelectedPath;
 
+            // Check required components
+            if (manifest.RequiredProductIds is { Length: > 0 })
+            {
+                List<string> missing = [];
+                foreach (string reqId in manifest.RequiredProductIds)
+                {
+                    InstalledProduct? installed = await _productRepository.GetByIdAsync(reqId);
+                    if (installed is null)
+                        missing.Add(reqId);
+                }
+
+                if (missing.Count > 0)
+                {
+                    Views.RequiredComponentsDialog reqDialog = new(product.Title, missing)
+                    {
+                        Owner = System.Windows.Application.Current.MainWindow,
+                    };
+                    if (reqDialog.ShowDialog() != true)
+                        return;
+                }
+            }
+
             product.IsInstalling = true;
             product.InstallPercentage = 0;
 

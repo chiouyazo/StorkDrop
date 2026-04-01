@@ -37,6 +37,8 @@ public sealed class InstallationEngine : IInstallationEngine
     /// <inheritdoc />
     public FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
 
+    public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
+
     private static readonly JsonSerializerOptions FileManifestJsonOptions =
         new JsonSerializerOptions { WriteIndented = true };
 
@@ -243,6 +245,7 @@ public sealed class InstallationEngine : IInstallationEngine
             )
             {
                 List<PluginConfigField> allFields = [];
+                CurrentInteractivePlugin = null;
                 PluginEnvironment env = await BuildPluginEnvironmentAsync(
                     manifest,
                     cancellationToken
@@ -265,6 +268,12 @@ public sealed class InstallationEngine : IInstallationEngine
                             FailedStep = "PluginConfig",
                         };
                     }
+
+                    if (
+                        plugin is IInteractiveStorkPlugin interactive
+                        && CurrentInteractivePlugin is null
+                    )
+                        CurrentInteractivePlugin = interactive;
 
                     IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(env);
                     allFields.AddRange(fields);

@@ -35,4 +35,10 @@ public enum PluginFieldType
     /// Values are stored as JSON array in the field's Value.
     /// </summary>
     Group,
+
+    /// <summary>
+    /// A clickable button. Requires the plugin to implement IInteractiveStorkPlugin.
+    /// The button label comes from PluginConfigField.Label.
+    /// </summary>
+    Button,
 }

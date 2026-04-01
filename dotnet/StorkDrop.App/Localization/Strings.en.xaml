@@ -163,6 +163,14 @@
   <!-- Confirmation dialogs -->
   <system:String x:Key="Confirm_Uninstall">Are you sure you want to uninstall {0}?</system:String>
 
+  <!-- Required components -->
+  <system:String x:Key="RequiredComponents_Title">Missing Required Components</system:String>
+  <system:String x:Key="RequiredComponents_Message"
+    >The following components are required for {0} to work properly but were not found. You can still proceed, but the product may not function correctly.</system:String
+  >
+  <system:String x:Key="RequiredComponents_Proceed">Install Anyway</system:String>
+  <system:String x:Key="RequiredComponents_Cancel">Cancel</system:String>
+
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} has been uninstalled.</system:String>
   <system:String x:Key="Info_UninstallNeedsReboot"

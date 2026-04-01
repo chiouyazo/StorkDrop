@@ -21,5 +21,6 @@ public sealed record ProductManifest(
     string? ImageUrl = null,
     string? Publisher = null,
     long? DownloadSizeBytes = null,
-    string? ShortcutFolder = null
+    string? ShortcutFolder = null,
+    string[]? RequiredProductIds = null
 );

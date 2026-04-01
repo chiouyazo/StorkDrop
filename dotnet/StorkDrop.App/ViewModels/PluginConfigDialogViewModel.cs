@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts;
+using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -19,6 +20,8 @@ public partial class PluginConfigDialogViewModel : ObservableObject
     [ObservableProperty]
     private string _globalErrorMessage = string.Empty;
 
+    public IInteractiveStorkPlugin? InteractivePlugin { get; set; }
+
     /// <summary>
     /// Initializes a new instance of the <see cref="PluginConfigDialogViewModel"/> class.
     /// </summary>
@@ -34,10 +37,46 @@ public partial class PluginConfigDialogViewModel : ObservableObject
     )
     {
         _validateCallback = validateCallback;
+        BuildFields(schema, previousValues);
+    }
 
+    public void HandleButtonClick(PluginConfigFieldViewModel field)
+    {
+        if (InteractivePlugin is null)
+            return;
+
+        try
+        {
+            PluginButtonResult result = InteractivePlugin.OnButtonClicked(field.Key, GetValues());
+
+            if (result.StatusText is not null)
+            {
+                field.StatusText = result.StatusText;
+                field.IsStatusError = result.IsError;
+            }
+
+            if (result.UpdatedSchema is not null)
+            {
+                Dictionary<string, string> currentValues = GetValues();
+                BuildFields(result.UpdatedSchema, currentValues);
+            }
+        }
+        catch (Exception ex)
+        {
+            field.StatusText = ex.Message;
+            field.IsStatusError = true;
+        }
+    }
+
+    private void BuildFields(
+        IReadOnlyList<PluginConfigField> schema,
+        Dictionary<string, string> previousValues
+    )
+    {
+        Fields.Clear();
         foreach (PluginConfigField field in schema)
         {
-            PluginConfigFieldViewModel fieldVm = new PluginConfigFieldViewModel()
+            PluginConfigFieldViewModel fieldVm = new()
             {
                 Key = field.Key,
                 Label = field.Label,
@@ -50,13 +89,9 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             };
 
             if (previousValues.TryGetValue(field.Key, out string? previousValue))
-            {
                 fieldVm.Value = previousValue;
-            }
             else if (!string.IsNullOrEmpty(field.DefaultValue))
-            {
                 fieldVm.Value = field.DefaultValue;
-            }
 
             Fields.Add(fieldVm);
         }
