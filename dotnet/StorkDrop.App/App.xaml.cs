@@ -20,6 +20,11 @@ public partial class App : Application
         true,
         "StorkDrop-SingleInstance-Mutex"
     );
+    private static readonly EventWaitHandle ShowWindowEvent = new EventWaitHandle(
+        false,
+        EventResetMode.AutoReset,
+        "StorkDrop-ShowWindow-Event"
+    );
     private IHost? _host;
 
     public static IServiceProvider Services { get; private set; } = null!;
@@ -51,12 +56,8 @@ public partial class App : Application
 
         if (!SingleInstanceMutex.WaitOne(TimeSpan.Zero, true))
         {
-            MessageBox.Show(
-                "StorkDrop is already running. Check the system tray.",
-                "StorkDrop",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information
-            );
+            // Signal the already-running instance to show its window
+            ShowWindowEvent.Set();
             Shutdown();
             return;
         }
@@ -154,6 +155,21 @@ public partial class App : Application
 
             MainWindow mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
+
+            // Listen for duplicate instance signal - show main window when triggered
+            _ = Task.Run(() =>
+            {
+                while (true)
+                {
+                    ShowWindowEvent.WaitOne();
+                    Dispatcher.BeginInvoke(() =>
+                    {
+                        mainWindow.Show();
+                        mainWindow.WindowState = System.Windows.WindowState.Normal;
+                        mainWindow.Activate();
+                    });
+                }
+            });
 
             // Clean up leftover temp directories from previous installs (native DLLs prevent deletion during install)
             _ = Task.Run(() =>

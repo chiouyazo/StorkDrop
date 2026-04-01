@@ -6,6 +6,7 @@
   Title="{DynamicResource PluginConfig_Title}"
   Width="560"
   MinHeight="400"
+  MaxHeight="700"
   SizeToContent="Height"
   WindowStartupLocation="CenterOwner"
   ResizeMode="CanResizeWithGrip"
