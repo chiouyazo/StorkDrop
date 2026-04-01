@@ -49,8 +49,14 @@ public partial class PluginConfigFieldViewModel : ObservableObject
     [ObservableProperty]
     private double? _max;
 
-    /// <summary>
-    /// Gets a value indicating whether this field has a validation error.
-    /// </summary>
+    [ObservableProperty]
+    private string _statusText = string.Empty;
+
+    [ObservableProperty]
+    private bool _isStatusError;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
+    public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
+
+    partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusText));
 }

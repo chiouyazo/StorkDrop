@@ -46,6 +46,8 @@ public interface IInstallationEngine
     /// </summary>
     FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
 
+    IInteractiveStorkPlugin? CurrentInteractivePlugin { get; }
+
     /// <summary>
     /// Gets the plugin configuration schema for the specified product manifest.
     /// </summary>

@@ -185,6 +185,14 @@
     >M&#246;chten Sie {0} wirklich deinstallieren?</system:String
   >
 
+  <!-- Required components -->
+  <system:String x:Key="RequiredComponents_Title">Fehlende Voraussetzungen</system:String>
+  <system:String x:Key="RequiredComponents_Message"
+    >Die folgenden Komponenten werden für {0} benötigt, wurden aber nicht gefunden. Sie können trotzdem fortfahren, aber das Produkt funktioniert möglicherweise nicht korrekt.</system:String
+  >
+  <system:String x:Key="RequiredComponents_Proceed">Trotzdem installieren</system:String>
+  <system:String x:Key="RequiredComponents_Cancel">Abbrechen</system:String>
+
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} wurde deinstalliert.</system:String>
   <system:String x:Key="Info_UninstallNeedsReboot"

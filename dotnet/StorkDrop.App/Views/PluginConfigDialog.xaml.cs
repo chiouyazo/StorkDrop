@@ -88,6 +88,18 @@ public partial class PluginConfigDialog : Window
         }
     }
 
+    private void PluginButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (
+            sender is System.Windows.Controls.Button button
+            && button.Tag is PluginConfigFieldViewModel field
+            && DataContext is PluginConfigDialogViewModel viewModel
+        )
+        {
+            viewModel.HandleButtonClick(field);
+        }
+    }
+
     private void MultiSelect_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
 
     private void MultiSelectCheckBox_Loaded(object sender, RoutedEventArgs e)

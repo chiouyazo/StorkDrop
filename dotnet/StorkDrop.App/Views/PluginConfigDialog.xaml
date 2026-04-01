@@ -233,6 +233,45 @@
                 />
               </Grid>
 
+              <!-- Button -->
+              <StackPanel Orientation="Horizontal">
+                <StackPanel.Style>
+                  <Style TargetType="StackPanel">
+                    <Setter Property="Visibility" Value="Collapsed" />
+                    <Style.Triggers>
+                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Button">
+                        <Setter Property="Visibility" Value="Visible" />
+                      </DataTrigger>
+                    </Style.Triggers>
+                  </Style>
+                </StackPanel.Style>
+                <Button
+                  Content="{Binding Label}"
+                  Style="{DynamicResource OutlinedButton}"
+                  Padding="16,8"
+                  MinWidth="150"
+                  Tag="{Binding}"
+                  Click="PluginButton_Click"
+                />
+                <TextBlock
+                  Text="{Binding StatusText}"
+                  VerticalAlignment="Center"
+                  Margin="12,0,0,0"
+                  FontSize="12"
+                >
+                  <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                      <Setter Property="Foreground" Value="#2E7D32" />
+                      <Style.Triggers>
+                        <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                          <Setter Property="Foreground" Value="#D32F2F" />
+                        </DataTrigger>
+                      </Style.Triggers>
+                    </Style>
+                  </TextBlock.Style>
+                </TextBlock>
+              </StackPanel>
+
               <!-- MultiSelect -->
               <Border MaxHeight="180" Padding="8,4">
                 <Border.Style>

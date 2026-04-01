@@ -124,6 +124,7 @@ public partial class App : Application
                         fields,
                         currentValues
                     );
+                    vm.InteractivePlugin = engine.CurrentInteractivePlugin;
                     Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
                     dialog.Owner = MainWindow;
                     if (dialog.ShowDialog() == true)
