@@ -53,7 +53,6 @@ public sealed class SelfUpdateService
         );
         await using FileStream fileStream = File.Create(installerPath);
         await downloadStream.CopyToAsync(fileStream, cancellationToken);
-        await fileStream.FlushAsync(cancellationToken);
 
         _logger.LogInformation(
             "Download complete ({Bytes} bytes), launching installer: {Path}",
@@ -61,9 +60,19 @@ public sealed class SelfUpdateService
             installerPath
         );
 
-        Process.Start(new ProcessStartInfo(installerPath) { UseShellExecute = true });
+        _logger.LogInformation("Shutting down StorkDrop, then launching installer");
 
-        _logger.LogInformation("Installer launched, shutting down StorkDrop");
+        // Launch installer after StorkDrop exits (installer needs the exe to not be in use)
+        Process.Start(
+            new ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = $"/c timeout /t 2 /nobreak >nul & \"{installerPath}\"",
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            }
+        );
+
         System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
             System.Windows.Application.Current.Shutdown();
