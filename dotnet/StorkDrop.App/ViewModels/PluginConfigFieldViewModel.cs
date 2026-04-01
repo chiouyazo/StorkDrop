@@ -58,5 +58,7 @@ public partial class PluginConfigFieldViewModel : ObservableObject
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
 
+    partial void OnErrorMessageChanged(string value) => OnPropertyChanged(nameof(HasError));
+
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusText));
 }
