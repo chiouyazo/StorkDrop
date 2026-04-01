@@ -71,6 +71,7 @@ public static class AppHostBuilder
                 services.AddSingleton<INotificationService, ToastNotificationService>();
                 services.AddHostedService<UpdateBackgroundService>();
                 services.AddSingleton<InstallationTracker>();
+                services.AddSingleton<SelfUpdateService>();
 
                 PluginLoadStatus pluginLoadStatus = new PluginLoadStatus();
                 LoadPlugins(services, pluginLoadStatus);
