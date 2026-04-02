@@ -22,5 +22,6 @@ public sealed record ProductManifest(
     string? Publisher = null,
     long? DownloadSizeBytes = null,
     string? ShortcutFolder = null,
-    string[]? RequiredProductIds = null
+    string[]? RequiredProductIds = null,
+    OptionalPostProduct[]? OptionalPostProducts = null
 );

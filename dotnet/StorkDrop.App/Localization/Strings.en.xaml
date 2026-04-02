@@ -171,6 +171,18 @@
   <system:String x:Key="RequiredComponents_Proceed">Install Anyway</system:String>
   <system:String x:Key="RequiredComponents_Cancel">Cancel</system:String>
 
+  <!-- Optional post-products -->
+  <system:String x:Key="OptionalProducts_Title">Optional Companion Products</system:String>
+  <system:String x:Key="OptionalProducts_Message"
+    >The following companion products are available for {0}. Select which you'd like to install:</system:String
+  >
+  <system:String x:Key="OptionalProducts_Install">Install Selected</system:String>
+  <system:String x:Key="OptionalProducts_Skip">Skip</system:String>
+  <system:String x:Key="OptionalProducts_AlreadyInstalled">(already installed)</system:String>
+  <system:String x:Key="OptionalProducts_NotAvailable"
+    >{0} is recommended but not available in your configured feeds.</system:String
+  >
+
   <!-- Restart -->
   <system:String x:Key="Restart_PluginInstalled"
     >{0} has been installed. StorkDrop needs to restart to load the new plugin. Restart now?</system:String

@@ -24,6 +24,7 @@ public partial class MarketplaceViewModel : ObservableObject
     private readonly InstallationCoordinator _coordinator;
     private readonly InstallationTracker _tracker;
     private readonly INotificationService _notificationService;
+    private readonly PostProductResolver _postProductResolver;
     private readonly ILogger<MarketplaceViewModel> _logger;
 
     public MarketplaceViewModel(
@@ -32,6 +33,7 @@ public partial class MarketplaceViewModel : ObservableObject
         InstallationCoordinator coordinator,
         InstallationTracker tracker,
         INotificationService notificationService,
+        PostProductResolver postProductResolver,
         ILogger<MarketplaceViewModel> logger
     )
     {
@@ -40,6 +42,7 @@ public partial class MarketplaceViewModel : ObservableObject
         _tracker = tracker;
         _coordinator = coordinator;
         _notificationService = notificationService;
+        _postProductResolver = postProductResolver;
         _logger = logger;
     }
 
@@ -259,6 +262,9 @@ public partial class MarketplaceViewModel : ObservableObject
             product.InstalledVersion = product.Version;
             product.IsInstalling = false;
 
+            // Offer optional post-products
+            await HandleOptionalPostProductsAsync(manifest);
+
             // If installed to StorkDrop's own directory, prompt for restart
             if (manifest.RecommendedInstallPath?.Contains("{StorkPath}") == true)
             {
@@ -301,6 +307,171 @@ public partial class MarketplaceViewModel : ObservableObject
                 + ": "
                 + ex.Message;
             product.IsInstalling = false;
+        }
+    }
+
+    private async Task HandleOptionalPostProductsAsync(ProductManifest parentManifest)
+    {
+        if (parentManifest.OptionalPostProducts is not { Length: > 0 })
+            return;
+
+        try
+        {
+            PostProductResolution resolution = await _postProductResolver.ResolveAsync(
+                parentManifest.OptionalPostProducts
+            );
+
+            foreach (string warning in resolution.Warnings)
+            {
+                try
+                {
+                    _notificationService.ShowInfo(
+                        LocalizationManager
+                            .GetString("OptionalProducts_NotAvailable")
+                            .Replace("{0}", warning),
+                        string.Empty
+                    );
+                }
+                catch { }
+            }
+
+            if (resolution.Available.Count == 0 && resolution.AlreadyInstalled.Count == 0)
+                return;
+
+            Views.OptionalPostProductsDialog dialog = new(
+                parentManifest.Title,
+                resolution.Available,
+                resolution.AlreadyInstalled
+            )
+            {
+                Owner = System.Windows.Application.Current.MainWindow,
+            };
+
+            if (dialog.ShowDialog() != true || dialog.SelectedProducts.Count == 0)
+                return;
+
+            foreach (ResolvedPostProduct postProduct in dialog.SelectedProducts)
+            {
+                try
+                {
+                    await InstallPostProductAsync(postProduct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to install optional post-product {ProductId}",
+                        postProduct.Manifest.ProductId
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to handle optional post-products for {ProductId}",
+                parentManifest.ProductId
+            );
+        }
+    }
+
+    private async Task InstallPostProductAsync(ResolvedPostProduct postProduct)
+    {
+        ProductManifest manifest = postProduct.Manifest;
+
+        string defaultPath =
+            manifest.RecommendedInstallPath
+            ?? Path.Combine(StorkPaths.DefaultInstallRoot, manifest.Title);
+
+        bool hasFileTypeHandlers = App
+            .Services.GetServices<IStorkDropPlugin>()
+            .Any(p => p is IFileTypeHandler);
+
+        Views.InstallDialog dialog = new Views.InstallDialog(
+            manifest.Title,
+            manifest.Version,
+            defaultPath,
+            manifest,
+            hasFileTypeHandlers
+        );
+        dialog.Owner = System.Windows.Application.Current.MainWindow;
+
+        if (dialog.ShowDialog() != true || !dialog.Confirmed)
+            return;
+
+        string targetPath = dialog.SelectedPath;
+
+        TrackedInstallation tracked = _tracker.StartInstallation(
+            manifest.ProductId,
+            manifest.Title
+        );
+        tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
+
+        InstallOptions options = new InstallOptions(
+            TargetPath: targetPath,
+            FeedId: postProduct.FeedId
+        );
+        Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+        {
+            tracked.Percentage = p.Percentage;
+            tracked.StatusMessage = p.Message;
+            if (!string.IsNullOrEmpty(p.Message))
+                tracked.AddLog(p.Message);
+        });
+
+        InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
+            manifest,
+            options,
+            progress,
+            tracked.Cts.Token
+        );
+
+        if (!installResult.Success)
+        {
+            tracked.Complete(false, installResult.ErrorMessage);
+            _tracker.NotifyChanged();
+            _logger.LogWarning(
+                "Optional post-product {ProductId} installation failed: {Error}",
+                manifest.ProductId,
+                installResult.ErrorMessage
+            );
+            try
+            {
+                _notificationService.ShowError(
+                    $"Installation of {manifest.Title} failed",
+                    installResult.ErrorMessage ?? string.Empty
+                );
+            }
+            catch
+            {
+                // Notification failures should never block
+            }
+            return;
+        }
+
+        tracked.Complete(true);
+        _tracker.NotifyChanged();
+        try
+        {
+            _notificationService.ShowSuccess(
+                $"{manifest.Title} installed successfully",
+                $"Version {manifest.Version} has been installed."
+            );
+        }
+        catch
+        {
+            // Notification failures should never block
+        }
+
+        ProductCardViewModel? card = Products.FirstOrDefault(p =>
+            p.ProductId == manifest.ProductId
+        );
+        if (card is not null)
+        {
+            card.IsInstalled = true;
+            card.HasUpdate = false;
+            card.InstalledVersion = manifest.Version;
         }
     }
 

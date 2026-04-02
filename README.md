@@ -317,6 +317,11 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "plugins": [
     { "assembly": "MyProduct.dll", "typeName": "MyProduct.Installer" },
   ],
+  "bundledProductIds": ["my-other-product"],
+  "requiredProductIds": ["dependency-product"],
+  "optionalPostProducts": [
+    { "id": "my-example-data", "hideNoAccess": true },
+  ],
   "cleanup": {
     "registryKeys": [],
     "dataLocations": ["%APPDATA%\\MyProduct"],
