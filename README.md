@@ -587,8 +587,13 @@ Stored in `%APPDATA%/StorkDrop/Config/`:
 
 Logs in `%APPDATA%/StorkDrop/Logs/` (Serilog, rolling daily, 30-day retention).
 
+## Known limitations
+
+- **Re-running plugin phases**: Currently, Pre/PostInstall steps can only run during installation. If you need to run the same plugin logic against a second database or with different configuration, you must reinstall the product. A "Re-run configuration" button per installed product is planned.
+
 ## Roadmap
 
+- **Re-run plugin configuration** - allow re-executing Pre/PostInstall plugin phases on already-installed products with new configuration values (e.g., targeting a second database)
 - **Remote deployment via WinRM** - deploy to remote servers without installing a persistent agent. StorkDrop connects via PowerShell Remoting (WinRM, enabled by default on Windows Server), installs itself on the target machine if needed, verifies plugin compatibility, and runs the installation locally on the remote machine. The local StorkDrop streams config dialogs and progress back to the user. Deployment targets are modular (`IDeploymentTarget`) so additional transports (SSH, custom) can be added alongside the built-in local and WinRM targets.
 - **Cross-platform plugin scripting** - support pre/post install scripts in PowerShell, Python, and Bash alongside compiled .NET plugins
 - **Differential updates** - download only changed files using binary diff instead of full packages

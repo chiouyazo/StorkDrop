@@ -239,7 +239,7 @@ public sealed class NexusRegistryClient(
     }
 
     /// <summary>
-    /// Lists all raw hosted repositories accessible to the authenticated account.
+    /// Lists all raw hosted and group repositories accessible to the authenticated account.
     /// </summary>
     public static async Task<IReadOnlyList<NexusRepositoryInfo>> ListRawHostedRepositoriesAsync(
         HttpClient httpClient,
@@ -259,7 +259,10 @@ public sealed class NexusRegistryClient(
         return repos
             .Where(r =>
                 r.Format.Equals("raw", StringComparison.OrdinalIgnoreCase)
-                && r.Type.Equals("hosted", StringComparison.OrdinalIgnoreCase)
+                && (
+                    r.Type.Equals("hosted", StringComparison.OrdinalIgnoreCase)
+                    || r.Type.Equals("group", StringComparison.OrdinalIgnoreCase)
+                )
             )
             .ToList();
     }
