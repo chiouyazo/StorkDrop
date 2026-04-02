@@ -131,7 +131,7 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
                         );
 
                     _logger.LogInformation(
-                        "Discovered {Count} raw hosted repositories on {FeedName}",
+                        "Discovered {Count} raw repositories on {FeedName}",
                         repos.Count,
                         fc.Name
                     );
