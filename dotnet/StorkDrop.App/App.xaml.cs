@@ -32,6 +32,9 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         string[] args = Environment.GetCommandLineArgs();
+        bool isCliMode = args.Length >= 2 && args[1] == "--cli";
+        if (!isCliMode)
+            ConsoleHelper.DetachConsole();
 
         if (args.Length >= 5 && args[1] == "--install")
         {
@@ -50,6 +53,13 @@ public partial class App : Application
         if (args.Length >= 5 && args[1] == "--update")
         {
             await RunElevatedUpdateAsync(args[2], args[3], args[4]);
+            Shutdown();
+            return;
+        }
+
+        if (args.Length >= 2 && args[1] == "--cli")
+        {
+            await RunCliModeAsync(args);
             Shutdown();
             return;
         }
@@ -82,6 +92,10 @@ public partial class App : Application
 
             IConfigurationService configService =
                 Services.GetRequiredService<IConfigurationService>();
+
+            AppConfiguration? existingConfig = await configService.LoadAsync();
+            if (existingConfig is not null)
+                Localization.LocalizationManager.Initialize(existingConfig.Language);
 
             if (!configService.ConfigurationExists())
             {
@@ -349,6 +363,37 @@ public partial class App : Application
                 }
             }
         );
+    }
+
+    private async Task RunCliModeAsync(string[] args)
+    {
+        try
+        {
+            _host = AppHostBuilder.Build();
+            Services = _host.Services;
+            _host.Start();
+
+            IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
+            await feedRegistry.ReloadAsync();
+
+            CliRunner runner = new CliRunner(Services);
+            Environment.ExitCode = await runner.RunAsync(args);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"CLI error: {ex.Message}");
+            Environment.ExitCode = 1;
+        }
+        finally
+        {
+            try
+            {
+                if (_host is not null)
+                    await _host.StopAsync(TimeSpan.FromSeconds(3));
+                _host?.Dispose();
+            }
+            catch { }
+        }
     }
 
     private async Task RunElevatedAsync(string operation, Func<IServiceProvider, Task> action)

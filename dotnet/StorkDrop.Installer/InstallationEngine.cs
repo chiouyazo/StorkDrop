@@ -1272,7 +1272,7 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
-        // Use resolvedPath (not options.TargetPath which may still have {StepsPath} template)
+        // Use resolvedPath (not options.TargetPath which may still have {ACMEPath} template)
         InstallOptions resolvedOptions = options with
         {
             TargetPath = resolvedPath,
