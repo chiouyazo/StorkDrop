@@ -84,7 +84,7 @@
         </StackPanel>
       </Border>
 
-      <!-- Install Path -->
+      <!-- Recommended Install Path -->
       <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,16">
         <StackPanel>
           <TextBlock
@@ -92,23 +92,12 @@
             Style="{DynamicResource HeadingSmall}"
             Margin="0,0,0,8"
           />
-          <Grid>
-            <Grid.ColumnDefinitions>
-              <ColumnDefinition Width="*" />
-              <ColumnDefinition Width="Auto" />
-            </Grid.ColumnDefinitions>
-            <TextBox
-              Text="{Binding InstallPath, UpdateSourceTrigger=PropertyChanged}"
-              Style="{DynamicResource StyledTextBox}"
-            />
-            <Button
-              Grid.Column="1"
-              Content="{DynamicResource ProductDetail_Browse}"
-              Style="{DynamicResource OutlinedButton}"
-              Command="{Binding BrowseInstallPathCommand}"
-              Margin="8,0,0,0"
-            />
-          </Grid>
+          <TextBox
+            Text="{Binding RecommendedInstallPath, Mode=OneWay}"
+            Style="{DynamicResource StyledTextBox}"
+            IsReadOnly="True"
+            Opacity="0.7"
+          />
         </StackPanel>
       </Border>
 
@@ -121,19 +110,6 @@
         HorizontalAlignment="Left"
         MinWidth="160"
       />
-
-      <!-- Progress -->
-      <StackPanel
-        Visibility="{Binding IsInstalling, Converter={StaticResource BoolToVisibilityConverter}}"
-        Margin="0,16,0,0"
-      >
-        <ProgressBar
-          Value="{Binding InstallProgress}"
-          Style="{DynamicResource StyledProgressBar}"
-          Margin="0,0,0,8"
-        />
-        <TextBlock Text="{Binding InstallStatusMessage}" Style="{DynamicResource CaptionText}" />
-      </StackPanel>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

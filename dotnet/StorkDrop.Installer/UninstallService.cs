@@ -91,6 +91,13 @@ public sealed class UninstallService
                     {
                         await DeleteFileWithRetryAsync(fullPath, cancellationToken);
                     }
+                    else
+                    {
+                        _logger.LogInformation(
+                            "Tracked file no longer exists, skipping: {FilePath}",
+                            relativePath
+                        );
+                    }
                 }
 
                 CleanupEmptyDirectories(product.InstalledPath);

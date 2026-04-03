@@ -1,46 +1,45 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
+using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Installer;
 
 namespace StorkDrop.App.ViewModels;
 
-/// <summary>
-/// View model for the product detail view, displaying product information and handling installation.
-/// </summary>
 public partial class ProductDetailViewModel : ObservableObject
 {
     private readonly IFeedRegistry _feedRegistry;
     private readonly InstallationCoordinator _coordinator;
     private readonly IProductRepository _productRepository;
-    private readonly DialogService _dialogService;
+    private readonly InstallationTracker _tracker;
+    private readonly INotificationService _notificationService;
+    private readonly PostProductResolver _postProductResolver;
     private readonly ILogger<ProductDetailViewModel> _logger;
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="ProductDetailViewModel"/> class.
-    /// </summary>
-    /// <param name="feedRegistry">The feed registry for fetching product details.</param>
-    /// <param name="coordinator">The installation coordinator for isolated installs.</param>
-    /// <param name="productRepository">The repository for installed products.</param>
-    /// <param name="dialogService">The dialog service for user interactions.</param>
-    /// <param name="logger">The logger instance.</param>
     public ProductDetailViewModel(
         IFeedRegistry feedRegistry,
         InstallationCoordinator coordinator,
         IProductRepository productRepository,
-        DialogService dialogService,
+        InstallationTracker tracker,
+        INotificationService notificationService,
+        PostProductResolver postProductResolver,
         ILogger<ProductDetailViewModel> logger
     )
     {
         _feedRegistry = feedRegistry;
         _coordinator = coordinator;
         _productRepository = productRepository;
-        _dialogService = dialogService;
+        _tracker = tracker;
+        _notificationService = notificationService;
+        _postProductResolver = postProductResolver;
         _logger = logger;
     }
 
@@ -56,16 +55,7 @@ public partial class ProductDetailViewModel : ObservableObject
     private string _selectedVersion = string.Empty;
 
     [ObservableProperty]
-    private string _installPath = string.Empty;
-
-    [ObservableProperty]
     private bool _isInstalling;
-
-    [ObservableProperty]
-    private int _installProgress;
-
-    [ObservableProperty]
-    private string _installStatusMessage = string.Empty;
 
     [ObservableProperty]
     private bool _isInstalled;
@@ -82,11 +72,11 @@ public partial class ProductDetailViewModel : ObservableObject
     [ObservableProperty]
     private string _selectedVersionReleaseNotes = string.Empty;
 
+    [ObservableProperty]
+    private string _recommendedInstallPath = string.Empty;
+
     public bool CanInstallSelectedVersion => !IsInstalling && !IsSelectedVersionInstalled;
 
-    /// <summary>
-    /// Event raised when the user wants to go back to the marketplace.
-    /// </summary>
     public event Action? GoBackRequested;
 
     partial void OnIsInstallingChanged(bool value) =>
@@ -109,22 +99,20 @@ public partial class ProductDetailViewModel : ObservableObject
         if (IsInstalled && SelectedVersion == InstalledVersion)
         {
             IsSelectedVersionInstalled = true;
-            InstallButtonText =
-                LocalizationManager.GetString("Install_Installed") + " v" + SelectedVersion;
+            InstallButtonText = LocalizationManager.GetString("Install_Installed");
+        }
+        else if (IsInstalled)
+        {
+            IsSelectedVersionInstalled = false;
+            InstallButtonText = LocalizationManager.GetString("Install_Update");
         }
         else
         {
             IsSelectedVersionInstalled = false;
-            InstallButtonText =
-                LocalizationManager.GetString("Install_Button") + " v" + SelectedVersion;
+            InstallButtonText = LocalizationManager.GetString("Install_Button");
         }
     }
 
-    /// <summary>
-    /// Loads the product details for the specified product ID.
-    /// </summary>
-    /// <param name="productId">The product ID to load details for.</param>
-    /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand]
     private async Task LoadAsync(string productId)
     {
@@ -136,8 +124,8 @@ public partial class ProductDetailViewModel : ObservableObject
         IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync(productId);
         AvailableVersions = new ObservableCollection<string>(versions);
         SelectedVersion = Manifest.Version;
-        InstallPath = Manifest.RecommendedInstallPath ?? string.Empty;
         SelectedVersionReleaseNotes = Manifest.ReleaseNotes ?? string.Empty;
+        RecommendedInstallPath = Manifest.RecommendedInstallPath ?? string.Empty;
 
         InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
         IsInstalled = installed is not null;
@@ -172,89 +160,309 @@ public partial class ProductDetailViewModel : ObservableObject
         }
     }
 
-    /// <summary>
-    /// Opens a folder picker to select the install directory.
-    /// </summary>
-    [RelayCommand]
-    private void BrowseInstallPath()
-    {
-        string? path = _dialogService.ShowFolderPicker(
-            LocalizationManager.GetString("Install_Directory")
-        );
-        if (path is not null)
-            InstallPath = path;
-    }
-
-    /// <summary>
-    /// Navigates back to the marketplace view.
-    /// </summary>
     [RelayCommand]
     private void GoBack()
     {
         GoBackRequested?.Invoke();
     }
 
-    /// <summary>
-    /// Installs the product with the selected version and install path.
-    /// </summary>
-    /// <returns>A task representing the asynchronous operation.</returns>
     [RelayCommand]
     private async Task InstallAsync()
     {
-        if (Manifest is null || string.IsNullOrEmpty(InstallPath))
+        if (Manifest is null)
             return;
 
         try
         {
-            IsInstalling = true;
-            InstallOptions options = new InstallOptions(TargetPath: InstallPath, FeedId: FeedId);
-            Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
-            {
-                InstallProgress = p.Percentage;
-                InstallStatusMessage = p.Message;
-            });
-
             IRegistryClient client = _feedRegistry.GetClient(FeedId);
-            ProductManifest? versionManifest =
+            ProductManifest? manifest =
                 SelectedVersion == Manifest.Version
                     ? Manifest
                     : await client.GetProductManifestAsync(Manifest.ProductId, SelectedVersion);
 
-            if (versionManifest is not null)
-            {
-                using CancellationTokenSource cts = new CancellationTokenSource();
-                InstallResult result = await _coordinator.InstallWithIsolationAsync(
-                    versionManifest,
-                    options,
-                    progress,
-                    cts.Token
-                );
+            if (manifest is null)
+                return;
 
-                if (result.Success)
+            string defaultPath =
+                manifest.RecommendedInstallPath
+                ?? Path.Combine(StorkPaths.DefaultInstallRoot, manifest.Title);
+
+            bool hasFileTypeHandlers = App
+                .Services.GetServices<IStorkDropPlugin>()
+                .Any(p => p is IFileTypeHandler);
+
+            Views.InstallDialog dialog = new Views.InstallDialog(
+                manifest.Title,
+                manifest.Version,
+                defaultPath,
+                manifest,
+                hasFileTypeHandlers
+            );
+            dialog.Owner = System.Windows.Application.Current.MainWindow;
+
+            if (dialog.ShowDialog() != true || !dialog.Confirmed)
+                return;
+
+            string targetPath = dialog.SelectedPath;
+
+            if (manifest.RequiredProductIds is { Length: > 0 })
+            {
+                List<string> missing = [];
+                foreach (string reqId in manifest.RequiredProductIds)
                 {
-                    IsInstalled = true;
-                    InstalledVersion = SelectedVersion;
-                    UpdateInstallButtonText();
+                    InstalledProduct? installed = await _productRepository.GetByIdAsync(reqId);
+                    if (installed is null)
+                        missing.Add(reqId);
                 }
-                else
+
+                if (missing.Count > 0)
                 {
-                    _dialogService.ShowError(
-                        LocalizationManager.GetString("Error_InstallFailed_Generic")
-                            + ": "
-                            + (result.ErrorMessage ?? string.Empty)
+                    Views.RequiredComponentsDialog reqDialog = new(manifest.Title, missing)
+                    {
+                        Owner = System.Windows.Application.Current.MainWindow,
+                    };
+                    if (reqDialog.ShowDialog() != true)
+                        return;
+                }
+            }
+
+            IsInstalling = true;
+
+            TrackedInstallation tracked = _tracker.StartInstallation(
+                manifest.ProductId,
+                manifest.Title
+            );
+            tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
+
+            InstallOptions options = new InstallOptions(TargetPath: targetPath, FeedId: FeedId);
+            Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+            {
+                tracked.Percentage = p.Percentage;
+                tracked.StatusMessage = p.Message;
+                if (!string.IsNullOrEmpty(p.Message))
+                    tracked.AddLog(p.Message);
+            });
+
+            InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
+                manifest,
+                options,
+                progress,
+                tracked.Cts.Token
+            );
+
+            if (!installResult.Success)
+            {
+                tracked.Complete(false, installResult.ErrorMessage);
+                _tracker.NotifyChanged();
+                try
+                {
+                    _notificationService.ShowError(
+                        $"Installation of {manifest.Title} failed",
+                        installResult.ErrorMessage ?? string.Empty
+                    );
+                }
+                catch { }
+                return;
+            }
+
+            tracked.Complete(true);
+            _tracker.NotifyChanged();
+            try
+            {
+                _notificationService.ShowSuccess(
+                    $"{manifest.Title} installed successfully",
+                    $"Version {manifest.Version} has been installed."
+                );
+            }
+            catch { }
+
+            IsInstalled = true;
+            InstalledVersion = manifest.Version;
+            UpdateInstallButtonText();
+
+            await HandleOptionalPostProductsAsync(manifest);
+
+            if (manifest.RecommendedInstallPath?.Contains("{StorkPath}") == true)
+            {
+                System.Windows.MessageBoxResult restartResult = System.Windows.MessageBox.Show(
+                    LocalizationManager
+                        .GetString("Restart_PluginInstalled")
+                        .Replace("{0}", manifest.Title),
+                    "StorkDrop",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question
+                );
+                if (restartResult == System.Windows.MessageBoxResult.Yes)
+                {
+                    string? exePath = System.Environment.ProcessPath;
+                    if (!string.IsNullOrEmpty(exePath))
+                    {
+                        System.Diagnostics.Process.Start(
+                            new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "cmd.exe",
+                                Arguments = $"/c timeout /t 2 /nobreak >nul & \"{exePath}\"",
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                            }
+                        );
+                    }
+                    System.Windows.Application.Current.Shutdown();
+                }
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to install product from detail view");
+        }
+        finally
+        {
+            IsInstalling = false;
+        }
+    }
+
+    private async Task HandleOptionalPostProductsAsync(ProductManifest parentManifest)
+    {
+        if (parentManifest.OptionalPostProducts is not { Length: > 0 })
+            return;
+
+        try
+        {
+            PostProductResolution resolution = await _postProductResolver.ResolveAsync(
+                parentManifest.OptionalPostProducts
+            );
+
+            foreach (string warning in resolution.Warnings)
+            {
+                try
+                {
+                    _notificationService.ShowInfo(
+                        LocalizationManager
+                            .GetString("OptionalProducts_NotAvailable")
+                            .Replace("{0}", warning),
+                        string.Empty
+                    );
+                }
+                catch { }
+            }
+
+            if (resolution.Available.Count == 0 && resolution.AlreadyInstalled.Count == 0)
+                return;
+
+            Views.OptionalPostProductsDialog dialog = new(
+                parentManifest.Title,
+                resolution.Available,
+                resolution.AlreadyInstalled
+            )
+            {
+                Owner = System.Windows.Application.Current.MainWindow,
+            };
+
+            if (dialog.ShowDialog() != true || dialog.SelectedProducts.Count == 0)
+                return;
+
+            foreach (ResolvedPostProduct postProduct in dialog.SelectedProducts)
+            {
+                try
+                {
+                    await InstallPostProductAsync(postProduct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to install optional post-product {ProductId}",
+                        postProduct.Manifest.ProductId
                     );
                 }
             }
         }
         catch (Exception ex)
         {
-            _dialogService.ShowError(
-                LocalizationManager.GetString("Error_InstallFailed_Generic") + ": " + ex.Message
+            _logger.LogWarning(
+                ex,
+                "Failed to handle optional post-products for {ProductId}",
+                parentManifest.ProductId
             );
         }
-        finally
+    }
+
+    private async Task InstallPostProductAsync(ResolvedPostProduct postProduct)
+    {
+        ProductManifest manifest = postProduct.Manifest;
+
+        string defaultPath =
+            manifest.RecommendedInstallPath
+            ?? Path.Combine(StorkPaths.DefaultInstallRoot, manifest.Title);
+
+        bool hasFileTypeHandlers = App
+            .Services.GetServices<IStorkDropPlugin>()
+            .Any(p => p is IFileTypeHandler);
+
+        Views.InstallDialog dialog = new Views.InstallDialog(
+            manifest.Title,
+            manifest.Version,
+            defaultPath,
+            manifest,
+            hasFileTypeHandlers
+        );
+        dialog.Owner = System.Windows.Application.Current.MainWindow;
+
+        if (dialog.ShowDialog() != true || !dialog.Confirmed)
+            return;
+
+        string targetPath = dialog.SelectedPath;
+
+        TrackedInstallation tracked = _tracker.StartInstallation(
+            manifest.ProductId,
+            manifest.Title
+        );
+        tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
+
+        InstallOptions options = new InstallOptions(
+            TargetPath: targetPath,
+            FeedId: postProduct.FeedId
+        );
+        Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
         {
-            IsInstalling = false;
+            tracked.Percentage = p.Percentage;
+            tracked.StatusMessage = p.Message;
+            if (!string.IsNullOrEmpty(p.Message))
+                tracked.AddLog(p.Message);
+        });
+
+        InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
+            manifest,
+            options,
+            progress,
+            tracked.Cts.Token
+        );
+
+        if (!installResult.Success)
+        {
+            tracked.Complete(false, installResult.ErrorMessage);
+            _tracker.NotifyChanged();
+            try
+            {
+                _notificationService.ShowError(
+                    $"Installation of {manifest.Title} failed",
+                    installResult.ErrorMessage ?? string.Empty
+                );
+            }
+            catch { }
+            return;
         }
+
+        tracked.Complete(true);
+        _tracker.NotifyChanged();
+        try
+        {
+            _notificationService.ShowSuccess(
+                $"{manifest.Title} installed successfully",
+                $"Version {manifest.Version} has been installed."
+            );
+        }
+        catch { }
     }
 }
