@@ -49,13 +49,26 @@ public sealed class GitHubUpdateChecker : ISelfUpdateChecker
             }
 
             string remoteVersion = release.TagName.TrimStart('v');
-            string? currentVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
+            string? currentVersion = Assembly
+                .GetEntryAssembly()
+                ?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+                ?.InformationalVersion;
+
+            if (string.IsNullOrEmpty(currentVersion))
+            {
+                currentVersion = Assembly.GetEntryAssembly()?.GetName().Version?.ToString();
+            }
 
             if (string.IsNullOrEmpty(currentVersion))
             {
                 _logger.LogWarning("Could not determine current app version");
                 return null;
             }
+
+            // Strip build metadata (+commitsha) if present
+            int plusIndex = currentVersion.IndexOf('+');
+            if (plusIndex >= 0)
+                currentVersion = currentVersion[..plusIndex];
 
             // Strip the 4th segment (.0) if present for comparison
             if (currentVersion.Split('.').Length == 4 && currentVersion.EndsWith(".0"))
