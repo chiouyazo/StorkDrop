@@ -34,7 +34,11 @@ public sealed class TrayIconService : IDisposable
         try
         {
             using System.IO.Stream? stream = Application
-                .GetResourceStream(new Uri("/Assets/stork_icon_32.png", UriKind.Relative))
+                .GetResourceStream(
+                    new Uri(
+                        "pack://application:,,,/StorkDrop.App;component/Assets/stork_icon_32.png"
+                    )
+                )
                 ?.Stream;
             if (stream is not null)
             {

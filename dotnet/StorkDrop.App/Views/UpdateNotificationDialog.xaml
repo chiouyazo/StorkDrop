@@ -3,7 +3,7 @@
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   Title="{DynamicResource Update_Available_Title}"
-  Icon="/Assets/stork.ico"
+  Icon="pack://application:,,,/StorkDrop.App;component/Assets/stork.ico"
   Width="450"
   Height="350"
   WindowStartupLocation="CenterOwner"
