@@ -75,12 +75,23 @@ public partial class ProductDetailViewModel : ObservableObject
     [ObservableProperty]
     private string _recommendedInstallPath = string.Empty;
 
+    [ObservableProperty]
+    private bool _hasPlugins;
+
     public bool CanInstallSelectedVersion => !IsInstalling && !IsSelectedVersionInstalled;
+    public bool CanReExecutePlugins => IsInstalled && HasPlugins && !IsInstalling;
 
     public event Action? GoBackRequested;
 
-    partial void OnIsInstallingChanged(bool value) =>
+    partial void OnIsInstallingChanged(bool value)
+    {
         OnPropertyChanged(nameof(CanInstallSelectedVersion));
+        OnPropertyChanged(nameof(CanReExecutePlugins));
+    }
+
+    partial void OnIsInstalledChanged(bool value) => OnPropertyChanged(nameof(CanReExecutePlugins));
+
+    partial void OnHasPluginsChanged(bool value) => OnPropertyChanged(nameof(CanReExecutePlugins));
 
     partial void OnIsSelectedVersionInstalledChanged(bool value) =>
         OnPropertyChanged(nameof(CanInstallSelectedVersion));
@@ -126,6 +137,7 @@ public partial class ProductDetailViewModel : ObservableObject
         SelectedVersion = Manifest.Version;
         SelectedVersionReleaseNotes = Manifest.ReleaseNotes ?? string.Empty;
         RecommendedInstallPath = Manifest.RecommendedInstallPath ?? string.Empty;
+        HasPlugins = Manifest.Plugins is { Length: > 0 };
 
         InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
         IsInstalled = installed is not null;
@@ -464,5 +476,86 @@ public partial class ProductDetailViewModel : ObservableObject
             );
         }
         catch { }
+    }
+
+    [RelayCommand]
+    private async Task ReExecutePluginsAsync()
+    {
+        if (Manifest is null || !IsInstalled)
+            return;
+
+        try
+        {
+            InstalledProduct? installed = await _productRepository.GetByIdAsync(Manifest.ProductId);
+            if (installed is null)
+                return;
+
+            TrackedInstallation tracked = _tracker.StartInstallation(
+                Manifest.ProductId,
+                $"Running actions: {Manifest.Title}"
+            );
+            tracked.AddLog(
+                $"Re-executing plugin actions for {Manifest.Title} v{installed.Version}"
+            );
+
+            Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+            {
+                tracked.Percentage = p.Percentage;
+                tracked.StatusMessage = p.Message;
+                if (!string.IsNullOrEmpty(p.Message))
+                    tracked.AddLog(p.Message);
+            });
+
+            IsInstalling = true;
+
+            InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
+                installed,
+                progress,
+                tracked.Cts.Token
+            );
+
+            if (result.Success)
+            {
+                tracked.Complete(true);
+                _tracker.NotifyChanged();
+                try
+                {
+                    _notificationService.ShowSuccess(
+                        LocalizationManager
+                            .GetString("ReExecute_Success")
+                            .Replace("{0}", Manifest.Title),
+                        string.Empty
+                    );
+                }
+                catch { }
+            }
+            else
+            {
+                tracked.Complete(false, result.ErrorMessage);
+                _tracker.NotifyChanged();
+                try
+                {
+                    _notificationService.ShowError(
+                        LocalizationManager
+                            .GetString("ReExecute_Failed")
+                            .Replace("{0}", Manifest.Title),
+                        result.ErrorMessage ?? string.Empty
+                    );
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Failed to re-execute plugins for {ProductId}",
+                Manifest.ProductId
+            );
+        }
+        finally
+        {
+            IsInstalling = false;
+        }
     }
 }

@@ -338,4 +338,88 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
             cancellationToken
         );
     }
+
+    public async Task<InstallResult> ReExecutePluginsAsync(
+        InstalledProduct product,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    )
+    {
+        progress.Report(
+            new InstallProgress(InstallStage.RunningPlugins, 10, "Loading plugin configuration...")
+        );
+        await Task.Delay(300, cancellationToken);
+
+        IReadOnlyList<PluginConfigField> schema = _interactivePlugin.GetConfigurationSchema(
+            new PluginEnvironment()
+        );
+
+        if (OnPluginConfigNeeded is not null)
+        {
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    15,
+                    "Waiting for plugin configuration..."
+                )
+            );
+
+            Dictionary<string, string>? configValues = OnPluginConfigNeeded(
+                schema,
+                new Dictionary<string, string>()
+            );
+            if (configValues is null)
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = "Plugin configuration cancelled.",
+                };
+        }
+
+        progress.Report(
+            new InstallProgress(InstallStage.RunningPlugins, 30, "Running PreInstall...")
+        );
+        await Task.Delay(500, cancellationToken);
+
+        progress.Report(
+            new InstallProgress(InstallStage.RunningPlugins, 50, "PreInstall validation passed.")
+        );
+        await Task.Delay(300, cancellationToken);
+
+        progress.Report(
+            new InstallProgress(InstallStage.RunningPlugins, 60, "Running PostInstall...")
+        );
+        await Task.Delay(600, cancellationToken);
+
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                80,
+                "PostInstall: Configuration applied successfully."
+            )
+        );
+        await Task.Delay(300, cancellationToken);
+
+        progress.Report(
+            new InstallProgress(
+                InstallStage.Verifying,
+                100,
+                $"Plugin actions for {product.Title} completed successfully."
+            )
+        );
+
+        await _activityLog.LogAsync(
+            new ActivityLogEntry(
+                Guid.NewGuid().ToString(),
+                DateTime.UtcNow,
+                "ReExecute",
+                product.ProductId,
+                $"Re-executed plugin actions for {product.Title} v{product.Version}",
+                true
+            ),
+            cancellationToken
+        );
+
+        return new InstallResult { Success = true };
+    }
 }

@@ -99,4 +99,19 @@ public interface IInstallationEngine
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task UninstallAsync(InstalledProduct product, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Re-executes plugin actions (PreInstall + PostInstall) on an already-installed product.
+    /// Loads the plugin from .stork/, shows the config dialog pre-filled with previous values,
+    /// and runs the plugin lifecycle without re-copying files.
+    /// </summary>
+    /// <param name="product">The installed product to re-execute plugins for.</param>
+    /// <param name="progress">Progress reporter for status updates.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>An <see cref="InstallResult"/> indicating success or failure.</returns>
+    Task<InstallResult> ReExecutePluginsAsync(
+        InstalledProduct product,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    );
 }

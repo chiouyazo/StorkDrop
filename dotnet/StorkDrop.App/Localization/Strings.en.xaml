@@ -86,6 +86,13 @@
   <system:String x:Key="Installed_NoProducts">No products installed yet.</system:String>
   <system:String x:Key="Installed_Uninstall">Uninstall</system:String>
 
+  <!-- Re-execute -->
+  <system:String x:Key="ReExecute_Button">Run Actions</system:String>
+  <system:String x:Key="ReExecute_Success"
+    >{0} plugin actions completed successfully.</system:String
+  >
+  <system:String x:Key="ReExecute_Failed">Plugin actions failed for {0}</system:String>
+
   <!-- Updates -->
   <system:String x:Key="Updates_Title">Updates</system:String>
   <system:String x:Key="Updates_UpdateAll">Update All</system:String>

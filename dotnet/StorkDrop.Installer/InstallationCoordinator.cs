@@ -182,6 +182,65 @@ public sealed class InstallationCoordinator
         }
     }
 
+    public async Task<InstallResult> ReExecutePluginsWithIsolationAsync(
+        InstalledProduct product,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        SemaphoreSlim productLock = GetProductLock(product.ProductId);
+
+        if (!await productLock.WaitAsync(TimeSpan.Zero, cancellationToken))
+        {
+            _logger.LogWarning(
+                "Re-execute of {ProductId} blocked - another operation is already in progress",
+                product.ProductId
+            );
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = $"Another operation on {product.Title} is already in progress.",
+                FailedStep = "Coordination",
+            };
+        }
+
+        try
+        {
+            _logger.LogInformation("Re-execute lock acquired for {ProductId}", product.ProductId);
+            return await _engine.ReExecutePluginsAsync(product, progress, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Re-execute of {ProductId} was cancelled", product.ProductId);
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = "Operation cancelled.",
+                FailedStep = "Cancelled",
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+                ex,
+                "Re-execute of {ProductId} failed with unhandled exception",
+                product.ProductId
+            );
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message,
+                FailedStep = "Unknown",
+                Exception = ex,
+            };
+        }
+        finally
+        {
+            productLock.Release();
+            _logger.LogInformation("Re-execute lock released for {ProductId}", product.ProductId);
+        }
+    }
+
     private SemaphoreSlim GetProductLock(string productId) =>
         _productLocks.GetOrAdd(productId, _ => new SemaphoreSlim(1, 1));
 }

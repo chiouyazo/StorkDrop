@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.IO;
+using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -11,14 +13,13 @@ using StorkDrop.Installer;
 
 namespace StorkDrop.App.ViewModels;
 
-/// <summary>
-/// View model for the installed products view, displaying installed products and handling uninstall.
-/// </summary>
 public partial class InstalledViewModel : ObservableObject
 {
     private readonly IProductRepository _productRepository;
     private readonly InstallationCoordinator _coordinator;
     private readonly UninstallService _uninstallService;
+    private readonly InstallationTracker _tracker;
+    private readonly INotificationService _notificationService;
     private readonly DialogService _dialogService;
     private readonly ILogger<InstalledViewModel> _logger;
 
@@ -26,6 +27,8 @@ public partial class InstalledViewModel : ObservableObject
         IProductRepository productRepository,
         InstallationCoordinator coordinator,
         UninstallService uninstallService,
+        InstallationTracker tracker,
+        INotificationService notificationService,
         DialogService dialogService,
         ILogger<InstalledViewModel> logger
     )
@@ -33,6 +36,8 @@ public partial class InstalledViewModel : ObservableObject
         _productRepository = productRepository;
         _coordinator = coordinator;
         _uninstallService = uninstallService;
+        _tracker = tracker;
+        _notificationService = notificationService;
         _dialogService = dialogService;
         _logger = logger;
     }
@@ -75,13 +80,33 @@ public partial class InstalledViewModel : ObservableObject
                 cancellationToken
             );
             Products = new ObservableCollection<InstalledProductViewModel>(
-                installed.Select(p => new InstalledProductViewModel
+                installed.Select(p =>
                 {
-                    ProductId = p.ProductId,
-                    Title = p.Title,
-                    Version = p.Version,
-                    InstalledPath = p.InstalledPath,
-                    InstalledDate = p.InstalledDate,
+                    bool hasPlugins = false;
+                    string manifestPath = Path.Combine(p.InstalledPath, ".stork", "manifest.json");
+                    if (File.Exists(manifestPath))
+                    {
+                        try
+                        {
+                            string json = File.ReadAllText(manifestPath);
+                            ProductManifest? manifest = JsonSerializer.Deserialize<ProductManifest>(
+                                json,
+                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                            );
+                            hasPlugins = manifest?.Plugins is { Length: > 0 };
+                        }
+                        catch { }
+                    }
+
+                    return new InstalledProductViewModel
+                    {
+                        ProductId = p.ProductId,
+                        Title = p.Title,
+                        Version = p.Version,
+                        InstalledPath = p.InstalledPath,
+                        InstalledDate = p.InstalledDate,
+                        HasPlugins = hasPlugins,
+                    };
                 })
             );
         }
@@ -205,6 +230,72 @@ public partial class InstalledViewModel : ObservableObject
             _dialogService.ShowError(
                 LocalizationManager.GetString("Error_UninstallFailed") + ": " + ex.Message
             );
+        }
+    }
+
+    [RelayCommand]
+    private async Task ReExecutePluginsAsync(InstalledProductViewModel product)
+    {
+        try
+        {
+            InstalledProduct? installed = await _productRepository.GetByIdAsync(product.ProductId);
+            if (installed is null)
+                return;
+
+            TrackedInstallation tracked = _tracker.StartInstallation(
+                product.ProductId,
+                $"Running actions: {product.Title}"
+            );
+            tracked.AddLog($"Re-executing plugin actions for {product.Title} v{product.Version}");
+
+            Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+            {
+                tracked.Percentage = p.Percentage;
+                tracked.StatusMessage = p.Message;
+                if (!string.IsNullOrEmpty(p.Message))
+                    tracked.AddLog(p.Message);
+            });
+
+            InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
+                installed,
+                progress,
+                tracked.Cts.Token
+            );
+
+            if (result.Success)
+            {
+                tracked.Complete(true);
+                _tracker.NotifyChanged();
+                try
+                {
+                    _notificationService.ShowSuccess(
+                        LocalizationManager
+                            .GetString("ReExecute_Success")
+                            .Replace("{0}", product.Title),
+                        string.Empty
+                    );
+                }
+                catch { }
+            }
+            else
+            {
+                tracked.Complete(false, result.ErrorMessage);
+                _tracker.NotifyChanged();
+                try
+                {
+                    _notificationService.ShowError(
+                        LocalizationManager
+                            .GetString("ReExecute_Failed")
+                            .Replace("{0}", product.Title),
+                        result.ErrorMessage ?? string.Empty
+                    );
+                }
+                catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to re-execute plugins for {ProductId}", product.ProductId);
         }
     }
 }

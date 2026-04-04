@@ -21,4 +21,7 @@ public partial class InstalledProductViewModel : ObservableObject
 
     [ObservableProperty]
     private DateTime _installedDate;
+
+    [ObservableProperty]
+    private bool _hasPlugins;
 }
