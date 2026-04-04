@@ -16,6 +16,14 @@ namespace StorkDrop.App;
 
 public partial class App : Application
 {
+    static App()
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        bool isCliMode = args.Length >= 2 && args[1] == "--cli";
+        if (!isCliMode)
+            StorkDrop.App.Services.ConsoleHelper.DetachConsole();
+    }
+
     private static readonly Mutex SingleInstanceMutex = new Mutex(
         true,
         "StorkDrop-SingleInstance-Mutex"
@@ -32,9 +40,6 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         string[] args = Environment.GetCommandLineArgs();
-        bool isCliMode = args.Length >= 2 && args[1] == "--cli";
-        if (!isCliMode)
-            ConsoleHelper.DetachConsole();
 
         if (args.Length >= 5 && args[1] == "--install")
         {
