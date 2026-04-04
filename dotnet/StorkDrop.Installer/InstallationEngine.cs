@@ -1597,6 +1597,209 @@ public sealed class InstallationEngine : IInstallationEngine
         await _uninstallService.UninstallAsync(product, cancellationToken);
     }
 
+    public async Task<InstallResult> ReExecutePluginsAsync(
+        InstalledProduct product,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    )
+    {
+        _currentProgress = progress;
+
+        try
+        {
+            ReportProgress(
+                InstallStage.RunningPlugins,
+                0,
+                $"Loading plugin data for {product.Title}..."
+            );
+
+            string storkDir = Path.Combine(product.InstalledPath, ".stork");
+            string manifestPath = Path.Combine(storkDir, "manifest.json");
+
+            if (!File.Exists(manifestPath))
+            {
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage =
+                        "No plugin data found for this product. The product may need to be reinstalled.",
+                };
+            }
+
+            string manifestJson = await File.ReadAllTextAsync(manifestPath, cancellationToken);
+            ProductManifest? manifest =
+                System.Text.Json.JsonSerializer.Deserialize<ProductManifest>(
+                    manifestJson,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                    }
+                );
+
+            if (manifest?.Plugins is not { Length: > 0 })
+            {
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = "This product has no plugins to re-execute.",
+                };
+            }
+
+            ReportProgress(
+                InstallStage.RunningPlugins,
+                10,
+                "Loading plugin configuration schema..."
+            );
+
+            PluginEnvironment environment = await BuildPluginEnvironmentAsync(
+                manifest,
+                cancellationToken
+            );
+
+            List<PluginConfigField> allFields = [];
+            foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+            {
+                IStorkPlugin? plugin = LoadPlugin(storkDir, pluginInfo, _activePluginContexts);
+                if (plugin is null)
+                {
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage =
+                            $"Plugin files not found ({pluginInfo.TypeName}). Reinstall the product to restore plugin data.",
+                    };
+                }
+
+                if (plugin is IInteractiveStorkPlugin interactive)
+                    CurrentInteractivePlugin = interactive;
+
+                IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                    environment
+                );
+                allFields.AddRange(fields);
+            }
+
+            Dictionary<string, string>? configValues = null;
+            if (allFields.Count > 0 && OnPluginConfigNeeded is not null)
+            {
+                ReportProgress(
+                    InstallStage.RunningPlugins,
+                    15,
+                    "Waiting for plugin configuration..."
+                );
+                configValues = OnPluginConfigNeeded(allFields, environment.PreviousConfigValues);
+                if (configValues is null)
+                {
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Plugin configuration cancelled.",
+                    };
+                }
+            }
+
+            InstallOptions options = new InstallOptions(
+                TargetPath: product.InstalledPath,
+                FeedId: product.FeedId,
+                PluginConfigValues: configValues
+            );
+
+            PluginContext context = new PluginContext
+            {
+                ProductId = product.ProductId,
+                Version = product.Version,
+                InstallPath = product.InstalledPath,
+                StorkConfigDirectory = GetStorkConfigDir(),
+                ConfigValues = configValues ?? new Dictionary<string, string>(),
+            };
+
+            ReportProgress(InstallStage.RunningPlugins, 30, "Running PreInstall...");
+            PluginPhaseResult preResult = await RunPluginPhaseAsync(
+                manifest,
+                options,
+                context,
+                PluginPhase.PreInstall,
+                cancellationToken
+            );
+            if (!preResult.Success)
+            {
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = preResult.ErrorMessage ?? "PreInstall failed.",
+                };
+            }
+
+            ReportProgress(InstallStage.RunningPlugins, 60, "Running PostInstall...");
+            PluginPhaseResult postResult = await RunPluginPhaseAsync(
+                manifest,
+                options,
+                context,
+                PluginPhase.PostInstall,
+                cancellationToken
+            );
+            if (!postResult.Success)
+            {
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = postResult.ErrorMessage ?? "PostInstall failed.",
+                };
+            }
+
+            ReportProgress(InstallStage.RunningPlugins, 90, "Saving configuration...");
+            await SavePluginConfigValues(product.ProductId, configValues, cancellationToken);
+
+            ReportProgress(
+                InstallStage.Verifying,
+                100,
+                $"Plugin actions for {product.Title} completed successfully."
+            );
+
+            await _activityLog.LogAsync(
+                new ActivityLogEntry(
+                    Id: Guid.NewGuid().ToString(),
+                    Timestamp: DateTime.UtcNow,
+                    Action: "ReExecute",
+                    ProductId: product.ProductId,
+                    Details: $"Re-executed plugin actions for {product.Title} v{product.Version}",
+                    Success: true
+                ),
+                cancellationToken
+            );
+
+            return new InstallResult { Success = true };
+        }
+        catch (OperationCanceledException)
+        {
+            return new InstallResult { Success = false, ErrorMessage = "Operation cancelled." };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to re-execute plugins for {ProductId}", product.ProductId);
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message,
+                Exception = ex,
+            };
+        }
+        finally
+        {
+            foreach (ProductPluginLoadContext ctx in _activePluginContexts)
+            {
+                try
+                {
+                    ctx.Unload();
+                }
+                catch { }
+            }
+            _activePluginContexts.Clear();
+            CurrentInteractivePlugin = null;
+            _currentProgress = null;
+        }
+    }
+
     private sealed class PluginPhaseResult
     {
         public bool Success { get; set; } = true;

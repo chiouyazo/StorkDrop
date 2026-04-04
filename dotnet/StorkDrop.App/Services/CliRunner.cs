@@ -41,6 +41,7 @@ internal sealed class CliRunner
                 "install" => await InstallAsync(args),
                 "uninstall" => await UninstallAsync(args),
                 "update" => await UpdateAsync(args),
+                "re-execute" => await ReExecuteAsync(args),
                 "list" => await ListAsync(),
                 "versions" => await VersionsAsync(args),
                 "help" => PrintCommandHelp(args.Length > 3 ? args[3] : null),
@@ -187,6 +188,44 @@ internal sealed class CliRunner
             return Error($"Update failed: {result.ErrorMessage}");
 
         Console.WriteLine($"Successfully updated {manifest.Title} to v{manifest.Version}");
+        return 0;
+    }
+
+    private async Task<int> ReExecuteAsync(string[] args)
+    {
+        if (args.Length < 4)
+            return Error("Missing product ID. Usage: storkdrop --cli re-execute <productId>");
+
+        string productId = args[3];
+        Dictionary<string, string> configValues = ParseConfigValues(args);
+
+        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
+        if (installed is null)
+            return Error($"Product '{productId}' is not installed.");
+
+        if (configValues.Count > 0)
+            SetupPluginConfigCallbacks(configValues);
+
+        Console.WriteLine(
+            $"Re-executing plugin actions for {installed.Title} v{installed.Version}"
+        );
+
+        Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+        {
+            if (!string.IsNullOrEmpty(p.Message))
+                Console.WriteLine($"[{p.Percentage}%] {p.Message}");
+        });
+
+        InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
+            installed,
+            progress,
+            CancellationToken.None
+        );
+
+        if (!result.Success)
+            return Error($"Plugin actions failed: {result.ErrorMessage}");
+
+        Console.WriteLine($"Successfully re-executed plugin actions for {installed.Title}");
         return 0;
     }
 
@@ -384,12 +423,15 @@ internal sealed class CliRunner
         Console.WriteLine("Usage: storkdrop --cli <command> [options]");
         Console.WriteLine();
         Console.WriteLine("Commands:");
-        Console.WriteLine("  install <productId>    Install a product");
-        Console.WriteLine("  uninstall <productId>  Uninstall a product");
-        Console.WriteLine("  update <productId>     Update an installed product");
-        Console.WriteLine("  list                   List all available products");
-        Console.WriteLine("  versions <productId>   List available versions for a product");
-        Console.WriteLine("  help [command]         Show help for a command");
+        Console.WriteLine("  install <productId>      Install a product");
+        Console.WriteLine("  uninstall <productId>    Uninstall a product");
+        Console.WriteLine("  update <productId>       Update an installed product");
+        Console.WriteLine(
+            "  re-execute <productId>   Re-run plugin actions on an installed product"
+        );
+        Console.WriteLine("  list                     List all available products");
+        Console.WriteLine("  versions <productId>     List available versions for a product");
+        Console.WriteLine("  help [command]           Show help for a command");
         Console.WriteLine();
         Console.WriteLine(
             "Run 'storkdrop --cli help <command>' for details on a specific command."
@@ -433,6 +475,20 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --version <version>     Update to a specific version (default: latest)"
                 );
+                Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
+                Console.WriteLine(
+                    "  --config key=value      Set a plugin config value (repeatable)"
+                );
+                break;
+
+            case "re-execute":
+                Console.WriteLine("Usage: storkdrop --cli re-execute <productId> [options]");
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Re-runs plugin actions (PreInstall + PostInstall) on an installed product."
+                );
+                Console.WriteLine();
+                Console.WriteLine("Options:");
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"

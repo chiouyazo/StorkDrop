@@ -69,6 +69,19 @@ List available versions for a product.
 storkdrop --cli versions <productId>
 ```
 
+### re-execute
+
+Re-run plugin actions (PreInstall + PostInstall) on an installed product without re-downloading or re-copying files. Previous configuration values are pre-filled in the dialog.
+
+```
+storkdrop --cli re-execute <productId> [options]
+```
+
+| Option | Description |
+|--------|-------------|
+| `--config-file <path>` | JSON file with plugin config values |
+| `--config key=value` | Set a plugin config value (repeatable) |
+
 ### help
 
 Show usage information.

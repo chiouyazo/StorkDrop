@@ -122,15 +122,26 @@
                 </StackPanel>
               </StackPanel>
 
-              <Button
-                Grid.Column="1"
-                Content="{DynamicResource Installed_Uninstall}"
-                Style="{DynamicResource OutlinedButton}"
-                Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
-                CommandParameter="{Binding}"
-                VerticalAlignment="Center"
-                Padding="12,6"
-              />
+              <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Button
+                  Content="&#xE768;"
+                  FontFamily="Segoe MDL2 Assets"
+                  Style="{DynamicResource OutlinedButton}"
+                  Command="{Binding DataContext.ReExecutePluginsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"
+                  ToolTip="{DynamicResource ReExecute_Button}"
+                  Padding="10,6"
+                  Margin="0,0,8,0"
+                  Visibility="{Binding HasPlugins, Converter={StaticResource BoolToVisibilityConverter}}"
+                />
+                <Button
+                  Content="{DynamicResource Installed_Uninstall}"
+                  Style="{DynamicResource OutlinedButton}"
+                  Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"
+                  Padding="12,6"
+                />
+              </StackPanel>
             </Grid>
           </Border>
         </DataTemplate>

@@ -101,15 +101,26 @@
         </StackPanel>
       </Border>
 
-      <!-- Install Button -->
-      <Button
-        Content="{Binding InstallButtonText}"
-        Style="{DynamicResource FilledAccentButton}"
-        Command="{Binding InstallCommand}"
-        IsEnabled="{Binding CanInstallSelectedVersion}"
-        HorizontalAlignment="Left"
-        MinWidth="160"
-      />
+      <!-- Install / Run Actions -->
+      <StackPanel Orientation="Horizontal">
+        <Button
+          Content="{Binding InstallButtonText}"
+          Style="{DynamicResource FilledAccentButton}"
+          Command="{Binding InstallCommand}"
+          IsEnabled="{Binding CanInstallSelectedVersion}"
+          MinWidth="160"
+        />
+        <Button
+          Content="&#xE768;"
+          FontFamily="Segoe MDL2 Assets"
+          Style="{DynamicResource OutlinedButton}"
+          Command="{Binding ReExecutePluginsCommand}"
+          ToolTip="{DynamicResource ReExecute_Button}"
+          Padding="10,6"
+          Margin="8,0,0,0"
+          Visibility="{Binding CanReExecutePlugins, Converter={StaticResource BoolToVisibilityConverter}}"
+        />
+      </StackPanel>
     </StackPanel>
   </ScrollViewer>
 </UserControl>

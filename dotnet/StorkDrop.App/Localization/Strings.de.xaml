@@ -90,6 +90,13 @@
   <system:String x:Key="Installed_NoProducts">Noch keine Produkte installiert.</system:String>
   <system:String x:Key="Installed_Uninstall">Deinstallieren</system:String>
 
+  <!-- Re-execute -->
+  <system:String x:Key="ReExecute_Button">Aktionen ausfuhren</system:String>
+  <system:String x:Key="ReExecute_Success"
+    >{0} Plugin-Aktionen erfolgreich ausgefuhrt.</system:String
+  >
+  <system:String x:Key="ReExecute_Failed">Plugin-Aktionen fur {0} fehlgeschlagen</system:String>
+
   <!-- Updates -->
   <system:String x:Key="Updates_Title">Updates</system:String>
   <system:String x:Key="Updates_UpdateAll">Alle aktualisieren</system:String>
