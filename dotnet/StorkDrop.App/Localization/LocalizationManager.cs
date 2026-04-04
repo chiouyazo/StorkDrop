@@ -7,8 +7,12 @@ public static class LocalizationManager
 {
     private static readonly Dictionary<string, Uri> LanguageResources = new Dictionary<string, Uri>
     {
-        ["en"] = new Uri("Localization/Strings.en.xaml", UriKind.Relative),
-        ["de"] = new Uri("Localization/Strings.de.xaml", UriKind.Relative),
+        ["en"] = new Uri(
+            "pack://application:,,,/StorkDrop.App;component/Localization/Strings.en.xaml"
+        ),
+        ["de"] = new Uri(
+            "pack://application:,,,/StorkDrop.App;component/Localization/Strings.de.xaml"
+        ),
     };
 
     private static string _currentLanguage = "en";

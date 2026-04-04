@@ -63,6 +63,17 @@ jobs:
           -p:IncludeNativeLibrariesForSelfExtract=true
           --output publish/
 
+      - name: Publish Demo exe
+        run: >
+          dotnet publish dotnet/StorkDrop.Demo/StorkDrop.Demo.csproj
+          --configuration Release
+          --no-build
+          --self-contained
+          --runtime win-x64
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          --output publish-demo/
+
       - name: Sign application exe
         shell: pwsh
         env:
@@ -108,12 +119,18 @@ jobs:
         run: |
           Compress-Archive -Path publish\StorkDrop.App.exe -DestinationPath publish\StorkDrop-${{ steps.version.outputs.version }}-win-x64.zip
 
+      - name: Package Demo zip
+        shell: pwsh
+        run: |
+          Compress-Archive -Path publish-demo\StorkDrop.Demo.exe -DestinationPath publish\StorkDrop-Demo-${{ steps.version.outputs.version }}-win-x64.zip
+
       - name: Generate checksums
         shell: pwsh
         run: |
           $files = @(
             "publish\StorkDrop.App.exe",
             "publish\StorkDrop-${{ steps.version.outputs.version }}-win-x64.zip",
+            "publish\StorkDrop-Demo-${{ steps.version.outputs.version }}-win-x64.zip",
             (Get-Item "installer\Output\*.exe").FullName
           ) | Where-Object { $_ -and (Test-Path $_) }
           $checksums = $files | ForEach-Object {
@@ -130,6 +147,7 @@ jobs:
           name: storkdrop-build
           path: |
             publish/
+            publish-demo/
             installer/Output/
 
   release:
@@ -206,6 +224,7 @@ jobs:
           files: |
             artifacts/publish/StorkDrop.App.exe
             artifacts/publish/StorkDrop-*-win-x64.zip
+            artifacts/publish/StorkDrop-Demo-*-win-x64.zip
             artifacts/publish/*.nupkg
             artifacts/publish/SHA256SUMS.txt
             artifacts/installer/Output/*.exe

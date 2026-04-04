@@ -51,6 +51,10 @@ product.zip        Install tracking          Environment variables
 4. **Updates** are detected automatically and applied with backup/rollback
 5. **Everything is tracked** - what was installed, where, and what changed - for clean uninstall
 
+## Try it out
+
+Download **StorkDrop-Demo** from the [latest release](https://github.com/chiouyazo/StorkDrop/releases) - a standalone exe, no installation needed. The demo runs entirely in-memory with sample data and showcases every feature: marketplace browsing, installation with live progress tracking, plugin configuration dialogs with interactive buttons, required component warnings, optional post-products, file handler dialogs, settings, and more.
+
 ## Documentation
 
 | Topic                                                  | Description                                                                                                                               |

@@ -11,7 +11,7 @@
   xmlns:plugins="clr-namespace:StorkDrop.App.Views.Plugins"
   xmlns:plugintab="clr-namespace:StorkDrop.App.Views.PluginTab"
   Title="StorkDrop"
-  Icon="/Assets/stork.ico"
+  Icon="pack://application:,,,/StorkDrop.App;component/Assets/stork.ico"
   Width="1200"
   Height="800"
   MinWidth="900"
@@ -67,7 +67,11 @@
       <DockPanel>
         <!-- Logo -->
         <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="16,16,16,20">
-          <Image Source="/Assets/stork_icon_64.png" Height="28" VerticalAlignment="Center" />
+          <Image
+            Source="pack://application:,,,/StorkDrop.App;component/Assets/stork_icon_64.png"
+            Height="28"
+            VerticalAlignment="Center"
+          />
           <TextBlock
             Text="StorkDrop"
             FontSize="16"

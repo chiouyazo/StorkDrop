@@ -27,7 +27,7 @@ public partial class App : Application
     );
     private IHost? _host;
 
-    public static IServiceProvider Services { get; private set; } = null!;
+    public static IServiceProvider Services { get; internal set; } = null!;
 
     protected override async void OnStartup(StartupEventArgs e)
     {

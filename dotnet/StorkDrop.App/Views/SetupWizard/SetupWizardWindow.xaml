@@ -4,7 +4,7 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:local="clr-namespace:StorkDrop.App.Views.SetupWizard"
   Title="StorkDrop - Setup"
-  Icon="/Assets/stork.ico"
+  Icon="pack://application:,,,/StorkDrop.App;component/Assets/stork.ico"
   Width="700"
   Height="550"
   WindowStartupLocation="CenterScreen"
