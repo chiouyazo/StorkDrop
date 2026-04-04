@@ -113,7 +113,11 @@ public static class AppHostBuilder
         foreach (string dir in pluginDirs)
         {
             if (Directory.Exists(dir))
-                allDlls.AddRange(Directory.GetFiles(dir, "*.dll"));
+                allDlls.AddRange(
+                    Directory
+                        .GetFiles(dir, "*.dll")
+                        .Where(f => !Path.GetFileName(f).StartsWith("DEL_"))
+                );
         }
 
         string[] dllFiles = allDlls.ToArray();
