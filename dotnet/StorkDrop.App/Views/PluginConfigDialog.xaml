@@ -41,6 +41,7 @@
           <TextBox.Style>
             <Style TargetType="TextBox" BasedOn="{StaticResource StyledTextBox}">
               <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="IsReadOnly" Value="{Binding IsReadOnly}" />
               <Style.Triggers>
                 <DataTrigger Binding="{Binding FieldTypeName}" Value="Number">
                   <Setter Property="Visibility" Value="Visible" />

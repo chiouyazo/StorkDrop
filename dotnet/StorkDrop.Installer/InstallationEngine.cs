@@ -270,6 +270,163 @@ public sealed class InstallationEngine : IInstallationEngine
         return groups;
     }
 
+    private async Task<List<PluginActionGroup>> BuildActionGroupsFromExtractedAsync(
+        ProductManifest manifest,
+        string extractPath,
+        CancellationToken cancellationToken
+    )
+    {
+        List<PluginActionGroup> groups = [];
+
+        AddFileHandlerGroups(groups, extractPath);
+
+        if (manifest.Plugins is not { Length: > 0 })
+            return groups;
+
+        PluginEnvironment environment = await BuildPluginEnvironmentAsync(
+            manifest,
+            cancellationToken
+        );
+
+        foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+        {
+            try
+            {
+                IStorkPlugin? plugin = LoadPlugin(extractPath, pluginInfo, _activePluginContexts);
+                if (plugin is null)
+                    continue;
+
+                if (plugin is IInteractiveStorkPlugin interactive)
+                    CurrentInteractivePlugin = interactive;
+
+                IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                    environment
+                );
+
+                List<PluginActionDescription> preDescriptions = [];
+                List<PluginActionDescription> postDescriptions = [];
+                if (plugin is IDescribableStorkPlugin describable)
+                {
+                    try
+                    {
+                        IReadOnlyList<PluginActionDescription> descriptions =
+                            describable.GetActionDescriptions(environment);
+                        preDescriptions = descriptions
+                            .Where(d => d.Phase == PluginActionPhase.PreInstall)
+                            .ToList();
+                        postDescriptions = descriptions
+                            .Where(d => d.Phase == PluginActionPhase.PostInstall)
+                            .ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Failed to get action descriptions from {TypeName}",
+                            pluginInfo.TypeName
+                        );
+                    }
+                }
+
+                string shortName = pluginInfo.TypeName.Contains('.')
+                    ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
+                    : pluginInfo.TypeName;
+
+                groups.Add(
+                    new PluginActionGroup
+                    {
+                        GroupId = $"preinstall-{pluginInfo.TypeName}",
+                        Title = $"PreInstall: {shortName}",
+                        Phase = PluginActionPhase.PreInstall,
+                        Fields = fields,
+                        Descriptions = preDescriptions,
+                    }
+                );
+
+                groups.Add(
+                    new PluginActionGroup
+                    {
+                        GroupId = $"postinstall-{pluginInfo.TypeName}",
+                        Title = $"PostInstall: {shortName}",
+                        Phase = PluginActionPhase.PostInstall,
+                        Fields = [],
+                        Descriptions = postDescriptions,
+                    }
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to build action groups from {TypeName}",
+                    pluginInfo.TypeName
+                );
+            }
+        }
+
+        return groups;
+    }
+
+    private void AddFileHandlerGroups(List<PluginActionGroup> groups, string filesDirectory)
+    {
+        if (_fileTypeHandlers.Count == 0 || !Directory.Exists(filesDirectory))
+            return;
+
+        string[] allFiles = Directory.GetFiles(filesDirectory);
+        if (allFiles.Length == 0)
+            return;
+
+        foreach (IFileTypeHandler handler in _fileTypeHandlers)
+        {
+            try
+            {
+                List<string> matchingFiles = allFiles
+                    .Where(f =>
+                        handler.HandledExtensions.Any(ext =>
+                            f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)
+                        )
+                    )
+                    .ToList();
+
+                if (matchingFiles.Count == 0)
+                    continue;
+
+                PluginContext tempContext = new PluginContext
+                {
+                    StorkConfigDirectory = GetStorkConfigDir(),
+                };
+
+                IReadOnlyList<PluginConfigField> fields = handler.GetFileHandlerConfig(
+                    matchingFiles,
+                    tempContext
+                );
+
+                string handlerName = handler is IStorkDropPlugin sdp
+                    ? sdp.DisplayName
+                    : handler.GetType().Name;
+
+                groups.Add(
+                    new PluginActionGroup
+                    {
+                        GroupId = $"filehandler-{handlerName}",
+                        Title = $"File Handler: {handlerName}",
+                        Phase = PluginActionPhase.PreInstall,
+                        Fields = fields,
+                        Descriptions = [],
+                    }
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to build file handler group for {Handler}",
+                    handler.GetType().Name
+                );
+            }
+        }
+    }
+
     /// <inheritdoc />
     public async Task<InstallResult> InstallAsync(
         ProductManifest manifest,
@@ -323,7 +480,47 @@ public sealed class InstallationEngine : IInstallationEngine
             // For file copy: use productContentPath (inner ZIP) if two-layer, else extractPath
             string copySourcePath = productContentPath ?? extractPath;
 
-            // StorkDrop level Plugins
+            // Unified action group dialog (when available)
+            HashSet<string> disabledGroups = new HashSet<string>();
+            if (OnActionGroupConfigNeeded is not null && options.PluginConfigValues is null)
+            {
+                List<PluginActionGroup> groups = await BuildActionGroupsFromExtractedAsync(
+                    manifest,
+                    extractPath,
+                    cancellationToken
+                );
+
+                if (groups.Count > 0)
+                {
+                    Dictionary<string, string> previousValues = await LoadPluginConfigValues(
+                        manifest.ProductId,
+                        cancellationToken
+                    );
+                    Dictionary<string, string>? userValues = OnActionGroupConfigNeeded(
+                        groups,
+                        previousValues
+                    );
+                    if (userValues is null)
+                    {
+                        return new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = "Installation cancelled by user.",
+                            FailedStep = "PluginConfig",
+                        };
+                    }
+
+                    foreach (string key in userValues.Keys)
+                    {
+                        if (key.StartsWith("__group_enabled_") && userValues[key] == "false")
+                            disabledGroups.Add(key["__group_enabled_".Length..]);
+                    }
+
+                    options = options with { PluginConfigValues = userValues };
+                }
+            }
+
+            // StorkDrop level Plugins (file handlers)
             cancellationToken.ThrowIfCancellationRequested();
             (
                 HashSet<string> handledFiles,
@@ -334,12 +531,13 @@ public sealed class InstallationEngine : IInstallationEngine
                 options,
                 extractPath,
                 progress,
-                cancellationToken
+                cancellationToken,
+                disabledGroups
             );
             if (fileHandlerError is not null)
                 return fileHandlerError;
 
-            // Product Plugins
+            // Product Plugins (old callback path - only when unified dialog was not used)
             if (
                 manifest.Plugins is { Length: > 0 }
                 && options.PluginConfigValues is null
@@ -406,14 +604,24 @@ public sealed class InstallationEngine : IInstallationEngine
                 options,
                 cancellationToken
             );
-            PluginPhaseResult preInstallResult = await RunPluginPhaseAsync(
-                manifest,
-                options,
-                pluginContext,
-                PluginPhase.PreInstall,
-                cancellationToken,
-                extractPath
-            );
+
+            bool skipPreInstall =
+                manifest.Plugins is { Length: > 0 }
+                && manifest.Plugins.All(p => disabledGroups.Contains($"preinstall-{p.TypeName}"));
+            bool skipPostInstall =
+                manifest.Plugins is { Length: > 0 }
+                && manifest.Plugins.All(p => disabledGroups.Contains($"postinstall-{p.TypeName}"));
+
+            PluginPhaseResult preInstallResult = skipPreInstall
+                ? new PluginPhaseResult { Success = true }
+                : await RunPluginPhaseAsync(
+                    manifest,
+                    options,
+                    pluginContext,
+                    PluginPhase.PreInstall,
+                    cancellationToken,
+                    extractPath
+                );
             if (!preInstallResult.Success)
             {
                 _logger.LogError(
@@ -539,6 +747,35 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
+            // Store file handler files for re-execution
+            if (handledFiles.Count > 0)
+            {
+                string storkFilesDir = Path.Combine(resolvedPath, ".stork", "files");
+                Directory.CreateDirectory(storkFilesDir);
+                foreach (string handledFile in handledFiles)
+                {
+                    if (File.Exists(handledFile))
+                    {
+                        string destPath = Path.Combine(
+                            storkFilesDir,
+                            Path.GetFileName(handledFile)
+                        );
+                        try
+                        {
+                            File.Copy(handledFile, destPath, overwrite: true);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to store handled file {File} to .stork/files/",
+                                handledFile
+                            );
+                        }
+                    }
+                }
+            }
+
             // Save manifest for uninstall plugin loading
             if (manifest.Plugins is { Length: > 0 })
             {
@@ -574,7 +811,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 pluginContext,
                 extractPath,
                 progress,
-                cancellationToken
+                cancellationToken,
+                skipPostInstall
             );
 
             progress.Report(
@@ -867,7 +1105,8 @@ public sealed class InstallationEngine : IInstallationEngine
         InstallOptions options,
         string extractPath,
         IProgress<InstallProgress> progress,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        HashSet<string>? disabledGroups = null
     )
     {
         HashSet<string> handledFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -1372,36 +1611,41 @@ public sealed class InstallationEngine : IInstallationEngine
         PluginContext pluginContext,
         string extractPath,
         IProgress<InstallProgress> progress,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        bool skipPostInstall = false
     )
     {
-        // Use resolvedPath (not options.TargetPath which may still have {ACMEPath} template)
-        InstallOptions resolvedOptions = options with
+        InstallOptions resolvedOptions = options with { TargetPath = resolvedPath };
+
+        if (skipPostInstall)
         {
-            TargetPath = resolvedPath,
-        };
-        PluginPhaseResult postInstallResult = await RunPluginPhaseAsync(
-            manifest,
-            resolvedOptions,
-            pluginContext,
-            PluginPhase.PostInstall,
-            cancellationToken,
-            extractPath
-        );
-        if (!postInstallResult.Success)
+            _logger.LogInformation("PostInstall skipped (disabled by user)");
+        }
+        else
         {
-            _logger.LogError(
-                "PostInstall plugin phase failed: {Error}",
-                postInstallResult.ErrorMessage
+            PluginPhaseResult postInstallResult = await RunPluginPhaseAsync(
+                manifest,
+                resolvedOptions,
+                pluginContext,
+                PluginPhase.PostInstall,
+                cancellationToken,
+                extractPath
             );
-            ReportProgress(
-                InstallStage.Installing,
-                0,
-                $"PostInstall failed: {postInstallResult.ErrorMessage}"
-            );
-            throw new InvalidOperationException(
-                $"PostInstall failed: {postInstallResult.ErrorMessage}"
-            );
+            if (!postInstallResult.Success)
+            {
+                _logger.LogError(
+                    "PostInstall plugin phase failed: {Error}",
+                    postInstallResult.ErrorMessage
+                );
+                ReportProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"PostInstall failed: {postInstallResult.ErrorMessage}"
+                );
+                throw new InvalidOperationException(
+                    $"PostInstall failed: {postInstallResult.ErrorMessage}"
+                );
+            }
         }
 
         progress.Report(new InstallProgress(InstallStage.Installing, 80, "Creating shortcuts..."));
@@ -1555,7 +1799,6 @@ public sealed class InstallationEngine : IInstallationEngine
 
         try
         {
-            // Remove old environment variables before installing new ones
             _logger.LogDebug(
                 "Removing old environment variables for {ProductId}",
                 installed.ProductId
@@ -1575,7 +1818,6 @@ public sealed class InstallationEngine : IInstallationEngine
                 // Best-effort
             }
 
-            // Delete only tracked files from the previous installation (preserves user-created files)
             if (Directory.Exists(installed.InstalledPath))
             {
                 _logger.LogDebug(
@@ -1605,7 +1847,6 @@ public sealed class InstallationEngine : IInstallationEngine
                     }
                 }
 
-                // Also clean .stork/ from previous install (will be recreated)
                 string oldStorkDir = Path.Combine(installed.InstalledPath, ".stork");
                 try
                 {
@@ -1740,121 +1981,318 @@ public sealed class InstallationEngine : IInstallationEngine
                     }
                 );
 
-            if (manifest?.Plugins is not { Length: > 0 })
+            string storkFilesDir = Path.Combine(storkDir, "files");
+            bool hasFileHandlerFiles =
+                Directory.Exists(storkFilesDir) && Directory.GetFiles(storkFilesDir).Length > 0;
+            bool hasPlugins = manifest?.Plugins is { Length: > 0 };
+
+            if (!hasPlugins && !hasFileHandlerFiles)
             {
                 return new InstallResult
                 {
                     Success = false,
-                    ErrorMessage = "This product has no plugins to re-execute.",
+                    ErrorMessage =
+                        "This product has no plugins or file handler data to re-execute.",
                 };
             }
 
-            ReportProgress(
-                InstallStage.RunningPlugins,
-                10,
-                "Loading plugin configuration schema..."
-            );
+            ReportProgress(InstallStage.RunningPlugins, 10, "Building action groups...");
 
-            PluginEnvironment environment = await BuildPluginEnvironmentAsync(
-                manifest,
-                cancellationToken
-            );
+            List<PluginActionGroup> groups = [];
 
-            List<PluginConfigField> allFields = [];
-            foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+            if (hasFileHandlerFiles)
+                AddFileHandlerGroups(groups, storkFilesDir);
+
+            if (hasPlugins)
             {
-                IStorkPlugin? plugin = LoadPlugin(storkDir, pluginInfo, _activePluginContexts);
-                if (plugin is null)
-                {
-                    return new InstallResult
-                    {
-                        Success = false,
-                        ErrorMessage =
-                            $"Plugin files not found ({pluginInfo.TypeName}). Reinstall the product to restore plugin data.",
-                    };
-                }
-
-                if (plugin is IInteractiveStorkPlugin interactive)
-                    CurrentInteractivePlugin = interactive;
-
-                IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
-                    environment
+                PluginEnvironment environment = await BuildPluginEnvironmentAsync(
+                    manifest!,
+                    cancellationToken
                 );
-                allFields.AddRange(fields);
+
+                foreach (StorkPluginInfo pluginInfo in manifest!.Plugins!)
+                {
+                    try
+                    {
+                        IStorkPlugin? plugin = LoadPlugin(
+                            storkDir,
+                            pluginInfo,
+                            _activePluginContexts
+                        );
+                        if (plugin is null)
+                        {
+                            _logger.LogWarning(
+                                "Plugin {TypeName} not found in .stork/",
+                                pluginInfo.TypeName
+                            );
+                            continue;
+                        }
+
+                        if (plugin is IInteractiveStorkPlugin interactive)
+                            CurrentInteractivePlugin = interactive;
+
+                        IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                            environment
+                        );
+
+                        List<PluginActionDescription> preDesc = [];
+                        List<PluginActionDescription> postDesc = [];
+                        if (plugin is IDescribableStorkPlugin describable)
+                        {
+                            try
+                            {
+                                IReadOnlyList<PluginActionDescription> descriptions =
+                                    describable.GetActionDescriptions(environment);
+                                preDesc = descriptions
+                                    .Where(d => d.Phase == PluginActionPhase.PreInstall)
+                                    .ToList();
+                                postDesc = descriptions
+                                    .Where(d => d.Phase == PluginActionPhase.PostInstall)
+                                    .ToList();
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(
+                                    ex,
+                                    "Failed to get action descriptions from {TypeName}",
+                                    pluginInfo.TypeName
+                                );
+                            }
+                        }
+
+                        string shortName = pluginInfo.TypeName.Contains('.')
+                            ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
+                            : pluginInfo.TypeName;
+
+                        groups.Add(
+                            new PluginActionGroup
+                            {
+                                GroupId = $"preinstall-{pluginInfo.TypeName}",
+                                Title = $"PreInstall: {shortName}",
+                                Phase = PluginActionPhase.PreInstall,
+                                IsEnabled = options.RunPreInstall,
+                                Fields = fields,
+                                Descriptions = preDesc,
+                            }
+                        );
+
+                        groups.Add(
+                            new PluginActionGroup
+                            {
+                                GroupId = $"postinstall-{pluginInfo.TypeName}",
+                                Title = $"PostInstall: {shortName}",
+                                Phase = PluginActionPhase.PostInstall,
+                                IsEnabled = options.RunPostInstall,
+                                Fields = [],
+                                Descriptions = postDesc,
+                            }
+                        );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(
+                            ex,
+                            "Failed to load plugin {TypeName}",
+                            pluginInfo.TypeName
+                        );
+                    }
+                }
             }
 
-            Dictionary<string, string>? configValues = null;
-            if (allFields.Count > 0 && OnPluginConfigNeeded is not null)
+            Dictionary<string, string> previousValues = await LoadPluginConfigValues(
+                product.ProductId,
+                cancellationToken
+            );
+            Dictionary<string, string>? configValues = options.PluginConfigValues;
+
+            if (configValues is null && groups.Count > 0)
             {
-                ReportProgress(
-                    InstallStage.RunningPlugins,
-                    15,
-                    "Waiting for plugin configuration..."
-                );
-                configValues = OnPluginConfigNeeded(allFields, environment.PreviousConfigValues);
+                if (OnActionGroupConfigNeeded is not null)
+                {
+                    ReportProgress(InstallStage.RunningPlugins, 15, "Waiting for configuration...");
+                    configValues = OnActionGroupConfigNeeded(groups, previousValues);
+                }
+                else if (OnPluginConfigNeeded is not null)
+                {
+                    List<PluginConfigField> flatFields = groups.SelectMany(g => g.Fields).ToList();
+                    if (flatFields.Count > 0)
+                    {
+                        ReportProgress(
+                            InstallStage.RunningPlugins,
+                            15,
+                            "Waiting for configuration..."
+                        );
+                        configValues = OnPluginConfigNeeded(flatFields, previousValues);
+                    }
+                }
+
                 if (configValues is null)
                 {
                     return new InstallResult
                     {
                         Success = false,
-                        ErrorMessage = "Plugin configuration cancelled.",
+                        ErrorMessage = "Configuration cancelled.",
                     };
                 }
             }
 
-            InstallOptions installOptions = new InstallOptions(
-                TargetPath: product.InstalledPath,
-                FeedId: product.FeedId,
-                PluginConfigValues: configValues ?? options.PluginConfigValues
-            );
-
-            PluginContext context = new PluginContext
+            HashSet<string> disabledGroups = new HashSet<string>();
+            if (configValues is not null)
             {
-                ProductId = product.ProductId,
-                Version = product.Version,
-                InstallPath = product.InstalledPath,
-                StorkConfigDirectory = GetStorkConfigDir(),
-                ConfigValues =
-                    configValues ?? options.PluginConfigValues ?? new Dictionary<string, string>(),
-            };
-
-            if (options.RunPreInstall)
-            {
-                ReportProgress(InstallStage.RunningPlugins, 30, "Running PreInstall...");
-                PluginPhaseResult preResult = await RunPluginPhaseAsync(
-                    manifest,
-                    installOptions,
-                    context,
-                    PluginPhase.PreInstall,
-                    cancellationToken
-                );
-                if (!preResult.Success)
+                foreach (string key in configValues.Keys)
                 {
-                    return new InstallResult
-                    {
-                        Success = false,
-                        ErrorMessage = preResult.ErrorMessage ?? "PreInstall failed.",
-                    };
+                    if (key.StartsWith("__group_enabled_") && configValues[key] == "false")
+                        disabledGroups.Add(key["__group_enabled_".Length..]);
                 }
             }
 
-            if (options.RunPostInstall)
+            Dictionary<string, string> effectiveConfig =
+                configValues ?? options.PluginConfigValues ?? new Dictionary<string, string>();
+
+            if (hasFileHandlerFiles && _fileTypeHandlers.Count > 0)
             {
-                ReportProgress(InstallStage.RunningPlugins, 60, "Running PostInstall...");
-                PluginPhaseResult postResult = await RunPluginPhaseAsync(
-                    manifest,
-                    installOptions,
-                    context,
-                    PluginPhase.PostInstall,
-                    cancellationToken
-                );
-                if (!postResult.Success)
+                bool anyFileHandlerEnabled = groups
+                    .Where(g => g.GroupId.StartsWith("filehandler-"))
+                    .Any(g => !disabledGroups.Contains(g.GroupId));
+
+                if (anyFileHandlerEnabled)
                 {
-                    return new InstallResult
+                    ReportProgress(InstallStage.RunningPlugins, 20, "Running file handlers...");
+                    string[] savedFiles = Directory.GetFiles(storkFilesDir);
+
+                    foreach (IFileTypeHandler handler in _fileTypeHandlers)
                     {
-                        Success = false,
-                        ErrorMessage = postResult.ErrorMessage ?? "PostInstall failed.",
-                    };
+                        string handlerName = handler is IStorkDropPlugin sdp
+                            ? sdp.DisplayName
+                            : handler.GetType().Name;
+                        string groupId = $"filehandler-{handlerName}";
+
+                        if (disabledGroups.Contains(groupId))
+                            continue;
+
+                        try
+                        {
+                            List<string> matchingFiles = savedFiles
+                                .Where(f =>
+                                    handler.HandledExtensions.Any(ext =>
+                                        f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)
+                                    )
+                                )
+                                .ToList();
+
+                            if (matchingFiles.Count == 0)
+                                continue;
+
+                            PluginContext fileContext = new PluginContext
+                            {
+                                ProductId = product.ProductId,
+                                Version = product.Version,
+                                InstallPath = product.InstalledPath,
+                                StorkConfigDirectory = GetStorkConfigDir(),
+                                ConfigValues = effectiveConfig,
+                            };
+
+                            ReportProgress(
+                                InstallStage.RunningPlugins,
+                                25,
+                                $"Processing {matchingFiles.Count} file(s) with {handlerName}..."
+                            );
+                            FileHandlerResult handlerResult = await handler.HandleFilesAsync(
+                                matchingFiles,
+                                fileContext,
+                                cancellationToken
+                            );
+
+                            if (!handlerResult.Success)
+                            {
+                                return new InstallResult
+                                {
+                                    Success = false,
+                                    ErrorMessage =
+                                        handlerResult.ErrorMessage
+                                        ?? $"File handler {handlerName} failed.",
+                                };
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(
+                                ex,
+                                "File handler {Handler} failed during re-execution",
+                                handlerName
+                            );
+                            return new InstallResult
+                            {
+                                Success = false,
+                                ErrorMessage = $"File handler {handlerName} failed: {ex.Message}",
+                            };
+                        }
+                    }
+                }
+            }
+
+            if (hasPlugins)
+            {
+                InstallOptions installOptions = new InstallOptions(
+                    TargetPath: product.InstalledPath,
+                    FeedId: product.FeedId,
+                    PluginConfigValues: effectiveConfig
+                );
+
+                PluginContext context = new PluginContext
+                {
+                    ProductId = product.ProductId,
+                    Version = product.Version,
+                    InstallPath = product.InstalledPath,
+                    StorkConfigDirectory = GetStorkConfigDir(),
+                    ConfigValues = effectiveConfig,
+                };
+
+                bool preEnabled = manifest!.Plugins!.Any(p =>
+                    !disabledGroups.Contains($"preinstall-{p.TypeName}")
+                );
+                bool postEnabled = manifest.Plugins.Any(p =>
+                    !disabledGroups.Contains($"postinstall-{p.TypeName}")
+                );
+
+                if (preEnabled)
+                {
+                    ReportProgress(InstallStage.RunningPlugins, 40, "Running PreInstall...");
+                    PluginPhaseResult preResult = await RunPluginPhaseAsync(
+                        manifest,
+                        installOptions,
+                        context,
+                        PluginPhase.PreInstall,
+                        cancellationToken
+                    );
+                    if (!preResult.Success)
+                    {
+                        return new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = preResult.ErrorMessage ?? "PreInstall failed.",
+                        };
+                    }
+                }
+
+                if (postEnabled)
+                {
+                    ReportProgress(InstallStage.RunningPlugins, 70, "Running PostInstall...");
+                    PluginPhaseResult postResult = await RunPluginPhaseAsync(
+                        manifest,
+                        installOptions,
+                        context,
+                        PluginPhase.PostInstall,
+                        cancellationToken
+                    );
+                    if (!postResult.Success)
+                    {
+                        return new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = postResult.ErrorMessage ?? "PostInstall failed.",
+                        };
+                    }
                 }
             }
 
