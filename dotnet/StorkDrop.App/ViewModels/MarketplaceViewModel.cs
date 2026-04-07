@@ -625,9 +625,10 @@ public partial class MarketplaceViewModel : ObservableObject
             filtered.Select(entry =>
             {
                 ProductManifest manifest = entry.Manifest;
-                InstalledProduct? installed = _installedProducts.FirstOrDefault(i =>
-                    i.ProductId == manifest.ProductId
-                );
+                InstalledProduct? installed =
+                    _installedProducts.FirstOrDefault(i =>
+                        i.ProductId == manifest.ProductId && i.FeedId == entry.FeedId
+                    ) ?? _installedProducts.FirstOrDefault(i => i.ProductId == manifest.ProductId);
                 bool isInstalled = installed is not null;
                 bool hasUpdate =
                     isInstalled && VersionComparer.IsNewer(manifest.Version, installed!.Version);

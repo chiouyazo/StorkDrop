@@ -60,6 +60,9 @@ public partial class ProductCardViewModel : ObservableObject
     [ObservableProperty]
     private string _feedId = string.Empty;
 
+    public string VersionDisplay =>
+        string.IsNullOrEmpty(FeedName) ? $"v{Version}" : $"{FeedName} / v{Version}";
+
     /// <summary>
     /// Loads the product image from the specified URL asynchronously.
     /// </summary>

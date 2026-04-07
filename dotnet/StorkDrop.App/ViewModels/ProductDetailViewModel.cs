@@ -46,6 +46,9 @@ public partial class ProductDetailViewModel : ObservableObject
     public string FeedId { get; set; } = string.Empty;
 
     [ObservableProperty]
+    private string _feedName = string.Empty;
+
+    [ObservableProperty]
     private ProductManifest? _manifest;
 
     [ObservableProperty]
@@ -77,6 +80,11 @@ public partial class ProductDetailViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasPlugins;
+
+    public string VersionDisplay =>
+        string.IsNullOrEmpty(FeedName)
+            ? $"v{Manifest?.Version}"
+            : $"{FeedName} / v{Manifest?.Version}";
 
     public bool CanInstallSelectedVersion => !IsInstalling && !IsSelectedVersionInstalled;
     public bool CanReExecutePlugins => IsInstalled && HasPlugins && !IsInstalling;
@@ -128,6 +136,8 @@ public partial class ProductDetailViewModel : ObservableObject
     private async Task LoadAsync(string productId)
     {
         IRegistryClient client = _feedRegistry.GetClient(FeedId);
+        FeedName =
+            _feedRegistry.GetFeeds().FirstOrDefault(f => f.Id == FeedId)?.Name ?? string.Empty;
         Manifest = await client.GetProductManifestAsync(productId);
         if (Manifest is null)
             return;

@@ -83,19 +83,19 @@ public partial class SetupWizardViewModel : ObservableObject
     /// </summary>
     public bool CanGoBack => CurrentStep > 0;
 
-    /// <summary>
-    /// Gets a value indicating whether the user can navigate forward.
-    /// </summary>
-    public bool CanGoNext => CurrentStep < TotalSteps - 1;
+    public bool CanGoNext => CurrentStep < TotalSteps - 1 && IsCurrentStepValid;
 
-    /// <summary>
-    /// Gets a value indicating whether the user can finish the wizard.
-    /// </summary>
     public bool CanFinish => CurrentStep == TotalSteps - 1;
 
-    /// <summary>
-    /// Navigates to the previous wizard step.
-    /// </summary>
+    private bool IsCurrentStepValid =>
+        CurrentStep switch
+        {
+            1 => !string.IsNullOrWhiteSpace(FeedUrl),
+            _ => true,
+        };
+
+    partial void OnFeedUrlChanged(string value) => OnPropertyChanged(nameof(CanGoNext));
+
     [RelayCommand]
     private void GoBack()
     {

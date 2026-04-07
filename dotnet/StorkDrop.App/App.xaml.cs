@@ -16,14 +16,6 @@ namespace StorkDrop.App;
 
 public partial class App : Application
 {
-    static App()
-    {
-        string[] args = Environment.GetCommandLineArgs();
-        bool isCliMode = args.Length >= 2 && args[1] == "--cli";
-        if (!isCliMode)
-            StorkDrop.App.Services.ConsoleHelper.DetachConsole();
-    }
-
     private static readonly Mutex SingleInstanceMutex = new Mutex(
         true,
         "StorkDrop-SingleInstance-Mutex"
@@ -372,6 +364,7 @@ public partial class App : Application
 
     private async Task RunCliModeAsync(string[] args)
     {
+        ConsoleHelper.AttachToParentConsole();
         try
         {
             _host = AppHostBuilder.Build();
