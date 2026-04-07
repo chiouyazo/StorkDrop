@@ -18,7 +18,7 @@
         VerticalAlignment="Center"
       />
       <Button
-        Content="&#xE72C;"
+        Content="&#xE945;"
         FontFamily="Segoe MDL2 Assets"
         FontSize="16"
         Background="Transparent"
@@ -124,7 +124,7 @@
 
               <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                 <Button
-                  Content="&#xE768;"
+                  Content="&#xE945;"
                   FontFamily="Segoe MDL2 Assets"
                   Style="{DynamicResource OutlinedButton}"
                   Command="{Binding DataContext.ReExecutePluginsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"

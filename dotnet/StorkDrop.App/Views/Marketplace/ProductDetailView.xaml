@@ -44,7 +44,7 @@
             Foreground="{DynamicResource OnSurfaceVariantBrush}"
           />
           <TextBlock
-            Text="{Binding Manifest.Version, StringFormat='v{0}'}"
+            Text="{Binding VersionDisplay}"
             FontSize="13"
             Foreground="#999999"
             Margin="0,4,0,0"
@@ -111,7 +111,7 @@
           MinWidth="160"
         />
         <Button
-          Content="&#xE768;"
+          Content="&#xE945;"
           FontFamily="Segoe MDL2 Assets"
           Style="{DynamicResource OutlinedButton}"
           Command="{Binding ReExecutePluginsCommand}"

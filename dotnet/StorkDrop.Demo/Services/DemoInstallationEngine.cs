@@ -173,17 +173,33 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
                 };
 
             progress.Report(
-                new InstallProgress(InstallStage.RunningPlugins, 55, "Running PreInstall...")
+                new InstallProgress(InstallStage.RunningPlugins, 52, "Running PreInstall...")
             );
-            await Task.Delay(500, cancellationToken);
+            await Task.Delay(300, cancellationToken);
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    55,
+                    "PreInstall: Validating database connection..."
+                )
+            );
+            await Task.Delay(400, cancellationToken);
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    58,
+                    "PreInstall: Connection verified."
+                )
+            );
+            await Task.Delay(200, cancellationToken);
             progress.Report(
                 new InstallProgress(
                     InstallStage.RunningPlugins,
                     60,
-                    "PreInstall validation passed."
+                    "PreInstall: All prerequisites met."
                 )
             );
-            await Task.Delay(300, cancellationToken);
+            await Task.Delay(200, cancellationToken);
         }
 
         string resolvedPath = options.TargetPath;
@@ -224,14 +240,38 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         if (manifest.Plugins is { Length: > 0 })
         {
             progress.Report(
-                new InstallProgress(InstallStage.RunningPlugins, 88, "Running PostInstall...")
+                new InstallProgress(InstallStage.RunningPlugins, 85, "Running PostInstall...")
             );
-            await Task.Delay(600, cancellationToken);
+            await Task.Delay(300, cancellationToken);
             progress.Report(
                 new InstallProgress(
                     InstallStage.RunningPlugins,
-                    92,
-                    "PostInstall: Configuration saved successfully."
+                    87,
+                    "PostInstall: Creating reporting tables..."
+                )
+            );
+            await Task.Delay(500, cancellationToken);
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    89,
+                    "PostInstall: Inserting default configuration..."
+                )
+            );
+            await Task.Delay(400, cancellationToken);
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    91,
+                    "PostInstall: Registering scheduled tasks..."
+                )
+            );
+            await Task.Delay(300, cancellationToken);
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    93,
+                    "PostInstall: Configuration applied successfully."
                 )
             );
             await Task.Delay(200, cancellationToken);
@@ -346,9 +386,22 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
     )
     {
         progress.Report(
-            new InstallProgress(InstallStage.RunningPlugins, 10, "Loading plugin configuration...")
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                5,
+                $"Loading plugin data for {product.Title}..."
+            )
         );
         await Task.Delay(300, cancellationToken);
+
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                10,
+                "Loading plugin configuration schema..."
+            )
+        );
+        await Task.Delay(200, cancellationToken);
 
         IReadOnlyList<PluginConfigField> schema = _interactivePlugin.GetConfigurationSchema(
             new PluginEnvironment()
@@ -366,7 +419,12 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
 
             Dictionary<string, string>? configValues = OnPluginConfigNeeded(
                 schema,
-                new Dictionary<string, string>()
+                new Dictionary<string, string>
+                {
+                    ["target-database"] = "dev",
+                    ["schema-name"] = "dbo",
+                    ["timeout"] = "300",
+                }
             );
             if (configValues is null)
                 return new InstallResult
@@ -377,28 +435,82 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         }
 
         progress.Report(
-            new InstallProgress(InstallStage.RunningPlugins, 30, "Running PreInstall...")
+            new InstallProgress(InstallStage.RunningPlugins, 25, "Running PreInstall...")
         );
-        await Task.Delay(500, cancellationToken);
-
-        progress.Report(
-            new InstallProgress(InstallStage.RunningPlugins, 50, "PreInstall validation passed.")
-        );
-        await Task.Delay(300, cancellationToken);
-
-        progress.Report(
-            new InstallProgress(InstallStage.RunningPlugins, 60, "Running PostInstall...")
-        );
-        await Task.Delay(600, cancellationToken);
-
+        await Task.Delay(400, cancellationToken);
         progress.Report(
             new InstallProgress(
                 InstallStage.RunningPlugins,
-                80,
-                "PostInstall: Configuration applied successfully."
+                30,
+                "PreInstall: Validating database connection..."
+            )
+        );
+        await Task.Delay(500, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                35,
+                "PreInstall: Connection to database verified."
+            )
+        );
+        await Task.Delay(200, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                40,
+                "PreInstall: Checking schema permissions..."
             )
         );
         await Task.Delay(300, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                45,
+                "PreInstall: All prerequisites met."
+            )
+        );
+        await Task.Delay(200, cancellationToken);
+
+        progress.Report(
+            new InstallProgress(InstallStage.RunningPlugins, 50, "Running PostInstall...")
+        );
+        await Task.Delay(400, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                55,
+                "PostInstall: Creating reporting tables..."
+            )
+        );
+        await Task.Delay(600, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                65,
+                "PostInstall: Inserting default configuration..."
+            )
+        );
+        await Task.Delay(400, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                75,
+                "PostInstall: Registering scheduled tasks..."
+            )
+        );
+        await Task.Delay(500, cancellationToken);
+        progress.Report(
+            new InstallProgress(
+                InstallStage.RunningPlugins,
+                85,
+                "PostInstall: Verifying data integrity..."
+            )
+        );
+        await Task.Delay(300, cancellationToken);
+        progress.Report(
+            new InstallProgress(InstallStage.RunningPlugins, 90, "Saving configuration...")
+        );
+        await Task.Delay(200, cancellationToken);
 
         progress.Report(
             new InstallProgress(

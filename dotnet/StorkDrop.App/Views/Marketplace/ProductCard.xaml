@@ -104,7 +104,7 @@
 
       <TextBlock
         Grid.Row="2"
-        Text="{Binding Version, StringFormat='v{0}'}"
+        Text="{Binding VersionDisplay}"
         FontSize="12"
         Foreground="#999999"
         Margin="0,0,0,8"
