@@ -3,9 +3,11 @@ using System.IO;
 using System.Text.Json;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
+using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
@@ -115,6 +117,31 @@ public partial class InstalledViewModel : ObservableObject
                     catch { }
                 }
 
+                bool hasFileHandlerData = false;
+                string storkFilesDir = Path.Combine(p.InstalledPath, ".stork", "files");
+                try
+                {
+                    if (
+                        Directory.Exists(storkFilesDir)
+                        && Directory.GetFiles(storkFilesDir).Length > 0
+                    )
+                        hasFileHandlerData = true;
+                }
+                catch { }
+
+                if (!hasFileHandlerData)
+                {
+                    try
+                    {
+                        bool hasFileHandlers = StorkDrop
+                            .App.App.Services.GetServices<IStorkDropPlugin>()
+                            .Any(plugin => plugin is IFileTypeHandler);
+                        if (hasFileHandlers && p.FeedId is not null)
+                            hasFileHandlerData = true;
+                    }
+                    catch { }
+                }
+
                 productVms.Add(
                     new InstalledProductViewModel
                     {
@@ -124,6 +151,7 @@ public partial class InstalledViewModel : ObservableObject
                         InstalledPath = p.InstalledPath,
                         InstalledDate = p.InstalledDate,
                         HasPlugins = hasPlugins,
+                        HasFileHandlerData = hasFileHandlerData,
                         InstallType = p.InstallType ?? InstallType.Plugin,
                     }
                 );

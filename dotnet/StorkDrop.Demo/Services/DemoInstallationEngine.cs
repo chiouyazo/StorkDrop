@@ -392,7 +392,9 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
                 manifest.Version,
                 resolvedPath,
                 DateTime.UtcNow,
-                options.FeedId
+                options.FeedId,
+                BackupPath: null,
+                InstallType: manifest.InstallType
             ),
             cancellationToken
         );
@@ -495,18 +497,67 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
             ["timeout"] = "300",
         };
 
-        IReadOnlyList<PluginActionGroup> groups = await GetActionGroupsAsync(
-            new ProductManifest(
-                product.ProductId,
-                product.Title,
-                product.Version,
-                DateOnly.FromDateTime(DateTime.Today),
-                InstallType.Plugin,
-                Plugins: [new StorkPluginInfo("demo", "demo")]
-            ),
-            product.FeedId,
-            cancellationToken
-        );
+        ProductManifest? actualManifest = Data
+            .DemoProducts.InternalFeedProducts.Concat(Data.DemoProducts.PartnerFeedProducts)
+            .FirstOrDefault(p => p.ProductId == product.ProductId);
+
+        List<PluginActionGroup> groups = [];
+        if (actualManifest?.Plugins is { Length: > 0 })
+        {
+            groups.AddRange(
+                await GetActionGroupsAsync(actualManifest, product.FeedId, cancellationToken)
+            );
+        }
+
+        if (product.ProductId == "nova-dashboard")
+        {
+            groups.Insert(
+                0,
+                new PluginActionGroup
+                {
+                    GroupId = "filehandler-SQL Deploy Tools",
+                    Title = "File Handler: SQL Deploy Tools",
+                    Phase = PluginActionPhase.PreInstall,
+                    Fields =
+                    [
+                        new PluginConfigField
+                        {
+                            Key = "target-db",
+                            Label = "Target Database",
+                            FieldType = PluginFieldType.Dropdown,
+                            Required = true,
+                            Options =
+                            [
+                                new PluginOptionItem
+                                {
+                                    Value = "production",
+                                    Label = "Production (db-prod-01)",
+                                },
+                                new PluginOptionItem
+                                {
+                                    Value = "staging",
+                                    Label = "Staging (db-staging-01)",
+                                },
+                            ],
+                        },
+                        new PluginConfigField
+                        {
+                            Key = "deploy-schema",
+                            Label = "Deploy schema-update.sql",
+                            FieldType = PluginFieldType.Checkbox,
+                            DefaultValue = "true",
+                        },
+                        new PluginConfigField
+                        {
+                            Key = "deploy-seed",
+                            Label = "Deploy seed-data.sql",
+                            FieldType = PluginFieldType.Checkbox,
+                            DefaultValue = "true",
+                        },
+                    ],
+                }
+            );
+        }
 
         Dictionary<string, string>? configValues = null;
         if (OnActionGroupConfigNeeded is not null && groups.Count > 0)

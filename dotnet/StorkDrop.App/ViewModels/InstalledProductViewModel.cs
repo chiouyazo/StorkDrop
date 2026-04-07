@@ -27,7 +27,11 @@ public partial class InstalledProductViewModel : ObservableObject
     private bool _hasPlugins;
 
     [ObservableProperty]
+    private bool _hasFileHandlerData;
+
+    [ObservableProperty]
     private InstallType _installType;
 
     public bool IsExecutable => InstallType == InstallType.Executable;
+    public bool HasActions => HasPlugins || HasFileHandlerData;
 }

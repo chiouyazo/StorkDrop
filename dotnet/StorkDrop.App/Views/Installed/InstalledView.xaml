@@ -186,7 +186,7 @@
                     <Style TargetType="Button" BasedOn="{StaticResource OutlinedButton}">
                       <Setter
                         Property="Visibility"
-                        Value="{Binding HasPlugins, Converter={StaticResource BoolToVisibilityConverter}}"
+                        Value="{Binding HasActions, Converter={StaticResource BoolToVisibilityConverter}}"
                       />
                       <Style.Triggers>
                         <DataTrigger Binding="{Binding IsExecutable}" Value="True">
