@@ -22,6 +22,16 @@ public delegate string? InstallPathResolverCallback(
 );
 
 /// <summary>
+/// Callback that receives action groups (phases with config fields) and returns
+/// the user's configuration values. Disabled groups are indicated by special keys
+/// (__group_enabled_{groupId} = "false"). Returns null if the user cancels.
+/// </summary>
+public delegate Dictionary<string, string>? ActionGroupConfigCallback(
+    IReadOnlyList<PluginActionGroup> groups,
+    Dictionary<string, string> currentValues
+);
+
+/// <summary>
 /// Defines the contract for the installation engine that handles product installation,
 /// update, and uninstall operations.
 /// </summary>
@@ -46,6 +56,13 @@ public interface IInstallationEngine
     /// </summary>
     FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
 
+    /// <summary>
+    /// Set by the UI layer to show the unified action group configuration dialog.
+    /// Receives all action groups (file handlers + product plugin phases) with their fields.
+    /// Returns null if the user cancels.
+    /// </summary>
+    ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
+
     IInteractiveStorkPlugin? CurrentInteractivePlugin { get; }
 
     /// <summary>
@@ -55,6 +72,16 @@ public interface IInstallationEngine
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A list of plugin configuration fields.</returns>
     Task<IReadOnlyList<PluginConfigField>> GetPluginConfigurationAsync(
+        ProductManifest manifest,
+        string? feedId = null,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
+    /// Builds action groups for a product, including file handler groups and product plugin
+    /// PreInstall/PostInstall groups with their config fields and action descriptions.
+    /// </summary>
+    Task<IReadOnlyList<PluginActionGroup>> GetActionGroupsAsync(
         ProductManifest manifest,
         string? feedId = null,
         CancellationToken cancellationToken = default
@@ -111,6 +138,7 @@ public interface IInstallationEngine
     /// <returns>An <see cref="InstallResult"/> indicating success or failure.</returns>
     Task<InstallResult> ReExecutePluginsAsync(
         InstalledProduct product,
+        ReExecuteOptions options,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken = default
     );

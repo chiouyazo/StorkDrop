@@ -184,6 +184,7 @@ public sealed class InstallationCoordinator
 
     public async Task<InstallResult> ReExecutePluginsWithIsolationAsync(
         InstalledProduct product,
+        ReExecuteOptions options,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken
     )
@@ -207,7 +208,12 @@ public sealed class InstallationCoordinator
         try
         {
             _logger.LogInformation("Re-execute lock acquired for {ProductId}", product.ProductId);
-            return await _engine.ReExecutePluginsAsync(product, progress, cancellationToken);
+            return await _engine.ReExecutePluginsAsync(
+                product,
+                options,
+                progress,
+                cancellationToken
+            );
         }
         catch (OperationCanceledException)
         {

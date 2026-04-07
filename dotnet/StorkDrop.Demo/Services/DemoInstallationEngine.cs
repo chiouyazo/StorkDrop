@@ -20,7 +20,78 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
     public InstallPathResolverCallback? OnResolveInstallPath { get; set; }
     public FileHandlerConfigCallback? OnFileHandlerConfigNeeded { get; set; }
     public FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
+    public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin => _interactivePlugin;
+
+    public Task<IReadOnlyList<PluginActionGroup>> GetActionGroupsAsync(
+        ProductManifest manifest,
+        string? feedId = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        if (manifest.Plugins is not { Length: > 0 })
+            return Task.FromResult<IReadOnlyList<PluginActionGroup>>([]);
+
+        IReadOnlyList<PluginConfigField> fields = _interactivePlugin.GetConfigurationSchema(
+            new PluginEnvironment()
+        );
+
+        List<PluginActionGroup> groups =
+        [
+            new PluginActionGroup
+            {
+                GroupId = "preinstall-demo",
+                Title = "PreInstall: Database Setup",
+                Phase = PluginActionPhase.PreInstall,
+                Fields = fields,
+                Descriptions =
+                [
+                    new PluginActionDescription
+                    {
+                        Phase = PluginActionPhase.PreInstall,
+                        Title = "Validate database connection",
+                        Description = "Checks that the selected database is reachable.",
+                    },
+                    new PluginActionDescription
+                    {
+                        Phase = PluginActionPhase.PreInstall,
+                        Title = "Check schema permissions",
+                        Description = "Verifies the service account has required permissions.",
+                    },
+                ],
+            },
+            new PluginActionGroup
+            {
+                GroupId = "postinstall-demo",
+                Title = "PostInstall: Configuration",
+                Phase = PluginActionPhase.PostInstall,
+                Fields = [],
+                Descriptions =
+                [
+                    new PluginActionDescription
+                    {
+                        Phase = PluginActionPhase.PostInstall,
+                        Title = "Create reporting tables",
+                        Description = "Creates the schema and tables for report storage.",
+                    },
+                    new PluginActionDescription
+                    {
+                        Phase = PluginActionPhase.PostInstall,
+                        Title = "Insert default configuration",
+                        Description = "Populates initial settings and templates.",
+                    },
+                    new PluginActionDescription
+                    {
+                        Phase = PluginActionPhase.PostInstall,
+                        Title = "Register scheduled tasks",
+                        Description = "Sets up automated report generation jobs.",
+                    },
+                ],
+            },
+        ];
+
+        return Task.FromResult<IReadOnlyList<PluginActionGroup>>(groups);
+    }
 
     public Task<IReadOnlyList<PluginConfigField>> GetPluginConfigurationAsync(
         ProductManifest manifest,
@@ -149,7 +220,7 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
             await Task.Delay(200, cancellationToken);
         }
 
-        if (manifest.Plugins is { Length: > 0 } && OnPluginConfigNeeded is not null)
+        if (manifest.Plugins is { Length: > 0 })
         {
             progress.Report(
                 new InstallProgress(
@@ -158,13 +229,26 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
                     "Loading plugin configuration..."
                 )
             );
-            IReadOnlyList<PluginConfigField> schema = _interactivePlugin.GetConfigurationSchema(
-                new PluginEnvironment()
+
+            IReadOnlyList<PluginActionGroup> groups = await GetActionGroupsAsync(
+                manifest,
+                options.FeedId,
+                cancellationToken
             );
 
-            Dictionary<string, string>? pluginConfig =
-                options.PluginConfigValues
-                ?? OnPluginConfigNeeded(schema, new Dictionary<string, string>());
+            Dictionary<string, string>? pluginConfig = options.PluginConfigValues;
+            if (pluginConfig is null && OnActionGroupConfigNeeded is not null && groups.Count > 0)
+            {
+                pluginConfig = OnActionGroupConfigNeeded(groups, new Dictionary<string, string>());
+            }
+            else if (pluginConfig is null && OnPluginConfigNeeded is not null)
+            {
+                IReadOnlyList<PluginConfigField> schema = _interactivePlugin.GetConfigurationSchema(
+                    new PluginEnvironment()
+                );
+                pluginConfig = OnPluginConfigNeeded(schema, new Dictionary<string, string>());
+            }
+
             if (pluginConfig is null)
                 return new InstallResult
                 {
@@ -381,6 +465,7 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
 
     public async Task<InstallResult> ReExecutePluginsAsync(
         InstalledProduct product,
+        ReExecuteOptions options,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken = default
     )
@@ -403,11 +488,28 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         );
         await Task.Delay(200, cancellationToken);
 
-        IReadOnlyList<PluginConfigField> schema = _interactivePlugin.GetConfigurationSchema(
-            new PluginEnvironment()
+        Dictionary<string, string> previousValues = new Dictionary<string, string>
+        {
+            ["target-database"] = "dev",
+            ["schema-name"] = "dbo",
+            ["timeout"] = "300",
+        };
+
+        IReadOnlyList<PluginActionGroup> groups = await GetActionGroupsAsync(
+            new ProductManifest(
+                product.ProductId,
+                product.Title,
+                product.Version,
+                DateOnly.FromDateTime(DateTime.Today),
+                InstallType.Plugin,
+                Plugins: [new StorkPluginInfo("demo", "demo")]
+            ),
+            product.FeedId,
+            cancellationToken
         );
 
-        if (OnPluginConfigNeeded is not null)
+        Dictionary<string, string>? configValues = null;
+        if (OnActionGroupConfigNeeded is not null && groups.Count > 0)
         {
             progress.Report(
                 new InstallProgress(
@@ -416,23 +518,29 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
                     "Waiting for plugin configuration..."
                 )
             );
-
-            Dictionary<string, string>? configValues = OnPluginConfigNeeded(
-                schema,
-                new Dictionary<string, string>
-                {
-                    ["target-database"] = "dev",
-                    ["schema-name"] = "dbo",
-                    ["timeout"] = "300",
-                }
-            );
-            if (configValues is null)
-                return new InstallResult
-                {
-                    Success = false,
-                    ErrorMessage = "Plugin configuration cancelled.",
-                };
+            configValues = OnActionGroupConfigNeeded(groups, previousValues);
         }
+        else if (OnPluginConfigNeeded is not null)
+        {
+            IReadOnlyList<PluginConfigField> schema = _interactivePlugin.GetConfigurationSchema(
+                new PluginEnvironment()
+            );
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.RunningPlugins,
+                    15,
+                    "Waiting for plugin configuration..."
+                )
+            );
+            configValues = OnPluginConfigNeeded(schema, previousValues);
+        }
+
+        if (configValues is null)
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = "Plugin configuration cancelled.",
+            };
 
         progress.Report(
             new InstallProgress(InstallStage.RunningPlugins, 25, "Running PreInstall...")

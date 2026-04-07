@@ -14,6 +14,277 @@
 >
   <Window.Resources>
     <BooleanToVisibilityConverter x:Key="BoolToVis" />
+    <DataTemplate DataType="{x:Type vm:PluginConfigFieldViewModel}">
+      <StackPanel Margin="0,0,0,12" IsEnabled="{Binding IsEnabled}">
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+          <TextBlock Text="{Binding Label}" Style="{DynamicResource BodyText}" />
+          <TextBlock
+            Text=" *"
+            Foreground="{DynamicResource ErrorBrush}"
+            Visibility="{Binding Required, Converter={StaticResource BoolToVis}}"
+          />
+        </StackPanel>
+        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}">
+          <TextBox.Style>
+            <Style TargetType="TextBox" BasedOn="{StaticResource StyledTextBox}">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="IsReadOnly" Value="{Binding IsReadOnly}" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Text">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBox.Style>
+        </TextBox>
+        <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}">
+          <TextBox.Style>
+            <Style TargetType="TextBox" BasedOn="{StaticResource StyledTextBox}">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Number">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBox.Style>
+        </TextBox>
+        <Border>
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="BorderBrush" Value="#E0E0E0" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="CornerRadius" Value="4" />
+              <Setter Property="Background" Value="White" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Dropdown">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <ComboBox
+            SelectedValue="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+            SelectedValuePath="Value"
+            DisplayMemberPath="Label"
+            ItemsSource="{Binding Options}"
+            Padding="8,6"
+            FontSize="13"
+            Background="White"
+            BorderThickness="0"
+            MinHeight="36"
+          />
+        </Border>
+        <CheckBox
+          Content="{Binding Label}"
+          Tag="{Binding}"
+          Checked="CheckBox_Changed"
+          Unchecked="CheckBox_Changed"
+          Loaded="CheckBox_Loaded"
+        >
+          <CheckBox.Style>
+            <Style TargetType="CheckBox">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Checkbox">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </CheckBox.Style>
+        </CheckBox>
+        <Border>
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="BorderBrush" Value="#E0E0E0" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="CornerRadius" Value="4" />
+              <Setter Property="Background" Value="White" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Password">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <PasswordBox
+            Padding="8,6"
+            FontSize="13"
+            MinHeight="36"
+            VerticalContentAlignment="Center"
+            BorderThickness="0"
+            Background="Transparent"
+            Tag="{Binding}"
+            PasswordChanged="PasswordBox_PasswordChanged"
+          />
+        </Border>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Grid.Style>
+            <Style TargetType="Grid">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="FilePath">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <TextBox
+            Grid.Column="0"
+            Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+            Style="{DynamicResource StyledTextBox}"
+            Margin="0,0,8,0"
+          />
+          <Button
+            Grid.Column="1"
+            Content="..."
+            Style="{DynamicResource OutlinedButton}"
+            Padding="8,6"
+            Tag="{Binding}"
+            Click="BrowseFile_Click"
+          />
+        </Grid>
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <Grid.Style>
+            <Style TargetType="Grid">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="FolderPath">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Grid.Style>
+          <TextBox
+            Grid.Column="0"
+            Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+            Style="{DynamicResource StyledTextBox}"
+            Margin="0,0,8,0"
+          />
+          <Button
+            Grid.Column="1"
+            Content="..."
+            Style="{DynamicResource OutlinedButton}"
+            Padding="8,6"
+            Tag="{Binding}"
+            Click="BrowseFolder_Click"
+          />
+        </Grid>
+        <StackPanel Orientation="Horizontal">
+          <StackPanel.Style>
+            <Style TargetType="StackPanel">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Button">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StackPanel.Style>
+          <Button
+            Content="{Binding Label}"
+            Style="{DynamicResource OutlinedButton}"
+            Padding="16,8"
+            MinWidth="150"
+            Tag="{Binding}"
+            Click="PluginButton_Click"
+          />
+          <TextBlock
+            Text="{Binding StatusText}"
+            VerticalAlignment="Center"
+            Margin="12,0,0,0"
+            FontSize="12"
+          >
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="#2E7D32" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                    <Setter Property="Foreground" Value="#D32F2F" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </StackPanel>
+        <Border MaxHeight="180" Padding="8,4">
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="CornerRadius" Value="4" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="MultiSelect">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Options}" Tag="{Binding}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <CheckBox
+                    Content="{Binding Label}"
+                    Tag="{Binding Value}"
+                    Margin="0,3"
+                    Checked="MultiSelectCheckBox_Changed"
+                    Unchecked="MultiSelectCheckBox_Changed"
+                    Loaded="MultiSelectCheckBox_Loaded"
+                  />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Border>
+        <TextBlock
+          Text="{Binding Description}"
+          Foreground="#999999"
+          FontSize="11"
+          Margin="0,4,0,0"
+          TextWrapping="Wrap"
+        >
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding Description}" Value="">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+        <TextBlock
+          Text="{Binding ErrorMessage}"
+          Foreground="{DynamicResource ErrorBrush}"
+          FontSize="11"
+          Margin="0,2,0,0"
+          TextWrapping="Wrap"
+        >
+          <TextBlock.Style>
+            <Style TargetType="TextBlock">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding HasError}" Value="True">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
+      </StackPanel>
+    </DataTemplate>
   </Window.Resources>
 
   <Grid Margin="24">
@@ -32,322 +303,63 @@
     />
 
     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,0,0,16">
-      <ItemsControl ItemsSource="{Binding Fields}">
-        <ItemsControl.ItemTemplate>
-          <DataTemplate DataType="{x:Type vm:PluginConfigFieldViewModel}">
-            <StackPanel Margin="0,0,0,12">
-              <!-- Label -->
-              <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                <TextBlock Text="{Binding Label}" Style="{DynamicResource BodyText}" />
-                <TextBlock
-                  Text=" *"
-                  Foreground="{DynamicResource ErrorBrush}"
-                  Visibility="{Binding Required, Converter={StaticResource BoolToVis}}"
-                />
-                <Border
-                  Visibility="{Binding Description, Converter={StaticResource BoolToVis}}"
-                  ToolTip="{Binding Description}"
-                  Margin="6,0,0,0"
-                  Width="16"
-                  Height="16"
-                  CornerRadius="8"
-                  Background="#CCCCCC"
-                  Cursor="Help"
-                  VerticalAlignment="Center"
-                >
-                  <TextBlock
-                    Text="?"
-                    FontSize="10"
-                    FontWeight="Bold"
-                    Foreground="White"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                  />
-                </Border>
-              </StackPanel>
-
-              <!-- Text -->
-              <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}">
-                <TextBox.Style>
-                  <Style TargetType="TextBox" BasedOn="{StaticResource StyledTextBox}">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Text">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBox.Style>
-              </TextBox>
-
-              <!-- Number -->
-              <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}">
-                <TextBox.Style>
-                  <Style TargetType="TextBox" BasedOn="{StaticResource StyledTextBox}">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Number">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBox.Style>
-              </TextBox>
-
-              <Border>
-                <Border.Style>
-                  <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Setter Property="BorderBrush" Value="#E0E0E0" />
-                    <Setter Property="BorderThickness" Value="1" />
-                    <Setter Property="CornerRadius" Value="4" />
-                    <Setter Property="Background" Value="White" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Dropdown">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Border.Style>
-                <ComboBox
-                  SelectedValue="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                  SelectedValuePath="Value"
-                  DisplayMemberPath="Label"
-                  ItemsSource="{Binding Options}"
-                  Padding="8,6"
-                  FontSize="13"
-                  Background="White"
-                  BorderThickness="0"
-                  MinHeight="36"
-                />
-              </Border>
-
-              <!-- Checkbox -->
-              <CheckBox
-                Content="{Binding Label}"
-                Tag="{Binding}"
-                Checked="CheckBox_Changed"
-                Unchecked="CheckBox_Changed"
-                Loaded="CheckBox_Loaded"
-              >
-                <CheckBox.Style>
-                  <Style TargetType="CheckBox">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Checkbox">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </CheckBox.Style>
-              </CheckBox>
-
-              <!-- Password -->
-              <Border>
-                <Border.Style>
-                  <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Setter Property="BorderBrush" Value="#E0E0E0" />
-                    <Setter Property="BorderThickness" Value="1" />
-                    <Setter Property="CornerRadius" Value="4" />
-                    <Setter Property="Background" Value="White" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Password">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Border.Style>
-                <PasswordBox
-                  Padding="8,6"
-                  FontSize="13"
-                  MinHeight="36"
-                  VerticalContentAlignment="Center"
-                  BorderThickness="0"
-                  Background="Transparent"
-                  Tag="{Binding}"
-                  PasswordChanged="PasswordBox_PasswordChanged"
-                />
-              </Border>
-
-              <!-- FilePath -->
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Grid.Style>
-                  <Style TargetType="Grid">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="FilePath">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Grid.Style>
-                <TextBox
-                  Grid.Column="0"
-                  Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                  Style="{DynamicResource StyledTextBox}"
-                  Margin="0,0,8,0"
-                />
-                <Button
-                  Grid.Column="1"
-                  Content="..."
-                  Style="{DynamicResource OutlinedButton}"
-                  Padding="8,6"
-                  Tag="{Binding}"
-                  Click="BrowseFile_Click"
-                />
-              </Grid>
-
-              <!-- FolderPath -->
-              <Grid>
-                <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="*" />
-                  <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <Grid.Style>
-                  <Style TargetType="Grid">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="FolderPath">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Grid.Style>
-                <TextBox
-                  Grid.Column="0"
-                  Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
-                  Style="{DynamicResource StyledTextBox}"
-                  Margin="0,0,8,0"
-                />
-                <Button
-                  Grid.Column="1"
-                  Content="..."
-                  Style="{DynamicResource OutlinedButton}"
-                  Padding="8,6"
-                  Tag="{Binding}"
-                  Click="BrowseFolder_Click"
-                />
-              </Grid>
-
-              <!-- Button -->
-              <StackPanel Orientation="Horizontal">
-                <StackPanel.Style>
-                  <Style TargetType="StackPanel">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="Button">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </StackPanel.Style>
-                <Button
-                  Content="{Binding Label}"
-                  Style="{DynamicResource OutlinedButton}"
-                  Padding="16,8"
-                  MinWidth="150"
-                  Tag="{Binding}"
-                  Click="PluginButton_Click"
-                />
-                <TextBlock
-                  Text="{Binding StatusText}"
-                  VerticalAlignment="Center"
-                  Margin="12,0,0,0"
-                  FontSize="12"
-                >
-                  <TextBlock.Style>
-                    <Style TargetType="TextBlock">
-                      <Setter Property="Foreground" Value="#2E7D32" />
-                      <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsStatusError}" Value="True">
-                          <Setter Property="Foreground" Value="#D32F2F" />
-                        </DataTrigger>
-                      </Style.Triggers>
-                    </Style>
-                  </TextBlock.Style>
-                </TextBlock>
-              </StackPanel>
-
-              <!-- MultiSelect -->
-              <Border MaxHeight="180" Padding="8,4">
-                <Border.Style>
-                  <Style TargetType="Border">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}" />
-                    <Setter Property="BorderThickness" Value="1" />
-                    <Setter Property="CornerRadius" Value="4" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding FieldTypeName}" Value="MultiSelect">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </Border.Style>
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
-                  <ItemsControl ItemsSource="{Binding Options}" Tag="{Binding}">
+      <!-- Action Groups (when present) -->
+      <StackPanel>
+        <ItemsControl
+          ItemsSource="{Binding ActionGroups}"
+          Visibility="{Binding HasActionGroups, Converter={StaticResource BoolToVis}}"
+        >
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="{x:Type vm:ActionGroupViewModel}">
+              <Border Style="{DynamicResource CardBorder}" Margin="0,0,0,12" Padding="12">
+                <StackPanel>
+                  <CheckBox
+                    IsChecked="{Binding IsEnabled}"
+                    FontSize="14"
+                    FontWeight="SemiBold"
+                    Margin="0,0,0,8"
+                  >
+                    <TextBlock Text="{Binding Title}" />
+                  </CheckBox>
+                  <ItemsControl
+                    ItemsSource="{Binding Descriptions}"
+                    Margin="24,0,0,4"
+                    IsEnabled="{Binding IsEnabled}"
+                    Visibility="{Binding HasDescriptions, Converter={StaticResource BoolToVis}}"
+                  >
                     <ItemsControl.ItemTemplate>
                       <DataTemplate>
-                        <CheckBox
-                          Content="{Binding Label}"
-                          Tag="{Binding Value}"
-                          Margin="0,3"
-                          Checked="MultiSelectCheckBox_Changed"
-                          Unchecked="MultiSelectCheckBox_Changed"
-                          Loaded="MultiSelectCheckBox_Loaded"
-                        />
+                        <StackPanel Orientation="Horizontal" Margin="0,2">
+                          <TextBlock Text="- " Foreground="#999999" FontSize="12" />
+                          <TextBlock Text="{Binding Title}" FontSize="12" Foreground="#666666" />
+                        </StackPanel>
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                </ScrollViewer>
+                  <ItemsControl
+                    ItemsSource="{Binding Fields}"
+                    Margin="24,4,0,0"
+                    IsEnabled="{Binding IsEnabled}"
+                  />
+                </StackPanel>
               </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
-              <!-- Description -->
-              <TextBlock
-                Text="{Binding Description}"
-                Foreground="#999999"
-                FontSize="11"
-                Margin="0,4,0,0"
-                TextWrapping="Wrap"
-              >
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock">
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding Description}" Value="">
-                        <Setter Property="Visibility" Value="Collapsed" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
-
-              <!-- Error message -->
-              <TextBlock
-                Text="{Binding ErrorMessage}"
-                Foreground="{DynamicResource ErrorBrush}"
-                FontSize="11"
-                Margin="0,2,0,0"
-                TextWrapping="Wrap"
-              >
-                <TextBlock.Style>
-                  <Style TargetType="TextBlock">
-                    <Setter Property="Visibility" Value="Collapsed" />
-                    <Style.Triggers>
-                      <DataTrigger Binding="{Binding HasError}" Value="True">
-                        <Setter Property="Visibility" Value="Visible" />
-                      </DataTrigger>
-                    </Style.Triggers>
-                  </Style>
-                </TextBlock.Style>
-              </TextBlock>
-            </StackPanel>
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+        <!-- Flat fields (when no action groups) -->
+        <ItemsControl ItemsSource="{Binding Fields}">
+          <ItemsControl.Style>
+            <Style TargetType="ItemsControl">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding HasActionGroups}" Value="True">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </ItemsControl.Style>
+        </ItemsControl>
+      </StackPanel>
     </ScrollViewer>
 
     <!-- Global error message -->

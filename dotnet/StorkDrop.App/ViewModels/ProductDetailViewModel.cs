@@ -115,10 +115,14 @@ public partial class ProductDetailViewModel : ObservableObject
 
     private void UpdateInstallButtonText()
     {
+        bool isExecutable = Manifest?.InstallType == InstallType.Executable;
+
         if (IsInstalled && SelectedVersion == InstalledVersion)
         {
             IsSelectedVersionInstalled = true;
-            InstallButtonText = LocalizationManager.GetString("Install_Installed");
+            InstallButtonText = isExecutable
+                ? LocalizationManager.GetString("Installed_Downloaded")
+                : LocalizationManager.GetString("Install_Installed");
         }
         else if (IsInstalled)
         {
@@ -128,7 +132,9 @@ public partial class ProductDetailViewModel : ObservableObject
         else
         {
             IsSelectedVersionInstalled = false;
-            InstallButtonText = LocalizationManager.GetString("Install_Button");
+            InstallButtonText = isExecutable
+                ? LocalizationManager.GetString("Install_Download")
+                : LocalizationManager.GetString("Install_Button");
         }
     }
 
@@ -229,22 +235,47 @@ public partial class ProductDetailViewModel : ObservableObject
 
             if (manifest.RequiredProductIds is { Length: > 0 })
             {
-                List<string> missing = [];
-                foreach (string reqId in manifest.RequiredProductIds)
-                {
-                    InstalledProduct? installed = await _productRepository.GetByIdAsync(reqId);
-                    if (installed is null)
-                        missing.Add(reqId);
-                }
+                OptionalPostProduct[] requiredAsOptional = manifest
+                    .RequiredProductIds.Select(id => new OptionalPostProduct(
+                        id,
+                        HideNoAccess: false
+                    ))
+                    .ToArray();
 
-                if (missing.Count > 0)
+                PostProductResolution resolution = await _postProductResolver.ResolveAsync(
+                    requiredAsOptional
+                );
+
+                if (resolution.Available.Count > 0 || resolution.Warnings.Count > 0)
                 {
-                    Views.RequiredComponentsDialog reqDialog = new(manifest.Title, missing)
+                    Views.RequiredProductsDialog reqDialog = new(
+                        manifest.Title,
+                        resolution.Available,
+                        resolution.AlreadyInstalled,
+                        resolution.Warnings
+                    )
                     {
                         Owner = System.Windows.Application.Current.MainWindow,
                     };
+
                     if (reqDialog.ShowDialog() != true)
                         return;
+
+                    foreach (ResolvedPostProduct reqProduct in reqDialog.SelectedProducts)
+                    {
+                        try
+                        {
+                            await InstallPostProductAsync(reqProduct);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to install required product {ProductId}",
+                                reqProduct.Manifest.ProductId
+                            );
+                        }
+                    }
                 }
             }
 
@@ -369,7 +400,7 @@ public partial class ProductDetailViewModel : ObservableObject
                 catch { }
             }
 
-            if (resolution.Available.Count == 0 && resolution.AlreadyInstalled.Count == 0)
+            if (resolution.Available.Count == 0)
                 return;
 
             Views.OptionalPostProductsDialog dialog = new(
@@ -520,6 +551,7 @@ public partial class ProductDetailViewModel : ObservableObject
 
             InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
                 installed,
+                new ReExecuteOptions(),
                 progress,
                 tracked.Cts.Token
             );

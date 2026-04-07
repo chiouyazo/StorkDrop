@@ -190,17 +190,12 @@
           </Button.Style>
         </Button>
 
-        <!-- State 4: Installed, no update -> "Installed" label -->
-        <TextBlock
-          Text="{DynamicResource Install_Installed}"
-          FontSize="13"
-          Foreground="#2E7D32"
-          HorizontalAlignment="Center"
-          Padding="0,8"
-        >
+        <!-- State 4: Installed, no update -> "Installed" or "Downloaded" label -->
+        <TextBlock FontSize="13" Foreground="#2E7D32" HorizontalAlignment="Center" Padding="0,8">
           <TextBlock.Style>
             <Style TargetType="TextBlock">
               <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="Text" Value="{DynamicResource Install_Installed}" />
               <Style.Triggers>
                 <MultiDataTrigger>
                   <MultiDataTrigger.Conditions>
@@ -210,6 +205,9 @@
                   </MultiDataTrigger.Conditions>
                   <Setter Property="Visibility" Value="Visible" />
                 </MultiDataTrigger>
+                <DataTrigger Binding="{Binding IsExecutable}" Value="True">
+                  <Setter Property="Text" Value="{DynamicResource Installed_Downloaded}" />
+                </DataTrigger>
               </Style.Triggers>
             </Style>
           </TextBlock.Style>

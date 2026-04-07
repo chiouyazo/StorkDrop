@@ -7,5 +7,6 @@ public sealed record InstalledProduct(
     string InstalledPath,
     DateTime InstalledDate,
     string? FeedId = null,
-    string? BackupPath = null
+    string? BackupPath = null,
+    InstallType? InstallType = null
 );

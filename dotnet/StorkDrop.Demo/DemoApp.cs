@@ -114,6 +114,24 @@ public class DemoApp : Application
                 return result;
             };
 
+            engine.OnActionGroupConfigNeeded = (groups, currentValues) =>
+            {
+                Dictionary<string, string>? result = null;
+                Dispatcher.Invoke(() =>
+                {
+                    PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                        groups,
+                        currentValues
+                    );
+                    vm.InteractivePlugin = engine.CurrentInteractivePlugin;
+                    PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
+                    dialog.Owner = MainWindow;
+                    if (dialog.ShowDialog() == true)
+                        result = vm.GetValues();
+                });
+                return result;
+            };
+
             IEnumerable<IStorkDropPlugin> allPlugins =
                 _host.Services.GetServices<IStorkDropPlugin>();
             List<IInstallPathResolver> pathResolvers = allPlugins

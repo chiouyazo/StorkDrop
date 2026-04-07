@@ -55,6 +55,12 @@ public partial class PluginConfigFieldViewModel : ObservableObject
     [ObservableProperty]
     private bool _isStatusError;
 
+    [ObservableProperty]
+    private bool _isEnabled = true;
+
+    [ObservableProperty]
+    private bool _isReadOnly;
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
 

@@ -268,3 +268,47 @@ Group field values are stored as JSON arrays within the string values:
 string dbJson = values["databases"];
 var databases = JsonSerializer.Deserialize<List<Dictionary<string, string>>>(dbJson);
 ```
+
+## Action descriptions (IDescribableStorkPlugin)
+
+Plugins can optionally implement `IDescribableStorkPlugin` to describe what their Pre/PostInstall steps do. These descriptions are shown in the configuration dialog as bullet points under each phase header, and help users decide which phases to enable or disable during re-execution.
+
+```csharp
+public class MyInstaller : IStorkPlugin, IDescribableStorkPlugin
+{
+    public IReadOnlyList<PluginActionDescription> GetActionDescriptions(PluginEnvironment env) =>
+    [
+        new PluginActionDescription
+        {
+            Phase = PluginActionPhase.PreInstall,
+            Title = "Validate database connection",
+            Description = "Checks that the selected database is reachable.",
+        },
+        new PluginActionDescription
+        {
+            Phase = PluginActionPhase.PostInstall,
+            Title = "Create database tables",
+            Description = "Creates the required schema and tables in the target database.",
+        },
+    ];
+
+    // ... IStorkPlugin methods
+}
+```
+
+## Field enable/disable
+
+Plugins can control whether individual fields are enabled or read-only:
+
+```csharp
+new PluginConfigField
+{
+    Key = "server",
+    Label = "Server",
+    FieldType = PluginFieldType.Text,
+    IsEnabled = !useWindowsAuth,  // Grey out when Windows auth is selected
+    IsReadOnly = true,            // Display value but prevent editing
+}
+```
+
+These properties can also be set dynamically via `IInteractiveStorkPlugin.OnButtonClicked` when returning `UpdatedSchema`.

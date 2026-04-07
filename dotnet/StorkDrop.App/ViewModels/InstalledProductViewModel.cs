@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -24,4 +25,9 @@ public partial class InstalledProductViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasPlugins;
+
+    [ObservableProperty]
+    private InstallType _installType;
+
+    public bool IsExecutable => InstallType == InstallType.Executable;
 }

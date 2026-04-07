@@ -145,6 +145,24 @@ public partial class App : Application
                 return result;
             };
 
+            engine.OnActionGroupConfigNeeded = (groups, currentValues) =>
+            {
+                Dictionary<string, string>? result = null;
+                Dispatcher.Invoke(() =>
+                {
+                    ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                        groups,
+                        currentValues
+                    );
+                    vm.InteractivePlugin = engine.CurrentInteractivePlugin;
+                    Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
+                    dialog.Owner = MainWindow;
+                    if (dialog.ShowDialog() == true)
+                        result = vm.GetValues();
+                });
+                return result;
+            };
+
             // Install path resolution via plugins (e.g., {ACMEPath} -> actual directory)
             IEnumerable<IStorkDropPlugin> allPlugins = Services.GetServices<IStorkDropPlugin>();
             List<IInstallPathResolver> pathResolvers = allPlugins

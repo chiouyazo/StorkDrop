@@ -70,6 +70,7 @@
   <!-- Install -->
   <system:String x:Key="Install_Title">Installation</system:String>
   <system:String x:Key="Install_Button">Installieren</system:String>
+  <system:String x:Key="Install_Download">Herunterladen</system:String>
   <system:String x:Key="Install_AsAdmin">Als Administrator installieren</system:String>
   <system:String x:Key="Install_AdminHint"
     >Dieses Verzeichnis erfordert Administratorrechte.</system:String
@@ -89,8 +90,13 @@
   <system:String x:Key="Installed_Title">Installierte Produkte</system:String>
   <system:String x:Key="Installed_NoProducts">Noch keine Produkte installiert.</system:String>
   <system:String x:Key="Installed_Uninstall">Deinstallieren</system:String>
+  <system:String x:Key="Installed_Remove">Entfernen</system:String>
+  <system:String x:Key="Installed_GroupActions">Aktionen</system:String>
+  <system:String x:Key="Installed_GroupProducts">Installierte Produkte</system:String>
+  <system:String x:Key="Installed_Downloaded">Heruntergeladen</system:String>
 
   <!-- Re-execute -->
+  <system:String x:Key="ReExecute_Run">Ausfuhren</system:String>
   <system:String x:Key="ReExecute_Button">Aktionen ausfuhren</system:String>
   <system:String x:Key="ReExecute_Success"
     >{0} Plugin-Aktionen erfolgreich ausgefuhrt.</system:String
@@ -199,6 +205,10 @@
   >
   <system:String x:Key="RequiredComponents_Proceed">Trotzdem installieren</system:String>
   <system:String x:Key="RequiredComponents_Cancel">Abbrechen</system:String>
+  <system:String x:Key="RequiredProducts_InstallContinue"
+    >Ausgewählte installieren und fortfahren</system:String
+  >
+  <system:String x:Key="RequiredProducts_SkipContinue">Uberspringen und fortfahren</system:String>
 
   <!-- Optional post-products -->
   <system:String x:Key="OptionalProducts_Title">Optionale Zusatzprodukte</system:String>

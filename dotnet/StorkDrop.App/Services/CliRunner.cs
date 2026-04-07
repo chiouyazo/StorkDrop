@@ -198,6 +198,9 @@ internal sealed class CliRunner
 
         string productId = args[3];
         Dictionary<string, string> configValues = ParseConfigValues(args);
+        bool skipPre = args.Any(a => a == "--skip-pre");
+        bool skipPost = args.Any(a => a == "--skip-post");
+        bool runFiles = args.Any(a => a == "--run-files");
 
         InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
         if (installed is null)
@@ -210,6 +213,14 @@ internal sealed class CliRunner
             $"Re-executing plugin actions for {installed.Title} v{installed.Version}"
         );
 
+        ReExecuteOptions reExecuteOptions = new ReExecuteOptions
+        {
+            RunPreInstall = !skipPre,
+            RunPostInstall = !skipPost,
+            RunFileHandlers = runFiles,
+            PluginConfigValues = configValues.Count > 0 ? configValues : null,
+        };
+
         Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
         {
             if (!string.IsNullOrEmpty(p.Message))
@@ -218,6 +229,7 @@ internal sealed class CliRunner
 
         InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
             installed,
+            reExecuteOptions,
             progress,
             CancellationToken.None
         );
@@ -492,6 +504,11 @@ internal sealed class CliRunner
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"
+                );
+                Console.WriteLine("  --skip-pre              Skip the PreInstall phase");
+                Console.WriteLine("  --skip-post             Skip the PostInstall phase");
+                Console.WriteLine(
+                    "  --run-files             Also run file handlers (requires .stork/files/)"
                 );
                 break;
 

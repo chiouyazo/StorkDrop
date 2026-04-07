@@ -16,6 +16,7 @@ namespace StorkDrop.App.ViewModels;
 public partial class InstalledViewModel : ObservableObject
 {
     private readonly IProductRepository _productRepository;
+    private readonly IFeedRegistry _feedRegistry;
     private readonly InstallationCoordinator _coordinator;
     private readonly UninstallService _uninstallService;
     private readonly InstallationTracker _tracker;
@@ -25,6 +26,7 @@ public partial class InstalledViewModel : ObservableObject
 
     public InstalledViewModel(
         IProductRepository productRepository,
+        IFeedRegistry feedRegistry,
         InstallationCoordinator coordinator,
         UninstallService uninstallService,
         InstallationTracker tracker,
@@ -34,6 +36,7 @@ public partial class InstalledViewModel : ObservableObject
     )
     {
         _productRepository = productRepository;
+        _feedRegistry = feedRegistry;
         _coordinator = coordinator;
         _uninstallService = uninstallService;
         _tracker = tracker;
@@ -79,26 +82,41 @@ public partial class InstalledViewModel : ObservableObject
             IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
                 cancellationToken
             );
-            Products = new ObservableCollection<InstalledProductViewModel>(
-                installed.Select(p =>
+            List<InstalledProductViewModel> productVms = [];
+            foreach (InstalledProduct p in installed)
+            {
+                bool hasPlugins = false;
+                string manifestPath = Path.Combine(p.InstalledPath, ".stork", "manifest.json");
+                if (File.Exists(manifestPath))
                 {
-                    bool hasPlugins = false;
-                    string manifestPath = Path.Combine(p.InstalledPath, ".stork", "manifest.json");
-                    if (File.Exists(manifestPath))
+                    try
                     {
-                        try
-                        {
-                            string json = File.ReadAllText(manifestPath);
-                            ProductManifest? manifest = JsonSerializer.Deserialize<ProductManifest>(
-                                json,
-                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                            );
-                            hasPlugins = manifest?.Plugins is { Length: > 0 };
-                        }
-                        catch { }
+                        string json = File.ReadAllText(manifestPath);
+                        ProductManifest? manifest = JsonSerializer.Deserialize<ProductManifest>(
+                            json,
+                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                        );
+                        hasPlugins = manifest?.Plugins is { Length: > 0 };
                     }
+                    catch { }
+                }
 
-                    return new InstalledProductViewModel
+                if (!hasPlugins && p.FeedId is not null)
+                {
+                    try
+                    {
+                        IRegistryClient client = _feedRegistry.GetClient(p.FeedId);
+                        ProductManifest? feedManifest = await client.GetProductManifestAsync(
+                            p.ProductId,
+                            cancellationToken
+                        );
+                        hasPlugins = feedManifest?.Plugins is { Length: > 0 };
+                    }
+                    catch { }
+                }
+
+                productVms.Add(
+                    new InstalledProductViewModel
                     {
                         ProductId = p.ProductId,
                         Title = p.Title,
@@ -106,9 +124,11 @@ public partial class InstalledViewModel : ObservableObject
                         InstalledPath = p.InstalledPath,
                         InstalledDate = p.InstalledDate,
                         HasPlugins = hasPlugins,
-                    };
-                })
-            );
+                        InstallType = p.InstallType ?? InstallType.Plugin,
+                    }
+                );
+            }
+            Products = new ObservableCollection<InstalledProductViewModel>(productVms);
         }
         finally
         {
@@ -258,6 +278,7 @@ public partial class InstalledViewModel : ObservableObject
 
             InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
                 installed,
+                new ReExecuteOptions(),
                 progress,
                 tracked.Cts.Token
             );

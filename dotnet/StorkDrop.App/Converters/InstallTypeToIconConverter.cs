@@ -10,9 +10,10 @@ public sealed class InstallTypeToIconConverter : IValueConverter
     {
         return value switch
         {
-            InstallType.Plugin => "\uE8F1", // Component icon
-            InstallType.Suite => "\uE8F9", // Package icon
-            InstallType.Bundle => "\uE8B7", // Bundle icon
+            InstallType.Plugin => "\uE8F1",
+            InstallType.Suite => "\uE8F9",
+            InstallType.Bundle => "\uE8B7",
+            InstallType.Executable => "\uE945",
             _ => "\uE8F1",
         };
     }
