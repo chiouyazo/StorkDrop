@@ -60,6 +60,8 @@ public partial class ProductCardViewModel : ObservableObject
     [ObservableProperty]
     private string _feedId = string.Empty;
 
+    public bool IsExecutable => InstallType == InstallType.Executable;
+
     public string VersionDisplay =>
         string.IsNullOrEmpty(FeedName) ? $"v{Version}" : $"{FeedName} / v{Version}";
 

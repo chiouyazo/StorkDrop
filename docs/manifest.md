@@ -83,7 +83,7 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "title": "My Product",
   "version": "1.0.0",
   "releaseDate": "2026-03-24",
-  "installType": "Suite", // Plugin | Suite | Bundle
+  "installType": "Suite", // Plugin | Suite | Bundle | Executable
   "description": "Short description for the marketplace card",
   "releaseNotes": "# What's new\n- Feature A\n- Bug fix B",
   "recommendedInstallPath": "C:\\Program Files\\MyCompany\\MyProduct",

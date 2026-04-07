@@ -56,4 +56,16 @@ public sealed class PluginConfigField
     /// Each instance gets its own copy of these sub-fields.
     /// </summary>
     public List<PluginConfigField> SubFields { get; set; } = new List<PluginConfigField>();
+
+    /// <summary>
+    /// Whether this field is enabled and interactive. When false, the field is rendered
+    /// but greyed out. Plugins can set this dynamically based on other field values.
+    /// </summary>
+    public bool IsEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Whether this field is read-only. When true, the field displays its value but
+    /// cannot be edited by the user.
+    /// </summary>
+    public bool IsReadOnly { get; set; } = false;
 }

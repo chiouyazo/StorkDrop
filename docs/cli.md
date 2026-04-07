@@ -81,6 +81,9 @@ storkdrop --cli re-execute <productId> [options]
 |--------|-------------|
 | `--config-file <path>` | JSON file with plugin config values |
 | `--config key=value` | Set a plugin config value (repeatable) |
+| `--skip-pre` | Skip the PreInstall phase |
+| `--skip-post` | Skip the PostInstall phase |
+| `--run-files` | Also run file handlers (requires files stored in .stork/files/) |
 
 ### help
 

@@ -1,10 +1,52 @@
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.Demo.Plugins;
 
-internal sealed class DemoInteractivePlugin : IStorkPlugin, IInteractiveStorkPlugin
+internal sealed class DemoInteractivePlugin
+    : IStorkPlugin,
+        IInteractiveStorkPlugin,
+        IDescribableStorkPlugin
 {
+    public IReadOnlyList<PluginActionDescription> GetActionDescriptions(
+        PluginEnvironment environment
+    ) =>
+        [
+            new PluginActionDescription
+            {
+                Phase = PluginActionPhase.PreInstall,
+                Title = "Validate database connection",
+                Description =
+                    "Checks that the selected database is reachable and responds to queries.",
+            },
+            new PluginActionDescription
+            {
+                Phase = PluginActionPhase.PreInstall,
+                Title = "Check schema permissions",
+                Description =
+                    "Verifies the service account has CREATE TABLE and INSERT permissions.",
+            },
+            new PluginActionDescription
+            {
+                Phase = PluginActionPhase.PostInstall,
+                Title = "Create reporting tables",
+                Description = "Creates the schema and tables for report storage.",
+            },
+            new PluginActionDescription
+            {
+                Phase = PluginActionPhase.PostInstall,
+                Title = "Insert default configuration",
+                Description = "Populates initial settings and templates.",
+            },
+            new PluginActionDescription
+            {
+                Phase = PluginActionPhase.PostInstall,
+                Title = "Register scheduled tasks",
+                Description = "Sets up automated report generation jobs.",
+            },
+        ];
+
     public IReadOnlyList<PluginConfigField> GetConfigurationSchema(PluginEnvironment environment) =>
         [
             new PluginConfigField

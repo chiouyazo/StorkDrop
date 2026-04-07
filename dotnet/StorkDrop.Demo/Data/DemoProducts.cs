@@ -87,7 +87,7 @@ internal static class DemoProducts
         Title: "Nova Example Data",
         Version: "1.0.0",
         ReleaseDate: new DateOnly(2026, 3, 1),
-        InstallType: InstallType.Plugin,
+        InstallType: InstallType.Executable,
         Description: "Sample datasets for development and testing of the Nova Dashboard.",
         ReleaseNotes: "Initial release with customer and transaction sample data.",
         RecommendedInstallPath: @"C:\Users\Demo\NovaApps\ExampleData",
@@ -100,8 +100,26 @@ internal static class DemoProducts
         CleanupInfo: new CleanupInfo([], [])
     );
 
+    public static readonly ProductManifest NovaDbMigration = new(
+        ProductId: "nova-db-migration",
+        Title: "Nova DB Migration",
+        Version: "1.0.0",
+        ReleaseDate: new DateOnly(2026, 4, 5),
+        InstallType: InstallType.Executable,
+        Description: "Runs database schema migrations and seed data insertion for the Nova platform.",
+        ReleaseNotes: "Initial release with schema v3 migration and seed data.",
+        RecommendedInstallPath: @"C:\Users\Demo\NovaApps\Migrations",
+        Publisher: "Nova Software",
+        DownloadSizeBytes: 1_200_000,
+        Plugins:
+        [
+            new StorkPluginInfo("plugins/Nova.DbMigration.dll", "Nova.DbMigration.MigrationPlugin"),
+        ],
+        CleanupInfo: new CleanupInfo([], [])
+    );
+
     public static IReadOnlyList<ProductManifest> InternalFeedProducts =>
-        [NovaDashboard, NovaCliTools, NovaReporting];
+        [NovaDashboard, NovaCliTools, NovaReporting, NovaDbMigration];
 
     public static IReadOnlyList<ProductManifest> PartnerFeedProducts =>
         [ZetaSyncModule, NovaExampleData];

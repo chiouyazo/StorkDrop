@@ -162,22 +162,47 @@ public partial class MarketplaceViewModel : ObservableObject
             // Check required components
             if (manifest.RequiredProductIds is { Length: > 0 })
             {
-                List<string> missing = [];
-                foreach (string reqId in manifest.RequiredProductIds)
-                {
-                    InstalledProduct? installed = await _productRepository.GetByIdAsync(reqId);
-                    if (installed is null)
-                        missing.Add(reqId);
-                }
+                OptionalPostProduct[] requiredAsOptional = manifest
+                    .RequiredProductIds.Select(id => new OptionalPostProduct(
+                        id,
+                        HideNoAccess: false
+                    ))
+                    .ToArray();
 
-                if (missing.Count > 0)
+                PostProductResolution resolution = await _postProductResolver.ResolveAsync(
+                    requiredAsOptional
+                );
+
+                if (resolution.Available.Count > 0 || resolution.Warnings.Count > 0)
                 {
-                    Views.RequiredComponentsDialog reqDialog = new(product.Title, missing)
+                    Views.RequiredProductsDialog reqDialog = new(
+                        product.Title,
+                        resolution.Available,
+                        resolution.AlreadyInstalled,
+                        resolution.Warnings
+                    )
                     {
                         Owner = System.Windows.Application.Current.MainWindow,
                     };
+
                     if (reqDialog.ShowDialog() != true)
                         return;
+
+                    foreach (ResolvedPostProduct reqProduct in reqDialog.SelectedProducts)
+                    {
+                        try
+                        {
+                            await InstallPostProductAsync(reqProduct);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to install required product {ProductId}",
+                                reqProduct.Manifest.ProductId
+                            );
+                        }
+                    }
                 }
             }
 
@@ -335,7 +360,7 @@ public partial class MarketplaceViewModel : ObservableObject
                 catch { }
             }
 
-            if (resolution.Available.Count == 0 && resolution.AlreadyInstalled.Count == 0)
+            if (resolution.Available.Count == 0)
                 return;
 
             Views.OptionalPostProductsDialog dialog = new(

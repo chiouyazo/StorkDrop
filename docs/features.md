@@ -109,6 +109,20 @@ Before uninstalling or updating, StorkDrop checks `.exe` and `.dll` files for lo
 - Uses `FileShare.ReadWrite | FileShare.Delete` - the minimum access needed to determine if deletion is possible
 - Shows a clear error: "Cannot uninstall: file 'MyApp.exe' is locked by: MyApp"
 
+## Executable products
+
+Products with `installType: "Executable"` are action-only products that run plugin steps (database migrations, data insertion, configuration) without installing persistent files. They show "Downloaded" instead of "Installed" in the marketplace and have a prominent "Run" button in the installed tab. They can be re-executed multiple times with different configuration.
+
+## Re-executing plugin actions
+
+Installed products with plugins can re-run their PreInstall and PostInstall steps without re-downloading or re-copying files. The plugin DLLs are stored in `.stork/plugins/` and previous configuration values are pre-filled in the dialog. Users can selectively enable or disable individual phases (PreInstall, PostInstall) via action groups in the configuration dialog.
+
+Plugins can implement `IDescribableStorkPlugin` to provide descriptions of what each phase does. These descriptions are shown in the configuration dialog as bullet points under each phase header.
+
+## Required product installation
+
+When a product declares `requiredProductIds`, StorkDrop resolves each required product across all configured feeds and shows a dialog with checkboxes. Users can install missing required products directly from the dialog before proceeding with the main installation.
+
 ## Data protection
 
 - Feed passwords are encrypted with DPAPI (`ProtectedData` with `CurrentUser` scope) - they're tied to the current Windows user and machine

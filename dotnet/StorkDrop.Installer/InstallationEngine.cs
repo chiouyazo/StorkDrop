@@ -37,6 +37,7 @@ public sealed class InstallationEngine : IInstallationEngine
     /// <inheritdoc />
     public FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
 
+    public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
 
     private static readonly JsonSerializerOptions FileManifestJsonOptions =
@@ -166,6 +167,107 @@ public sealed class InstallationEngine : IInstallationEngine
         }
 
         return allFields;
+    }
+
+    public async Task<IReadOnlyList<PluginActionGroup>> GetActionGroupsAsync(
+        ProductManifest manifest,
+        string? feedId = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        List<PluginActionGroup> groups = [];
+
+        if (manifest.Plugins is not { Length: > 0 })
+            return groups;
+
+        PluginEnvironment environment = await BuildPluginEnvironmentAsync(
+            manifest,
+            cancellationToken
+        );
+
+        foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+        {
+            try
+            {
+                IStorkPlugin? plugin = await DownloadAndLoadPluginAsync(
+                    manifest,
+                    pluginInfo,
+                    cancellationToken,
+                    feedId
+                );
+                if (plugin is null)
+                    continue;
+
+                if (plugin is IInteractiveStorkPlugin interactive)
+                    CurrentInteractivePlugin = interactive;
+
+                IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                    environment
+                );
+
+                List<PluginActionDescription> preDescriptions = [];
+                List<PluginActionDescription> postDescriptions = [];
+                if (plugin is IDescribableStorkPlugin describable)
+                {
+                    try
+                    {
+                        IReadOnlyList<PluginActionDescription> descriptions =
+                            describable.GetActionDescriptions(environment);
+                        preDescriptions = descriptions
+                            .Where(d => d.Phase == PluginActionPhase.PreInstall)
+                            .ToList();
+                        postDescriptions = descriptions
+                            .Where(d => d.Phase == PluginActionPhase.PostInstall)
+                            .ToList();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Failed to get action descriptions from {TypeName}",
+                            pluginInfo.TypeName
+                        );
+                    }
+                }
+
+                string shortName = pluginInfo.TypeName.Contains('.')
+                    ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
+                    : pluginInfo.TypeName;
+
+                groups.Add(
+                    new PluginActionGroup
+                    {
+                        GroupId = $"preinstall-{pluginInfo.TypeName}",
+                        Title = $"PreInstall: {shortName}",
+                        Phase = PluginActionPhase.PreInstall,
+                        Fields = fields,
+                        Descriptions = preDescriptions,
+                    }
+                );
+
+                groups.Add(
+                    new PluginActionGroup
+                    {
+                        GroupId = $"postinstall-{pluginInfo.TypeName}",
+                        Title = $"PostInstall: {shortName}",
+                        Phase = PluginActionPhase.PostInstall,
+                        Fields = [],
+                        Descriptions = postDescriptions,
+                    }
+                );
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(
+                    ex,
+                    "Failed to load action groups from {TypeName} for {ProductId}",
+                    pluginInfo.TypeName,
+                    manifest.ProductId
+                );
+            }
+        }
+
+        return groups;
     }
 
     /// <inheritdoc />
@@ -640,7 +742,8 @@ public sealed class InstallationEngine : IInstallationEngine
             InstalledPath: installPath,
             InstalledDate: DateTime.UtcNow,
             FeedId: feedId,
-            BackupPath: null
+            BackupPath: null,
+            InstallType: manifest.InstallType
         );
         await _productRepository.AddAsync(product, cancellationToken);
 
@@ -1599,6 +1702,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     public async Task<InstallResult> ReExecutePluginsAsync(
         InstalledProduct product,
+        ReExecuteOptions options,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken = default
     )
@@ -1698,10 +1802,10 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
-            InstallOptions options = new InstallOptions(
+            InstallOptions installOptions = new InstallOptions(
                 TargetPath: product.InstalledPath,
                 FeedId: product.FeedId,
-                PluginConfigValues: configValues
+                PluginConfigValues: configValues ?? options.PluginConfigValues
             );
 
             PluginContext context = new PluginContext
@@ -1710,41 +1814,48 @@ public sealed class InstallationEngine : IInstallationEngine
                 Version = product.Version,
                 InstallPath = product.InstalledPath,
                 StorkConfigDirectory = GetStorkConfigDir(),
-                ConfigValues = configValues ?? new Dictionary<string, string>(),
+                ConfigValues =
+                    configValues ?? options.PluginConfigValues ?? new Dictionary<string, string>(),
             };
 
-            ReportProgress(InstallStage.RunningPlugins, 30, "Running PreInstall...");
-            PluginPhaseResult preResult = await RunPluginPhaseAsync(
-                manifest,
-                options,
-                context,
-                PluginPhase.PreInstall,
-                cancellationToken
-            );
-            if (!preResult.Success)
+            if (options.RunPreInstall)
             {
-                return new InstallResult
+                ReportProgress(InstallStage.RunningPlugins, 30, "Running PreInstall...");
+                PluginPhaseResult preResult = await RunPluginPhaseAsync(
+                    manifest,
+                    installOptions,
+                    context,
+                    PluginPhase.PreInstall,
+                    cancellationToken
+                );
+                if (!preResult.Success)
                 {
-                    Success = false,
-                    ErrorMessage = preResult.ErrorMessage ?? "PreInstall failed.",
-                };
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = preResult.ErrorMessage ?? "PreInstall failed.",
+                    };
+                }
             }
 
-            ReportProgress(InstallStage.RunningPlugins, 60, "Running PostInstall...");
-            PluginPhaseResult postResult = await RunPluginPhaseAsync(
-                manifest,
-                options,
-                context,
-                PluginPhase.PostInstall,
-                cancellationToken
-            );
-            if (!postResult.Success)
+            if (options.RunPostInstall)
             {
-                return new InstallResult
+                ReportProgress(InstallStage.RunningPlugins, 60, "Running PostInstall...");
+                PluginPhaseResult postResult = await RunPluginPhaseAsync(
+                    manifest,
+                    installOptions,
+                    context,
+                    PluginPhase.PostInstall,
+                    cancellationToken
+                );
+                if (!postResult.Success)
                 {
-                    Success = false,
-                    ErrorMessage = postResult.ErrorMessage ?? "PostInstall failed.",
-                };
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = postResult.ErrorMessage ?? "PostInstall failed.",
+                    };
+                }
             }
 
             ReportProgress(InstallStage.RunningPlugins, 90, "Saving configuration...");

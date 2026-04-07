@@ -3,12 +3,10 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.ViewModels;
 
-/// <summary>
-/// View model for the plugin configuration dialog, managing dynamic configuration fields.
-/// </summary>
 public partial class PluginConfigDialogViewModel : ObservableObject
 {
     private readonly Func<PluginContext, IReadOnlyList<PluginValidationError>>? _validateCallback;
@@ -18,17 +16,16 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         new ObservableCollection<PluginConfigFieldViewModel>();
 
     [ObservableProperty]
+    private ObservableCollection<ActionGroupViewModel> _actionGroups =
+        new ObservableCollection<ActionGroupViewModel>();
+
+    [ObservableProperty]
     private string _globalErrorMessage = string.Empty;
+
+    public bool HasActionGroups => ActionGroups.Count > 0;
 
     public IInteractiveStorkPlugin? InteractivePlugin { get; set; }
 
-    /// <summary>
-    /// Initializes a new instance of the <see cref="PluginConfigDialogViewModel"/> class.
-    /// </summary>
-    /// <param name="schema">The configuration field schema from the plugin.</param>
-    /// <param name="previousValues">Previously saved configuration values.</param>
-    /// <param name="environment">The plugin environment, or null if not available.</param>
-    /// <param name="validateCallback">An optional validation callback from the plugin.</param>
     public PluginConfigDialogViewModel(
         IReadOnlyList<PluginConfigField> schema,
         Dictionary<string, string> previousValues,
@@ -38,6 +35,15 @@ public partial class PluginConfigDialogViewModel : ObservableObject
     {
         _validateCallback = validateCallback;
         BuildFields(schema, previousValues);
+    }
+
+    public PluginConfigDialogViewModel(
+        IReadOnlyList<PluginActionGroup> groups,
+        Dictionary<string, string> previousValues
+    )
+    {
+        _validateCallback = null;
+        BuildActionGroups(groups, previousValues);
     }
 
     public void HandleButtonClick(PluginConfigFieldViewModel field)
@@ -68,7 +74,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         }
     }
 
-    private void BuildFields(
+    public void BuildFields(
         IReadOnlyList<PluginConfigField> schema,
         Dictionary<string, string> previousValues
     )
@@ -76,39 +82,97 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         Fields.Clear();
         foreach (PluginConfigField field in schema)
         {
-            PluginConfigFieldViewModel fieldVm = new()
-            {
-                Key = field.Key,
-                Label = field.Label,
-                Description = field.Description ?? string.Empty,
-                FieldType = field.FieldType,
-                Required = field.Required,
-                Options = new ObservableCollection<PluginOptionItem>(field.Options),
-                Min = field.Min,
-                Max = field.Max,
-            };
-
-            if (previousValues.TryGetValue(field.Key, out string? previousValue))
-                fieldVm.Value = previousValue;
-            else if (!string.IsNullOrEmpty(field.DefaultValue))
-                fieldVm.Value = field.DefaultValue;
-
+            PluginConfigFieldViewModel fieldVm = CreateFieldViewModel(field, previousValues);
             Fields.Add(fieldVm);
         }
     }
 
-    /// <summary>
-    /// Validates all configuration fields and returns whether validation passed.
-    /// </summary>
-    /// <returns>True if all fields are valid; otherwise false.</returns>
+    private void BuildActionGroups(
+        IReadOnlyList<PluginActionGroup> groups,
+        Dictionary<string, string> previousValues
+    )
+    {
+        ActionGroups.Clear();
+        Fields.Clear();
+
+        foreach (PluginActionGroup group in groups)
+        {
+            ActionGroupViewModel groupVm = new ActionGroupViewModel
+            {
+                GroupId = group.GroupId,
+                Title = group.Title,
+                Phase = group.Phase,
+                IsEnabled = group.IsEnabled,
+                Descriptions = new ObservableCollection<PluginActionDescription>(
+                    group.Descriptions
+                ),
+            };
+
+            foreach (PluginConfigField field in group.Fields)
+            {
+                PluginConfigFieldViewModel fieldVm = CreateFieldViewModel(field, previousValues);
+                fieldVm.IsEnabled = group.IsEnabled;
+                groupVm.Fields.Add(fieldVm);
+                Fields.Add(fieldVm);
+            }
+
+            ActionGroups.Add(groupVm);
+        }
+
+        OnPropertyChanged(nameof(HasActionGroups));
+    }
+
+    private static PluginConfigFieldViewModel CreateFieldViewModel(
+        PluginConfigField field,
+        Dictionary<string, string> previousValues
+    )
+    {
+        PluginConfigFieldViewModel fieldVm = new PluginConfigFieldViewModel
+        {
+            Key = field.Key,
+            Label = field.Label,
+            Description = field.Description ?? string.Empty,
+            FieldType = field.FieldType,
+            Required = field.Required,
+            Options = new ObservableCollection<PluginOptionItem>(field.Options),
+            Min = field.Min,
+            Max = field.Max,
+            IsEnabled = field.IsEnabled,
+            IsReadOnly = field.IsReadOnly,
+        };
+
+        if (previousValues.TryGetValue(field.Key, out string? previousValue))
+            fieldVm.Value = previousValue;
+        else if (!string.IsNullOrEmpty(field.DefaultValue))
+            fieldVm.Value = field.DefaultValue;
+
+        return fieldVm;
+    }
+
     public bool Validate()
     {
         bool isValid = true;
         GlobalErrorMessage = string.Empty;
 
+        HashSet<string> disabledGroupFields = new HashSet<string>();
+        foreach (ActionGroupViewModel group in ActionGroups)
+        {
+            if (!group.IsEnabled)
+            {
+                foreach (PluginConfigFieldViewModel field in group.Fields)
+                    disabledGroupFields.Add(field.Key);
+            }
+        }
+
         foreach (PluginConfigFieldViewModel field in Fields)
         {
             field.ErrorMessage = string.Empty;
+
+            if (disabledGroupFields.Contains(field.Key))
+                continue;
+
+            if (!field.IsEnabled)
+                continue;
 
             if (field.Required && string.IsNullOrWhiteSpace(field.Value))
             {
@@ -160,7 +224,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         {
             try
             {
-                PluginContext context = new PluginContext() { ConfigValues = GetValues() };
+                PluginContext context = new PluginContext { ConfigValues = GetValues() };
                 IReadOnlyList<PluginValidationError> errors = _validateCallback(context);
                 foreach (PluginValidationError error in errors)
                 {
@@ -190,10 +254,6 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         return isValid;
     }
 
-    /// <summary>
-    /// Gets the current configuration values as a dictionary.
-    /// </summary>
-    /// <returns>A dictionary of field keys to their current values.</returns>
     public Dictionary<string, string> GetValues()
     {
         Dictionary<string, string> values = new Dictionary<string, string>();
@@ -201,6 +261,14 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         {
             values[field.Key] = field.Value;
         }
+
+        foreach (ActionGroupViewModel group in ActionGroups)
+        {
+            values[$"__group_enabled_{group.GroupId}"] = group
+                .IsEnabled.ToString()
+                .ToLowerInvariant();
+        }
+
         return values;
     }
 }
