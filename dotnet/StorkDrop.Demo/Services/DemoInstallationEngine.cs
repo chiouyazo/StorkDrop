@@ -466,56 +466,6 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
             );
         }
 
-        if (product.ProductId == "nova-dashboard")
-        {
-            groups.Insert(
-                0,
-                new PluginActionGroup
-                {
-                    GroupId = "filehandler-SQL Deploy Tools",
-                    Title = "File Handler: SQL Deploy Tools",
-                    Phase = PluginActionPhase.PreInstall,
-                    Fields =
-                    [
-                        new PluginConfigField
-                        {
-                            Key = "target-db",
-                            Label = "Target Database",
-                            FieldType = PluginFieldType.Dropdown,
-                            Required = true,
-                            Options =
-                            [
-                                new PluginOptionItem
-                                {
-                                    Value = "production",
-                                    Label = "Production (db-prod-01)",
-                                },
-                                new PluginOptionItem
-                                {
-                                    Value = "staging",
-                                    Label = "Staging (db-staging-01)",
-                                },
-                            ],
-                        },
-                        new PluginConfigField
-                        {
-                            Key = "deploy-schema",
-                            Label = "Deploy schema-update.sql",
-                            FieldType = PluginFieldType.Checkbox,
-                            DefaultValue = "true",
-                        },
-                        new PluginConfigField
-                        {
-                            Key = "deploy-seed",
-                            Label = "Deploy seed-data.sql",
-                            FieldType = PluginFieldType.Checkbox,
-                            DefaultValue = "true",
-                        },
-                    ],
-                }
-            );
-        }
-
         Dictionary<string, string>? configValues = null;
         if (OnActionGroupConfigNeeded is not null && groups.Count > 0)
         {
