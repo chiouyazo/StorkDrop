@@ -121,6 +121,9 @@
   <system:String x:Key="Settings_Proxy">Proxy-Einstellungen</system:String>
   <system:String x:Key="Settings_ProxyHost">Proxy-Host</system:String>
   <system:String x:Key="Settings_ProxyPort">Proxy-Port</system:String>
+  <system:String x:Key="Settings_CheckNow">Jetzt prüfen</system:String>
+  <system:String x:Key="Settings_UpdateAvailable">Update verfügbar: v{0}</system:String>
+  <system:String x:Key="Settings_UpToDate">StorkDrop ist auf dem neuesten Stand.</system:String>
   <system:String x:Key="Settings_Advanced">Erweitert</system:String>
   <system:String x:Key="Settings_Feeds">Feeds</system:String>
   <system:String x:Key="Settings_FeedName">Name</system:String>
@@ -180,6 +183,7 @@
   <system:String x:Key="Error_ConnectionFailed">Verbindung fehlgeschlagen</system:String>
   <system:String x:Key="Error_ConnectionError">Verbindungsfehler</system:String>
   <system:String x:Key="Error_ValidationFailed">Validierungsfehler</system:String>
+  <system:String x:Key="Error_UpdateCheckFailed">Update-Prüfung fehlgeschlagen</system:String>
   <system:String x:Key="Error_LoadLogFailed">Fehler beim Laden des Logs</system:String>
 
   <!-- Validation messages -->
@@ -387,7 +391,7 @@
 
   <!-- Install dialog plugin hint -->
   <system:String x:Key="InstallDialog_PluginHint"
-    >Ein Plugin ist mit diesem Produkt verbunden und fordert moeglicherweise zusaetzliche Konfiguration waehrend der Installation an.</system:String
+    >Ein Plugin ist mit diesem Produkt verbunden und fordert möglicherweise zusätzliche Konfiguration während der Installation an.</system:String
   >
 
   <!-- Activity log -->

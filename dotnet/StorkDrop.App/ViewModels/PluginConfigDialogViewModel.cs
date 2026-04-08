@@ -106,6 +106,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
                 Title = group.Title,
                 Phase = group.Phase,
                 IsEnabled = group.IsEnabled,
+                IsToggleable = !group.GroupId.StartsWith("config-"),
                 Descriptions = new ObservableCollection<PluginActionDescription>(
                     group.Descriptions
                 ),

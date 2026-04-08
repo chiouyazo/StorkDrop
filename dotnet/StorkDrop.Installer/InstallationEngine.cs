@@ -201,9 +201,27 @@ public sealed class InstallationEngine : IInstallationEngine
                 if (plugin is IInteractiveStorkPlugin interactive)
                     CurrentInteractivePlugin = interactive;
 
-                IReadOnlyList<PluginConfigField> sharedFields = plugin.GetConfigurationSchema(
-                    environment
+                IReadOnlyList<PluginConfigField> sharedFields;
+                try
+                {
+                    sharedFields = plugin.GetConfigurationSchema(environment);
+                }
+                catch (Exception schemaEx)
+                {
+                    _logger.LogError(
+                        schemaEx,
+                        "GetConfigurationSchema failed for {TypeName}",
+                        pluginInfo.TypeName
+                    );
+                    sharedFields = [];
+                }
+
+                _logger.LogInformation(
+                    "GetConfigurationSchema for {TypeName} returned {Count} fields",
+                    pluginInfo.TypeName,
+                    sharedFields.Count
                 );
+
                 if (sharedFields.Count > 0)
                 {
                     string cfgName = pluginInfo.TypeName.Contains('.')
@@ -313,9 +331,27 @@ public sealed class InstallationEngine : IInstallationEngine
                 if (plugin is IInteractiveStorkPlugin interactive)
                     CurrentInteractivePlugin = interactive;
 
-                IReadOnlyList<PluginConfigField> sharedFields = plugin.GetConfigurationSchema(
-                    environment
+                IReadOnlyList<PluginConfigField> sharedFields;
+                try
+                {
+                    sharedFields = plugin.GetConfigurationSchema(environment);
+                }
+                catch (Exception schemaEx)
+                {
+                    _logger.LogError(
+                        schemaEx,
+                        "GetConfigurationSchema failed for {TypeName}",
+                        pluginInfo.TypeName
+                    );
+                    sharedFields = [];
+                }
+
+                _logger.LogInformation(
+                    "GetConfigurationSchema for {TypeName} returned {Count} fields",
+                    pluginInfo.TypeName,
+                    sharedFields.Count
                 );
+
                 if (sharedFields.Count > 0)
                 {
                     string cfgName = pluginInfo.TypeName.Contains('.')
@@ -473,7 +509,6 @@ public sealed class InstallationEngine : IInstallationEngine
             options.TargetPath
         );
 
-        // Phase 1: Check if elevation is needed before downloading anything
         InstallResult? elevationResult = await TryElevateInstallAsync(
             manifest,
             options,
@@ -490,7 +525,6 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             Directory.CreateDirectory(tempDir);
 
-            // Download & Extraction
             cancellationToken.ThrowIfCancellationRequested();
             (string? extractPath, string? productContentPath) = await DownloadAndExtractAsync(
                 manifest,
@@ -507,10 +541,23 @@ public sealed class InstallationEngine : IInstallationEngine
                     FailedStep = "Extracting",
                 };
 
-            // For file copy: use productContentPath (inner ZIP) if two-layer, else extractPath
             string copySourcePath = productContentPath ?? extractPath;
 
-            // Unified action group dialog (when available)
+            cancellationToken.ThrowIfCancellationRequested();
+            (
+                HashSet<string> handledFiles,
+                PluginContext? fileHandlerContext,
+                InstallResult? fileHandlerError
+            ) = await HandleFileTypesAsync(
+                manifest,
+                options,
+                extractPath,
+                progress,
+                cancellationToken
+            );
+            if (fileHandlerError is not null)
+                return fileHandlerError;
+
             HashSet<string> disabledGroups = new HashSet<string>();
             if (OnActionGroupConfigNeeded is not null && options.PluginConfigValues is null)
             {
@@ -550,23 +597,6 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
-            // StorkDrop level Plugins (file handlers)
-            cancellationToken.ThrowIfCancellationRequested();
-            (
-                HashSet<string> handledFiles,
-                PluginContext? fileHandlerContext,
-                InstallResult? fileHandlerError
-            ) = await HandleFileTypesAsync(
-                manifest,
-                options,
-                extractPath,
-                progress,
-                cancellationToken
-            );
-            if (fileHandlerError is not null)
-                return fileHandlerError;
-
-            // Product Plugins (old callback path - only when unified dialog was not used)
             if (
                 manifest.Plugins is { Length: > 0 }
                 && options.PluginConfigValues is null
@@ -751,7 +781,6 @@ public sealed class InstallationEngine : IInstallationEngine
                     }
                     catch (IOException)
                     {
-                        // File still locked after context unload - use deferred replace
                         if (File.Exists(targetFile))
                         {
                             string delName =
@@ -776,7 +805,6 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
-            // Store file handler files for re-execution
             if (handledFiles.Count > 0)
             {
                 string storkFilesDir = Path.Combine(resolvedPath, ".stork", "files");
@@ -805,7 +833,6 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
-            // Save manifest for uninstall plugin loading
             if (manifest.Plugins is { Length: > 0 })
             {
                 string storkDir = Path.Combine(resolvedPath, ".stork");
@@ -1322,7 +1349,6 @@ public sealed class InstallationEngine : IInstallationEngine
             );
         }
 
-        // Allow plugins to resolve additional templates
         if (OnResolveInstallPath is not null)
         {
             string? resolved = OnResolveInstallPath(resolvedTargetPath, fileHandlerContext);
@@ -2128,6 +2154,96 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
+            if (hasFileHandlerFiles && _fileTypeHandlers.Count > 0 && options.RunFileHandlers)
+            {
+                ReportProgress(InstallStage.RunningPlugins, 15, "Running file handlers...");
+                string[] savedFiles = Directory.GetFiles(storkFilesDir);
+
+                foreach (IFileTypeHandler handler in _fileTypeHandlers)
+                {
+                    try
+                    {
+                        List<string> matchingFiles = savedFiles
+                            .Where(f =>
+                                handler.HandledExtensions.Any(ext =>
+                                    f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)
+                                )
+                            )
+                            .ToList();
+
+                        if (matchingFiles.Count == 0)
+                            continue;
+
+                        PluginContext fileContext = new PluginContext
+                        {
+                            ProductId = product.ProductId,
+                            Version = product.Version,
+                            InstallPath = product.InstalledPath,
+                            StorkConfigDirectory = GetStorkConfigDir(),
+                        };
+
+                        IReadOnlyList<PluginConfigField> configFields =
+                            handler.GetFileHandlerConfig(matchingFiles, fileContext);
+
+                        if (configFields.Count > 0 && OnFileHandlerConfigNeeded is not null)
+                        {
+                            ReportProgress(
+                                InstallStage.RunningPlugins,
+                                18,
+                                "Waiting for file handler configuration..."
+                            );
+                            Dictionary<string, string>? fileHandlerValues =
+                                OnFileHandlerConfigNeeded(
+                                    configFields,
+                                    new Dictionary<string, string>()
+                                );
+                            if (fileHandlerValues is null)
+                                return new InstallResult
+                                {
+                                    Success = false,
+                                    ErrorMessage = "File handler configuration cancelled.",
+                                };
+                            fileContext.ConfigValues = fileHandlerValues;
+                        }
+
+                        string handlerName = handler is IStorkDropPlugin sdp
+                            ? sdp.DisplayName
+                            : handler.GetType().Name;
+
+                        ReportProgress(
+                            InstallStage.RunningPlugins,
+                            20,
+                            $"Processing {matchingFiles.Count} file(s) with {handlerName}..."
+                        );
+                        FileHandlerResult handlerResult = await handler.HandleFilesAsync(
+                            matchingFiles,
+                            fileContext,
+                            cancellationToken
+                        );
+
+                        if (!handlerResult.Success)
+                        {
+                            return new InstallResult
+                            {
+                                Success = false,
+                                ErrorMessage =
+                                    handlerResult.ErrorMessage
+                                    ?? $"File handler {handlerName} failed.",
+                            };
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "File handler failed during re-execution");
+                        return new InstallResult
+                        {
+                            Success = false,
+                            ErrorMessage = $"File handler failed: {ex.Message}",
+                        };
+                    }
+                }
+            }
+
             Dictionary<string, string> previousValues = await LoadPluginConfigValues(
                 product.ProductId,
                 cancellationToken
@@ -2177,94 +2293,6 @@ public sealed class InstallationEngine : IInstallationEngine
 
             Dictionary<string, string> effectiveConfig =
                 configValues ?? options.PluginConfigValues ?? new Dictionary<string, string>();
-
-            if (hasFileHandlerFiles && _fileTypeHandlers.Count > 0 && options.RunFileHandlers)
-            {
-                ReportProgress(InstallStage.RunningPlugins, 20, "Running file handlers...");
-                string[] savedFiles = Directory.GetFiles(storkFilesDir);
-
-                foreach (IFileTypeHandler handler in _fileTypeHandlers)
-                {
-                    try
-                    {
-                        List<string> matchingFiles = savedFiles
-                            .Where(f =>
-                                handler.HandledExtensions.Any(ext =>
-                                    f.EndsWith(ext, StringComparison.OrdinalIgnoreCase)
-                                )
-                            )
-                            .ToList();
-
-                        if (matchingFiles.Count == 0)
-                            continue;
-
-                        PluginContext fileContext = new PluginContext
-                        {
-                            ProductId = product.ProductId,
-                            Version = product.Version,
-                            InstallPath = product.InstalledPath,
-                            StorkConfigDirectory = GetStorkConfigDir(),
-                            ConfigValues = effectiveConfig,
-                        };
-
-                        IReadOnlyList<PluginConfigField> configFields =
-                            handler.GetFileHandlerConfig(matchingFiles, fileContext);
-
-                        if (configFields.Count > 0 && OnFileHandlerConfigNeeded is not null)
-                        {
-                            ReportProgress(
-                                InstallStage.RunningPlugins,
-                                22,
-                                "Waiting for file handler configuration..."
-                            );
-                            Dictionary<string, string>? fileHandlerValues =
-                                OnFileHandlerConfigNeeded(configFields, effectiveConfig);
-                            if (fileHandlerValues is null)
-                                return new InstallResult
-                                {
-                                    Success = false,
-                                    ErrorMessage = "File handler configuration cancelled.",
-                                };
-                            fileContext.ConfigValues = fileHandlerValues;
-                        }
-
-                        string handlerName = handler is IStorkDropPlugin sdp
-                            ? sdp.DisplayName
-                            : handler.GetType().Name;
-
-                        ReportProgress(
-                            InstallStage.RunningPlugins,
-                            25,
-                            $"Processing {matchingFiles.Count} file(s) with {handlerName}..."
-                        );
-                        FileHandlerResult handlerResult = await handler.HandleFilesAsync(
-                            matchingFiles,
-                            fileContext,
-                            cancellationToken
-                        );
-
-                        if (!handlerResult.Success)
-                        {
-                            return new InstallResult
-                            {
-                                Success = false,
-                                ErrorMessage =
-                                    handlerResult.ErrorMessage
-                                    ?? $"File handler {handlerName} failed.",
-                            };
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "File handler failed during re-execution");
-                        return new InstallResult
-                        {
-                            Success = false,
-                            ErrorMessage = $"File handler failed: {ex.Message}",
-                        };
-                    }
-                }
-            }
 
             if (hasPlugins)
             {

@@ -306,7 +306,7 @@ public partial class InstalledViewModel : ObservableObject
 
             InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
                 installed,
-                new ReExecuteOptions(),
+                new ReExecuteOptions { RunFileHandlers = product.HasFileHandlerData },
                 progress,
                 tracked.Cts.Token
             );

@@ -117,6 +117,9 @@
   <system:String x:Key="Settings_Proxy">Proxy Settings</system:String>
   <system:String x:Key="Settings_ProxyHost">Proxy Host</system:String>
   <system:String x:Key="Settings_ProxyPort">Proxy Port</system:String>
+  <system:String x:Key="Settings_CheckNow">Check Now</system:String>
+  <system:String x:Key="Settings_UpdateAvailable">Update available: v{0}</system:String>
+  <system:String x:Key="Settings_UpToDate">StorkDrop is up to date.</system:String>
   <system:String x:Key="Settings_Advanced">Advanced</system:String>
   <system:String x:Key="Settings_Feeds">Feeds</system:String>
   <system:String x:Key="Settings_FeedName">Name</system:String>
@@ -162,6 +165,7 @@
   <system:String x:Key="Error_ConnectionFailed">Connection failed</system:String>
   <system:String x:Key="Error_ConnectionError">Connection error</system:String>
   <system:String x:Key="Error_ValidationFailed">Validation error</system:String>
+  <system:String x:Key="Error_UpdateCheckFailed">Update check failed</system:String>
   <system:String x:Key="Error_LoadLogFailed">Error loading log</system:String>
 
   <!-- Validation messages -->

@@ -19,6 +19,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
     private readonly IFeedConnectionService _connectionService;
+    private readonly ISelfUpdateChecker _selfUpdateChecker;
     private readonly DialogService _dialogService;
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
     private readonly IFeedRegistry _feedRegistry;
@@ -28,6 +29,7 @@ public partial class SettingsViewModel : ObservableObject
         IConfigurationService configurationService,
         IEncryptionService encryptionService,
         IFeedConnectionService connectionService,
+        ISelfUpdateChecker selfUpdateChecker,
         DialogService dialogService,
         IEnumerable<IStorkDropPlugin> plugins,
         IFeedRegistry feedRegistry,
@@ -37,6 +39,7 @@ public partial class SettingsViewModel : ObservableObject
         _configurationService = configurationService;
         _encryptionService = encryptionService;
         _connectionService = connectionService;
+        _selfUpdateChecker = selfUpdateChecker;
         _dialogService = dialogService;
         _plugins = plugins;
         _feedRegistry = feedRegistry;
@@ -74,6 +77,12 @@ public partial class SettingsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _includeDevVersions;
+
+    [ObservableProperty]
+    private bool _isCheckingForUpdates;
+
+    [ObservableProperty]
+    private string _updateCheckResult = string.Empty;
 
     [ObservableProperty]
     private string _errorMessage = string.Empty;
@@ -386,6 +395,38 @@ public partial class SettingsViewModel : ObservableObject
         catch (Exception ex)
         {
             ErrorMessage = LocalizationManager.GetString("Error_ImportFailed") + ": " + ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CheckForUpdatesNowAsync()
+    {
+        try
+        {
+            IsCheckingForUpdates = true;
+            UpdateCheckResult = string.Empty;
+
+            UpdateInfo? update = await _selfUpdateChecker.CheckForUpdateAsync(IncludeDevVersions);
+
+            if (update is not null)
+            {
+                UpdateCheckResult = LocalizationManager
+                    .GetString("Settings_UpdateAvailable")
+                    .Replace("{0}", update.Version);
+            }
+            else
+            {
+                UpdateCheckResult = LocalizationManager.GetString("Settings_UpToDate");
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateCheckResult =
+                LocalizationManager.GetString("Error_UpdateCheckFailed") + ": " + ex.Message;
+        }
+        finally
+        {
+            IsCheckingForUpdates = false;
         }
     }
 }

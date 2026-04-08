@@ -190,17 +190,18 @@ public partial class MarketplaceViewModel : ObservableObject
 
                     foreach (ResolvedPostProduct reqProduct in reqDialog.SelectedProducts)
                     {
-                        try
-                        {
-                            await InstallPostProductAsync(reqProduct);
-                        }
-                        catch (Exception ex)
+                        await InstallPostProductAsync(reqProduct);
+
+                        InstalledProduct? check = await _productRepository.GetByIdAsync(
+                            reqProduct.Manifest.ProductId
+                        );
+                        if (check is null)
                         {
                             _logger.LogWarning(
-                                ex,
-                                "Failed to install required product {ProductId}",
+                                "Required product {ProductId} was not installed successfully, aborting",
                                 reqProduct.Manifest.ProductId
                             );
+                            return;
                         }
                     }
                 }
