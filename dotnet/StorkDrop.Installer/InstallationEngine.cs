@@ -201,60 +201,58 @@ public sealed class InstallationEngine : IInstallationEngine
                 if (plugin is IInteractiveStorkPlugin interactive)
                     CurrentInteractivePlugin = interactive;
 
-                IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
-                    environment
-                );
-
-                List<PluginActionDescription> preDescriptions = [];
-                List<PluginActionDescription> postDescriptions = [];
                 if (plugin is IDescribableStorkPlugin describable)
                 {
-                    try
+                    IReadOnlyList<PluginActionDescription> descriptions =
+                        describable.GetActionDescriptions(environment);
+
+                    foreach (PluginActionDescription desc in descriptions)
                     {
-                        IReadOnlyList<PluginActionDescription> descriptions =
-                            describable.GetActionDescriptions(environment);
-                        preDescriptions = descriptions
-                            .Where(d => d.Phase == PluginActionPhase.PreInstall)
-                            .ToList();
-                        postDescriptions = descriptions
-                            .Where(d => d.Phase == PluginActionPhase.PostInstall)
-                            .ToList();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(
-                            ex,
-                            "Failed to get action descriptions from {TypeName}",
-                            pluginInfo.TypeName
+                        groups.Add(
+                            new PluginActionGroup
+                            {
+                                GroupId =
+                                    $"{desc.Phase.ToString().ToLowerInvariant()}-{pluginInfo.TypeName}-{desc.Title}",
+                                Title = desc.Title,
+                                Phase = desc.Phase,
+                                IsEnabled = desc.IsEnabled,
+                                Fields = desc.Fields,
+                                Descriptions = [desc],
+                            }
                         );
                     }
                 }
+                else
+                {
+                    IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                        environment
+                    );
+                    string shortName = pluginInfo.TypeName.Contains('.')
+                        ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
+                        : pluginInfo.TypeName;
 
-                string shortName = pluginInfo.TypeName.Contains('.')
-                    ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
-                    : pluginInfo.TypeName;
+                    groups.Add(
+                        new PluginActionGroup
+                        {
+                            GroupId = $"preinstall-{pluginInfo.TypeName}",
+                            Title = $"PreInstall: {shortName}",
+                            Phase = PluginActionPhase.PreInstall,
+                            Fields = fields,
+                            Descriptions = [],
+                        }
+                    );
 
-                groups.Add(
-                    new PluginActionGroup
-                    {
-                        GroupId = $"preinstall-{pluginInfo.TypeName}",
-                        Title = $"PreInstall: {shortName}",
-                        Phase = PluginActionPhase.PreInstall,
-                        Fields = fields,
-                        Descriptions = preDescriptions,
-                    }
-                );
-
-                groups.Add(
-                    new PluginActionGroup
-                    {
-                        GroupId = $"postinstall-{pluginInfo.TypeName}",
-                        Title = $"PostInstall: {shortName}",
-                        Phase = PluginActionPhase.PostInstall,
-                        Fields = [],
-                        Descriptions = postDescriptions,
-                    }
-                );
+                    groups.Add(
+                        new PluginActionGroup
+                        {
+                            GroupId = $"postinstall-{pluginInfo.TypeName}",
+                            Title = $"PostInstall: {shortName}",
+                            Phase = PluginActionPhase.PostInstall,
+                            Fields = [],
+                            Descriptions = [],
+                        }
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -299,60 +297,58 @@ public sealed class InstallationEngine : IInstallationEngine
                 if (plugin is IInteractiveStorkPlugin interactive)
                     CurrentInteractivePlugin = interactive;
 
-                IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
-                    environment
-                );
-
-                List<PluginActionDescription> preDescriptions = [];
-                List<PluginActionDescription> postDescriptions = [];
                 if (plugin is IDescribableStorkPlugin describable)
                 {
-                    try
+                    IReadOnlyList<PluginActionDescription> descriptions =
+                        describable.GetActionDescriptions(environment);
+
+                    foreach (PluginActionDescription desc in descriptions)
                     {
-                        IReadOnlyList<PluginActionDescription> descriptions =
-                            describable.GetActionDescriptions(environment);
-                        preDescriptions = descriptions
-                            .Where(d => d.Phase == PluginActionPhase.PreInstall)
-                            .ToList();
-                        postDescriptions = descriptions
-                            .Where(d => d.Phase == PluginActionPhase.PostInstall)
-                            .ToList();
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogWarning(
-                            ex,
-                            "Failed to get action descriptions from {TypeName}",
-                            pluginInfo.TypeName
+                        groups.Add(
+                            new PluginActionGroup
+                            {
+                                GroupId =
+                                    $"{desc.Phase.ToString().ToLowerInvariant()}-{pluginInfo.TypeName}-{desc.Title}",
+                                Title = desc.Title,
+                                Phase = desc.Phase,
+                                IsEnabled = desc.IsEnabled,
+                                Fields = desc.Fields,
+                                Descriptions = [desc],
+                            }
                         );
                     }
                 }
+                else
+                {
+                    IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                        environment
+                    );
+                    string shortName = pluginInfo.TypeName.Contains('.')
+                        ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
+                        : pluginInfo.TypeName;
 
-                string shortName = pluginInfo.TypeName.Contains('.')
-                    ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
-                    : pluginInfo.TypeName;
+                    groups.Add(
+                        new PluginActionGroup
+                        {
+                            GroupId = $"preinstall-{pluginInfo.TypeName}",
+                            Title = $"PreInstall: {shortName}",
+                            Phase = PluginActionPhase.PreInstall,
+                            Fields = fields,
+                            Descriptions = [],
+                        }
+                    );
 
-                groups.Add(
-                    new PluginActionGroup
-                    {
-                        GroupId = $"preinstall-{pluginInfo.TypeName}",
-                        Title = $"PreInstall: {shortName}",
-                        Phase = PluginActionPhase.PreInstall,
-                        Fields = fields,
-                        Descriptions = preDescriptions,
-                    }
-                );
-
-                groups.Add(
-                    new PluginActionGroup
-                    {
-                        GroupId = $"postinstall-{pluginInfo.TypeName}",
-                        Title = $"PostInstall: {shortName}",
-                        Phase = PluginActionPhase.PostInstall,
-                        Fields = [],
-                        Descriptions = postDescriptions,
-                    }
-                );
+                    groups.Add(
+                        new PluginActionGroup
+                        {
+                            GroupId = $"postinstall-{pluginInfo.TypeName}",
+                            Title = $"PostInstall: {shortName}",
+                            Phase = PluginActionPhase.PostInstall,
+                            Fields = [],
+                            Descriptions = [],
+                        }
+                    );
+                }
             }
             catch (Exception ex)
             {
@@ -2031,62 +2027,65 @@ public sealed class InstallationEngine : IInstallationEngine
                         if (plugin is IInteractiveStorkPlugin interactive)
                             CurrentInteractivePlugin = interactive;
 
-                        IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
-                            environment
-                        );
-
-                        List<PluginActionDescription> preDesc = [];
-                        List<PluginActionDescription> postDesc = [];
                         if (plugin is IDescribableStorkPlugin describable)
                         {
-                            try
+                            IReadOnlyList<PluginActionDescription> descriptions =
+                                describable.GetActionDescriptions(environment);
+
+                            foreach (PluginActionDescription desc in descriptions)
                             {
-                                IReadOnlyList<PluginActionDescription> descriptions =
-                                    describable.GetActionDescriptions(environment);
-                                preDesc = descriptions
-                                    .Where(d => d.Phase == PluginActionPhase.PreInstall)
-                                    .ToList();
-                                postDesc = descriptions
-                                    .Where(d => d.Phase == PluginActionPhase.PostInstall)
-                                    .ToList();
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(
-                                    ex,
-                                    "Failed to get action descriptions from {TypeName}",
-                                    pluginInfo.TypeName
+                                bool defaultEnabled =
+                                    desc.Phase == PluginActionPhase.PreInstall
+                                        ? options.RunPreInstall
+                                        : options.RunPostInstall;
+
+                                groups.Add(
+                                    new PluginActionGroup
+                                    {
+                                        GroupId =
+                                            $"{desc.Phase.ToString().ToLowerInvariant()}-{pluginInfo.TypeName}-{desc.Title}",
+                                        Title = desc.Title,
+                                        Phase = desc.Phase,
+                                        IsEnabled = defaultEnabled && desc.IsEnabled,
+                                        Fields = desc.Fields,
+                                        Descriptions = [desc],
+                                    }
                                 );
                             }
                         }
+                        else
+                        {
+                            IReadOnlyList<PluginConfigField> fields = plugin.GetConfigurationSchema(
+                                environment
+                            );
+                            string shortName = pluginInfo.TypeName.Contains('.')
+                                ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
+                                : pluginInfo.TypeName;
 
-                        string shortName = pluginInfo.TypeName.Contains('.')
-                            ? pluginInfo.TypeName[(pluginInfo.TypeName.LastIndexOf('.') + 1)..]
-                            : pluginInfo.TypeName;
+                            groups.Add(
+                                new PluginActionGroup
+                                {
+                                    GroupId = $"preinstall-{pluginInfo.TypeName}",
+                                    Title = $"PreInstall: {shortName}",
+                                    Phase = PluginActionPhase.PreInstall,
+                                    IsEnabled = options.RunPreInstall,
+                                    Fields = fields,
+                                    Descriptions = [],
+                                }
+                            );
 
-                        groups.Add(
-                            new PluginActionGroup
-                            {
-                                GroupId = $"preinstall-{pluginInfo.TypeName}",
-                                Title = $"PreInstall: {shortName}",
-                                Phase = PluginActionPhase.PreInstall,
-                                IsEnabled = options.RunPreInstall,
-                                Fields = fields,
-                                Descriptions = preDesc,
-                            }
-                        );
-
-                        groups.Add(
-                            new PluginActionGroup
-                            {
-                                GroupId = $"postinstall-{pluginInfo.TypeName}",
-                                Title = $"PostInstall: {shortName}",
-                                Phase = PluginActionPhase.PostInstall,
-                                IsEnabled = options.RunPostInstall,
-                                Fields = [],
-                                Descriptions = postDesc,
-                            }
-                        );
+                            groups.Add(
+                                new PluginActionGroup
+                                {
+                                    GroupId = $"postinstall-{pluginInfo.TypeName}",
+                                    Title = $"PostInstall: {shortName}",
+                                    Phase = PluginActionPhase.PostInstall,
+                                    IsEnabled = options.RunPostInstall,
+                                    Fields = [],
+                                    Descriptions = [],
+                                }
+                            );
+                        }
                     }
                     catch (Exception ex)
                     {
