@@ -32,63 +32,20 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         if (manifest.Plugins is not { Length: > 0 })
             return Task.FromResult<IReadOnlyList<PluginActionGroup>>([]);
 
-        IReadOnlyList<PluginConfigField> fields = _interactivePlugin.GetConfigurationSchema(
-            new PluginEnvironment()
-        );
+        IReadOnlyList<PluginActionDescription> descriptions =
+            _interactivePlugin.GetActionDescriptions(new PluginEnvironment());
 
-        List<PluginActionGroup> groups =
-        [
-            new PluginActionGroup
+        List<PluginActionGroup> groups = descriptions
+            .Select(desc => new PluginActionGroup
             {
-                GroupId = "preinstall-demo",
-                Title = "PreInstall: Database Setup",
-                Phase = PluginActionPhase.PreInstall,
-                Fields = fields,
-                Descriptions =
-                [
-                    new PluginActionDescription
-                    {
-                        Phase = PluginActionPhase.PreInstall,
-                        Title = "Validate database connection",
-                        Description = "Checks that the selected database is reachable.",
-                    },
-                    new PluginActionDescription
-                    {
-                        Phase = PluginActionPhase.PreInstall,
-                        Title = "Check schema permissions",
-                        Description = "Verifies the service account has required permissions.",
-                    },
-                ],
-            },
-            new PluginActionGroup
-            {
-                GroupId = "postinstall-demo",
-                Title = "PostInstall: Configuration",
-                Phase = PluginActionPhase.PostInstall,
-                Fields = [],
-                Descriptions =
-                [
-                    new PluginActionDescription
-                    {
-                        Phase = PluginActionPhase.PostInstall,
-                        Title = "Create reporting tables",
-                        Description = "Creates the schema and tables for report storage.",
-                    },
-                    new PluginActionDescription
-                    {
-                        Phase = PluginActionPhase.PostInstall,
-                        Title = "Insert default configuration",
-                        Description = "Populates initial settings and templates.",
-                    },
-                    new PluginActionDescription
-                    {
-                        Phase = PluginActionPhase.PostInstall,
-                        Title = "Register scheduled tasks",
-                        Description = "Sets up automated report generation jobs.",
-                    },
-                ],
-            },
-        ];
+                GroupId = $"{desc.Phase.ToString().ToLowerInvariant()}-demo-{desc.Title}",
+                Title = desc.Title,
+                Phase = desc.Phase,
+                IsEnabled = desc.IsEnabled,
+                Fields = desc.Fields,
+                Descriptions = [desc],
+            })
+            .ToList();
 
         return Task.FromResult<IReadOnlyList<PluginActionGroup>>(groups);
     }
