@@ -64,7 +64,10 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             if (result.UpdatedSchema is not null)
             {
                 Dictionary<string, string> currentValues = GetValues();
-                BuildFields(result.UpdatedSchema, currentValues);
+                if (HasActionGroups)
+                    RebuildGroupFields(result.UpdatedSchema, currentValues);
+                else
+                    BuildFields(result.UpdatedSchema, currentValues);
             }
         }
         catch (Exception ex)
@@ -120,6 +123,30 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasActionGroups));
+    }
+
+    private void RebuildGroupFields(
+        IReadOnlyList<PluginConfigField> updatedSchema,
+        Dictionary<string, string> currentValues
+    )
+    {
+        Dictionary<string, PluginConfigField> updatedByKey = updatedSchema.ToDictionary(f => f.Key);
+
+        foreach (ActionGroupViewModel group in ActionGroups)
+        {
+            foreach (PluginConfigFieldViewModel fieldVm in group.Fields)
+            {
+                if (updatedByKey.TryGetValue(fieldVm.Key, out PluginConfigField? updated))
+                {
+                    fieldVm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
+                    if (updated.DefaultValue is not null && !currentValues.ContainsKey(fieldVm.Key))
+                        fieldVm.Value = updated.DefaultValue;
+                    fieldVm.Description = updated.Description ?? string.Empty;
+                    fieldVm.IsEnabled = updated.IsEnabled;
+                    fieldVm.IsReadOnly = updated.IsReadOnly;
+                }
+            }
+        }
     }
 
     private static PluginConfigFieldViewModel CreateFieldViewModel(

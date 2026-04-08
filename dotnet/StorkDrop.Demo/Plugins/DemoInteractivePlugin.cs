@@ -19,50 +19,6 @@ internal sealed class DemoInteractivePlugin
                 Title = "Validate database connection",
                 Description =
                     "Checks that the selected database is reachable and responds to queries.",
-                Fields =
-                [
-                    new PluginConfigField
-                    {
-                        Key = "target-database",
-                        Label = "Target Database",
-                        FieldType = PluginFieldType.Dropdown,
-                        Required = true,
-                        Options =
-                        [
-                            new PluginOptionItem
-                            {
-                                Value = "prod",
-                                Label = "Production (db-prod-01)",
-                            },
-                            new PluginOptionItem
-                            {
-                                Value = "staging",
-                                Label = "Staging (db-staging-01)",
-                            },
-                            new PluginOptionItem
-                            {
-                                Value = "dev",
-                                Label = "Development (localhost)",
-                            },
-                        ],
-                        DefaultValue = "dev",
-                    },
-                    new PluginConfigField
-                    {
-                        Key = "schema-name",
-                        Label = "Schema Name",
-                        FieldType = PluginFieldType.Text,
-                        Required = true,
-                        DefaultValue = "dbo",
-                        Description = "The database schema to use for table creation.",
-                    },
-                    new PluginConfigField
-                    {
-                        Key = "test-connection",
-                        Label = "Test Connection",
-                        FieldType = PluginFieldType.Button,
-                    },
-                ],
             },
             new PluginActionDescription
             {
@@ -124,7 +80,37 @@ internal sealed class DemoInteractivePlugin
         ];
 
     public IReadOnlyList<PluginConfigField> GetConfigurationSchema(PluginEnvironment environment) =>
-        [];
+        [
+            new PluginConfigField
+            {
+                Key = "target-database",
+                Label = "Target Database",
+                FieldType = PluginFieldType.Dropdown,
+                Required = true,
+                Options =
+                [
+                    new PluginOptionItem { Value = "prod", Label = "Production (db-prod-01)" },
+                    new PluginOptionItem { Value = "staging", Label = "Staging (db-staging-01)" },
+                    new PluginOptionItem { Value = "dev", Label = "Development (localhost)" },
+                ],
+                DefaultValue = "dev",
+            },
+            new PluginConfigField
+            {
+                Key = "schema-name",
+                Label = "Schema Name",
+                FieldType = PluginFieldType.Text,
+                Required = true,
+                DefaultValue = "dbo",
+                Description = "The database schema to use for table creation.",
+            },
+            new PluginConfigField
+            {
+                Key = "test-connection",
+                Label = "Test Connection",
+                FieldType = PluginFieldType.Button,
+            },
+        ];
 
     public PluginButtonResult OnButtonClicked(
         string fieldKey,
