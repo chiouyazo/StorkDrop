@@ -19,6 +19,9 @@ public partial class ActionGroupViewModel : ObservableObject
     private bool _isEnabled = true;
 
     [ObservableProperty]
+    private bool _isToggleable = true;
+
+    [ObservableProperty]
     private ObservableCollection<PluginConfigFieldViewModel> _fields =
         new ObservableCollection<PluginConfigFieldViewModel>();
 

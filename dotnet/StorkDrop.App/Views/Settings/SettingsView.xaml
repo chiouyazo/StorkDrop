@@ -335,6 +335,23 @@
             IsEnabled="{Binding CheckForStorkDropUpdates}"
             Margin="0,0,0,8"
           />
+
+          <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+            <Button
+              Content="{DynamicResource Settings_CheckNow}"
+              Style="{DynamicResource OutlinedButton}"
+              Command="{Binding CheckForUpdatesNowCommand}"
+              IsEnabled="{Binding IsCheckingForUpdates, Converter={StaticResource InverseBoolConverter}}"
+              Padding="12,6"
+              Margin="0,0,12,0"
+            />
+            <TextBlock
+              Text="{Binding UpdateCheckResult}"
+              VerticalAlignment="Center"
+              FontSize="12"
+              Foreground="{DynamicResource OnSurfaceVariantBrush}"
+            />
+          </StackPanel>
         </StackPanel>
       </Border>
 

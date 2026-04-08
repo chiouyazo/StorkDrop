@@ -319,9 +319,65 @@
                     FontSize="14"
                     FontWeight="SemiBold"
                     Margin="0,0,0,8"
+                    Visibility="{Binding IsToggleable, Converter={StaticResource BoolToVis}}"
                   >
-                    <TextBlock Text="{Binding Title}" />
+                    <StackPanel Orientation="Horizontal">
+                      <TextBlock Text="{Binding Title}" />
+                      <TextBlock
+                        Text=" (PreInstall)"
+                        FontSize="11"
+                        Foreground="#999999"
+                        VerticalAlignment="Center"
+                        Margin="6,0,0,0"
+                      >
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding Phase}" Value="PreInstall">
+                                <Setter Property="Visibility" Value="Visible" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                      <TextBlock
+                        Text=" (PostInstall)"
+                        FontSize="11"
+                        Foreground="#999999"
+                        VerticalAlignment="Center"
+                        Margin="6,0,0,0"
+                      >
+                        <TextBlock.Style>
+                          <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                              <DataTrigger Binding="{Binding Phase}" Value="PostInstall">
+                                <Setter Property="Visibility" Value="Visible" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </TextBlock.Style>
+                      </TextBlock>
+                    </StackPanel>
                   </CheckBox>
+                  <TextBlock
+                    Text="{Binding Title}"
+                    FontSize="14"
+                    FontWeight="SemiBold"
+                    Margin="0,0,0,8"
+                  >
+                    <TextBlock.Style>
+                      <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                          <DataTrigger Binding="{Binding IsToggleable}" Value="False">
+                            <Setter Property="Visibility" Value="Visible" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </TextBlock.Style>
+                  </TextBlock>
                   <ItemsControl
                     ItemsSource="{Binding Descriptions}"
                     Margin="24,0,0,4"
