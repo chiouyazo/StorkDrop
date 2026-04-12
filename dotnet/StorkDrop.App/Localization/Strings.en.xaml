@@ -177,6 +177,24 @@
     >Please enter a valid boolean value.</system:String
   >
 
+  <!-- Locked files dialog -->
+  <system:String x:Key="LockedFiles_Title">Files In Use</system:String>
+  <system:String x:Key="LockedFiles_Message"
+    >The following processes are using files that need to be updated. You can end them or skip to continue with a deferred replacement.</system:String
+  >
+  <system:String x:Key="LockedFiles_Kill">End Selected Processes</system:String>
+  <system:String x:Key="LockedFiles_Refresh">Refresh</system:String>
+  <system:String x:Key="LockedFiles_Skip">Skip</system:String>
+  <system:String x:Key="LockedFiles_SkipHint"
+    >Files in use will be renamed and replaced on restart. Running processes may become unstable.</system:String
+  >
+  <system:String x:Key="LockedFiles_KillFailed">Could not end process: {0}</system:String>
+  <system:String x:Key="LockedFiles_ProcessName">Process</system:String>
+  <system:String x:Key="LockedFiles_PID">PID</system:String>
+  <system:String x:Key="LockedFiles_User">User</system:String>
+  <system:String x:Key="LockedFiles_Running">Running</system:String>
+  <system:String x:Key="LockedFiles_File">File</system:String>
+
   <!-- Confirmation dialogs -->
   <system:String x:Key="Confirm_Uninstall">Are you sure you want to uninstall {0}?</system:String>
 

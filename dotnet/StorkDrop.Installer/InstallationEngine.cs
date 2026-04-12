@@ -38,6 +38,7 @@ public sealed class InstallationEngine : IInstallationEngine
     public FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
 
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
+    public LockedFilesCallback? OnLockedFilesDetected { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
 
     private static readonly JsonSerializerOptions FileManifestJsonOptions =
@@ -1815,27 +1816,38 @@ public sealed class InstallationEngine : IInstallationEngine
             installed.Version,
             newManifest.Version
         );
-        // Don't throw on locked files -> InstallAsync handles them via rename + deferred delete.
-        // Only warn so the user knows a reboot may be needed.
-        try
+        IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
+            installed.InstalledPath
+        );
+        if (lockedFiles.Count > 0)
         {
-            _fileLockDetector.ThrowIfAnyLocked(installed.InstalledPath);
-        }
-        catch (FileLockedException ex)
-        {
-            _logger.LogWarning(
-                "Locked files detected during update of {ProductId}: {File} (used by {Processes}). Files will be replaced on next reboot.",
-                installed.ProductId,
-                ex.FileName,
-                ex.ProcessNames
-            );
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Installing,
-                    0,
-                    $"Warning: {ex.FileName} is in use. It will be updated on next reboot."
-                )
-            );
+            if (OnLockedFilesDetected is not null)
+            {
+                OnLockedFilesDetected(lockedFiles, _fileLockDetector, installed.InstalledPath);
+            }
+            else
+            {
+                foreach (LockedFileInfo lockedFile in lockedFiles)
+                {
+                    string processNames = string.Join(
+                        ", ",
+                        lockedFile.Processes.Select(p => p.ProcessName)
+                    );
+                    _logger.LogWarning(
+                        "Locked file during update of {ProductId}: {File} (used by {Processes})",
+                        installed.ProductId,
+                        lockedFile.FileName,
+                        processNames
+                    );
+                }
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        $"Warning: {lockedFiles.Count} file(s) in use. They will be replaced on restart."
+                    )
+                );
+            }
         }
 
         string? backupPath = null;

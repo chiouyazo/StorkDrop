@@ -91,4 +91,66 @@ internal static class NativeMethods
         string? lpNewFileName,
         MoveFileFlags dwFlags
     );
+
+    internal const uint PROCESS_QUERY_INFORMATION = 0x0400;
+    internal const uint TOKEN_QUERY = 0x0008;
+
+    internal enum TOKEN_INFORMATION_CLASS
+    {
+        TokenUser = 1,
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct SidAndAttributes
+    {
+        internal IntPtr Sid;
+        internal uint Attributes;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct TokenUser
+    {
+        internal SidAndAttributes User;
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    internal static extern IntPtr OpenProcess(
+        uint dwDesiredAccess,
+        bool bInheritHandle,
+        uint dwProcessId
+    );
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool OpenProcessToken(
+        IntPtr processHandle,
+        uint desiredAccess,
+        out IntPtr tokenHandle
+    );
+
+    [DllImport("advapi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool GetTokenInformation(
+        IntPtr tokenHandle,
+        TOKEN_INFORMATION_CLASS tokenInformationClass,
+        IntPtr tokenInformation,
+        int tokenInformationLength,
+        out int returnLength
+    );
+
+    [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    internal static extern bool LookupAccountSidW(
+        string? lpSystemName,
+        IntPtr sid,
+        char[] lpName,
+        ref int cchName,
+        char[] lpReferencedDomainName,
+        ref int cchReferencedDomainName,
+        out int peUse
+    );
 }

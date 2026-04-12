@@ -197,6 +197,26 @@
     >Bitte geben Sie einen g&#252;ltigen Wahrheitswert ein.</system:String
   >
 
+  <!-- Locked files dialog -->
+  <system:String x:Key="LockedFiles_Title">Dateien in Verwendung</system:String>
+  <system:String x:Key="LockedFiles_Message"
+    >Die folgenden Prozesse verwenden Dateien, die aktualisiert werden m&#252;ssen. Sie k&#246;nnen diese beenden oder &#252;berspringen, um mit einer verz&#246;gerten Ersetzung fortzufahren.</system:String
+  >
+  <system:String x:Key="LockedFiles_Kill">Ausgew&#228;hlte Prozesse beenden</system:String>
+  <system:String x:Key="LockedFiles_Refresh">Aktualisieren</system:String>
+  <system:String x:Key="LockedFiles_Skip">&#220;berspringen</system:String>
+  <system:String x:Key="LockedFiles_SkipHint"
+    >Dateien in Verwendung werden umbenannt und beim Neustart ersetzt. Laufende Prozesse k&#246;nnen instabil werden.</system:String
+  >
+  <system:String x:Key="LockedFiles_KillFailed"
+    >Prozess konnte nicht beendet werden: {0}</system:String
+  >
+  <system:String x:Key="LockedFiles_ProcessName">Prozess</system:String>
+  <system:String x:Key="LockedFiles_PID">PID</system:String>
+  <system:String x:Key="LockedFiles_User">Benutzer</system:String>
+  <system:String x:Key="LockedFiles_Running">Laufzeit</system:String>
+  <system:String x:Key="LockedFiles_File">Datei</system:String>
+
   <!-- Confirmation dialogs -->
   <system:String x:Key="Confirm_Uninstall"
     >M&#246;chten Sie {0} wirklich deinstallieren?</system:String

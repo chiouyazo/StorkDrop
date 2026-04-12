@@ -163,6 +163,25 @@ public partial class App : Application
                 return result;
             };
 
+            engine.OnLockedFilesDetected = (lockedFiles, detector, directory) =>
+            {
+                LockedFilesAction result = LockedFilesAction.Skip;
+                Dispatcher.Invoke(() =>
+                {
+                    Views.LockedFilesDialog dialog = new Views.LockedFilesDialog(
+                        lockedFiles,
+                        detector,
+                        directory
+                    )
+                    {
+                        Owner = MainWindow,
+                    };
+                    if (dialog.ShowDialog() == true)
+                        result = LockedFilesAction.Retry;
+                });
+                return result;
+            };
+
             // Install path resolution via plugins (e.g., {ACMEPath} -> actual directory)
             IEnumerable<IStorkDropPlugin> allPlugins = Services.GetServices<IStorkDropPlugin>();
             List<IInstallPathResolver> pathResolvers = allPlugins

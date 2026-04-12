@@ -31,6 +31,18 @@ public delegate Dictionary<string, string>? ActionGroupConfigCallback(
     Dictionary<string, string> currentValues
 );
 
+public enum LockedFilesAction
+{
+    Skip,
+    Retry,
+}
+
+public delegate LockedFilesAction LockedFilesCallback(
+    IReadOnlyList<LockedFileInfo> lockedFiles,
+    IFileLockDetector detector,
+    string directory
+);
+
 /// <summary>
 /// Defines the contract for the installation engine that handles product installation,
 /// update, and uninstall operations.
@@ -62,6 +74,8 @@ public interface IInstallationEngine
     /// Returns null if the user cancels.
     /// </summary>
     ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
+
+    LockedFilesCallback? OnLockedFilesDetected { get; set; }
 
     IInteractiveStorkPlugin? CurrentInteractivePlugin { get; }
 
