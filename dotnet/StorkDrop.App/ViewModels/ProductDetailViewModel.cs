@@ -91,6 +91,9 @@ public partial class ProductDetailViewModel : ObservableObject
 
     public event Action? GoBackRequested;
 
+    partial void OnManifestChanged(ProductManifest? value) =>
+        OnPropertyChanged(nameof(VersionDisplay));
+
     partial void OnIsInstallingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanInstallSelectedVersion));

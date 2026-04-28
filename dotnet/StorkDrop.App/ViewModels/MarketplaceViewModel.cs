@@ -673,6 +673,8 @@ public partial class MarketplaceViewModel : ObservableObject
                     Publisher = manifest.Publisher,
                     FeedName = entry.FeedName,
                     FeedId = entry.FeedId,
+                    BadgeText = manifest.BadgeText,
+                    BadgeColor = manifest.BadgeColor,
                 };
 
                 // Fire and forget image loading

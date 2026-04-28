@@ -32,17 +32,11 @@ public partial class MainWindow : Window
             return;
         }
 
-        IConfigurationService configService =
-            App.Services.GetRequiredService<IConfigurationService>();
-
-        AppConfiguration? config = Task.Run(async () => await configService.LoadAsync())
-            .GetAwaiter()
-            .GetResult();
-
-        if (config?.AutoCheckForUpdates == true)
+        TrayIconService? trayService = App.Services.GetService<TrayIconService>();
+        if (trayService?.IsVisible == true)
         {
             e.Cancel = true;
-            MinimizeToTray(config, configService);
+            Hide();
         }
         else
         {

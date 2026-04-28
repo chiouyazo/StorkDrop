@@ -204,6 +204,30 @@ public partial class App : Application
             MainWindow mainWindow = Services.GetRequiredService<MainWindow>();
             mainWindow.Show();
 
+            TrayIconService trayService = Services.GetRequiredService<TrayIconService>();
+            trayService.Show(
+                onOpen: () =>
+                {
+                    if (mainWindow.IsVisible)
+                    {
+                        if (mainWindow.WindowState == System.Windows.WindowState.Minimized)
+                            mainWindow.WindowState = System.Windows.WindowState.Normal;
+                        mainWindow.Activate();
+                    }
+                    else
+                    {
+                        mainWindow.Show();
+                        mainWindow.WindowState = System.Windows.WindowState.Normal;
+                        mainWindow.Activate();
+                    }
+                },
+                onExit: () =>
+                {
+                    trayService.Hide();
+                    Current.Shutdown();
+                }
+            );
+
             // Listen for duplicate instance signal - show main window when triggered
             _ = Task.Run(() =>
             {

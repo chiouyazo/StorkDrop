@@ -23,5 +23,7 @@ public sealed record ProductManifest(
     long? DownloadSizeBytes = null,
     string? ShortcutFolder = null,
     string[]? RequiredProductIds = null,
-    OptionalPostProduct[]? OptionalPostProducts = null
+    OptionalPostProduct[]? OptionalPostProducts = null,
+    string? BadgeText = null,
+    string? BadgeColor = null
 );

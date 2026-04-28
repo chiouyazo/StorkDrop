@@ -60,10 +60,20 @@ public partial class ProductCardViewModel : ObservableObject
     [ObservableProperty]
     private string _feedId = string.Empty;
 
+    [ObservableProperty]
+    private string? _badgeText;
+
+    [ObservableProperty]
+    private string? _badgeColor;
+
     public bool IsExecutable => InstallType == InstallType.Executable;
+
+    public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
 
     public string VersionDisplay =>
         string.IsNullOrEmpty(FeedName) ? $"v{Version}" : $"{FeedName} / v{Version}";
+
+    partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
 
     /// <summary>
     /// Loads the product image from the specified URL asynchronously.

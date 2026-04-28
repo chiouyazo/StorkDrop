@@ -10,6 +10,8 @@ public sealed class TrayIconService : IDisposable
 {
     private TaskbarIcon? _trayIcon;
 
+    public bool IsVisible => _trayIcon?.Visibility == Visibility.Visible;
+
     public void Show(Action onOpen, Action onExit)
     {
         if (_trayIcon is not null)

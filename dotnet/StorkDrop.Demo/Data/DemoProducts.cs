@@ -23,13 +23,15 @@ internal static class DemoProducts
         ],
         ShortcutFolder: "Nova Software",
         OptionalPostProducts: [new OptionalPostProduct("nova-example-data", HideNoAccess: false)],
-        CleanupInfo: new CleanupInfo([], [@"%APPDATA%\Demo\NovaApps\Dashboard"])
+        CleanupInfo: new CleanupInfo([], [@"%APPDATA%\Demo\NovaApps\Dashboard"]),
+        BadgeText: "STABLE",
+        BadgeColor: "#2E7D32"
     );
 
     public static readonly ProductManifest NovaCliTools = new(
         ProductId: "nova-cli-tools",
         Title: "Nova CLI Tools",
-        Version: "2.0.0",
+        Version: "2.0.0-rc.3",
         ReleaseDate: new DateOnly(2026, 3, 15),
         InstallType: InstallType.Plugin,
         Description: "Command-line utilities for Nova platform management and automation.",
@@ -42,13 +44,15 @@ internal static class DemoProducts
             new EnvironmentVariableInfo("NOVA_HOME", "{InstallPath}", "set"),
             new EnvironmentVariableInfo("PATH", @"{InstallPath}\bin", "append"),
         ],
-        CleanupInfo: new CleanupInfo([], [])
+        CleanupInfo: new CleanupInfo([], []),
+        BadgeText: "RC",
+        BadgeColor: "#FF9800"
     );
 
     public static readonly ProductManifest NovaReporting = new(
         ProductId: "nova-reporting",
         Title: "Nova Reporting Module",
-        Version: "1.3.0",
+        Version: "1.3.0-dev.42",
         ReleaseDate: new DateOnly(2026, 3, 28),
         InstallType: InstallType.Plugin,
         Description: "Reporting engine with database configuration, scheduled report generation, and email delivery.",
@@ -64,13 +68,15 @@ internal static class DemoProducts
             ),
         ],
         RequiredProductIds: ["nova-dashboard"],
-        CleanupInfo: new CleanupInfo([], [])
+        CleanupInfo: new CleanupInfo([], []),
+        BadgeText: "DEV",
+        BadgeColor: "#E53935"
     );
 
     public static readonly ProductManifest ZetaSyncModule = new(
         ProductId: "zetasync-module",
         Title: "ZetaSync Module",
-        Version: "1.0.0",
+        Version: "1.0.0-beta.2",
         ReleaseDate: new DateOnly(2026, 2, 20),
         InstallType: InstallType.Plugin,
         Description: "Synchronizes data between Nova Dashboard and external systems via REST API.",
@@ -79,7 +85,9 @@ internal static class DemoProducts
         Publisher: "Zeta Integrations",
         DownloadSizeBytes: 4_200_000,
         RequiredProductIds: ["nova-dashboard", "nova-cli-tools"],
-        CleanupInfo: new CleanupInfo([], [])
+        CleanupInfo: new CleanupInfo([], []),
+        BadgeText: "BETA",
+        BadgeColor: "#7B1FA2"
     );
 
     public static readonly ProductManifest NovaExampleData = new(
@@ -128,7 +136,7 @@ internal static class DemoProducts
         new(
             ProductId: "nova-cli-tools",
             Title: "Nova CLI Tools",
-            Version: "1.0.0",
+            Version: "2.0.0-rc.2",
             InstalledPath: @"C:\Users\Demo\StorkDrop\CLI",
             InstalledDate: new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc),
             FeedId: "internal"
