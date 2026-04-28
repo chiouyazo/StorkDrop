@@ -59,7 +59,7 @@ public sealed class PluginConfigField
 
     /// <summary>
     /// Whether this field is enabled and interactive. When false, the field is rendered
-    /// but greyed out. Plugins can set this dynamically based on other field values.
+    /// but greyed out. Used as the initial state if <see cref="EnabledWhen"/> is not set.
     /// </summary>
     public bool IsEnabled { get; set; } = true;
 
@@ -68,4 +68,11 @@ public sealed class PluginConfigField
     /// cannot be edited by the user.
     /// </summary>
     public bool IsReadOnly { get; set; } = false;
+
+    /// <summary>
+    /// Optional condition that dynamically controls whether this field is enabled.
+    /// Receives the current values of all fields and returns true if the field should be enabled.
+    /// Evaluated whenever any field value changes in the dialog.
+    /// </summary>
+    public Func<Dictionary<string, string>, bool>? EnabledWhen { get; set; }
 }

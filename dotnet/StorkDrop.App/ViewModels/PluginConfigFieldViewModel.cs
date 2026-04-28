@@ -61,6 +61,8 @@ public partial class PluginConfigFieldViewModel : ObservableObject
     [ObservableProperty]
     private bool _isReadOnly;
 
+    public Func<Dictionary<string, string>, bool>? EnabledWhen { get; set; }
+
     public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
     public bool HasStatusText => !string.IsNullOrEmpty(StatusText);
 

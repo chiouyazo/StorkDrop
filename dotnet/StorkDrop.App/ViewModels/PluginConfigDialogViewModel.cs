@@ -88,6 +88,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             PluginConfigFieldViewModel fieldVm = CreateFieldViewModel(field, previousValues);
             Fields.Add(fieldVm);
         }
+        EvaluateEnabledConditions();
     }
 
     private void BuildActionGroups(
@@ -124,6 +125,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         }
 
         OnPropertyChanged(nameof(HasActionGroups));
+        EvaluateEnabledConditions();
     }
 
     private void RebuildGroupFields(
@@ -145,12 +147,14 @@ public partial class PluginConfigDialogViewModel : ObservableObject
                     fieldVm.Description = updated.Description ?? string.Empty;
                     fieldVm.IsEnabled = updated.IsEnabled;
                     fieldVm.IsReadOnly = updated.IsReadOnly;
+                    fieldVm.EnabledWhen = updated.EnabledWhen;
                 }
             }
         }
+        EvaluateEnabledConditions();
     }
 
-    private static PluginConfigFieldViewModel CreateFieldViewModel(
+    private PluginConfigFieldViewModel CreateFieldViewModel(
         PluginConfigField field,
         Dictionary<string, string> previousValues
     )
@@ -167,6 +171,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             Max = field.Max,
             IsEnabled = field.IsEnabled,
             IsReadOnly = field.IsReadOnly,
+            EnabledWhen = field.EnabledWhen,
         };
 
         if (previousValues.TryGetValue(field.Key, out string? previousValue))
@@ -174,7 +179,36 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         else if (!string.IsNullOrEmpty(field.DefaultValue))
             fieldVm.Value = field.DefaultValue;
 
+        fieldVm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(PluginConfigFieldViewModel.Value))
+                EvaluateEnabledConditions();
+        };
+
         return fieldVm;
+    }
+
+    private bool _isEvaluating;
+
+    private void EvaluateEnabledConditions()
+    {
+        if (_isEvaluating)
+            return;
+
+        _isEvaluating = true;
+        try
+        {
+            Dictionary<string, string> currentValues = GetValues();
+            foreach (PluginConfigFieldViewModel field in Fields)
+            {
+                if (field.EnabledWhen is not null)
+                    field.IsEnabled = field.EnabledWhen(currentValues);
+            }
+        }
+        finally
+        {
+            _isEvaluating = false;
+        }
     }
 
     public bool Validate()

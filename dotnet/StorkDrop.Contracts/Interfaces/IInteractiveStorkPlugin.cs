@@ -11,11 +11,6 @@ public interface IInteractiveStorkPlugin
 {
     /// <summary>
     /// Called when the user clicks a button in the plugin configuration dialog.
-    /// Use this to perform validation, test connections, fetch dynamic data, or
-    /// update the configuration schema based on user interaction.
     /// </summary>
-    /// <param name="fieldKey">The key of the button field that was clicked.</param>
-    /// <param name="currentValues">The current values of all configuration fields at the time of the click.</param>
-    /// <returns>A result containing optional status text, error state, and an optionally updated schema.</returns>
     PluginButtonResult OnButtonClicked(string fieldKey, Dictionary<string, string> currentValues);
 }
