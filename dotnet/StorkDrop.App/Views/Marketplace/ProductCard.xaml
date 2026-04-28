@@ -104,13 +104,15 @@
         <TextBlock Text="{Binding Title}" Style="{DynamicResource HeadingSmall}" />
       </Viewbox>
 
-      <TextBlock
+      <Viewbox
         Grid.Row="2"
-        Text="{Binding VersionDisplay}"
-        FontSize="12"
-        Foreground="#999999"
+        HorizontalAlignment="Left"
+        StretchDirection="DownOnly"
+        Stretch="Uniform"
         Margin="0,0,0,8"
-      />
+      >
+        <TextBlock Text="{Binding VersionDisplay}" FontSize="12" Foreground="#999999" />
+      </Viewbox>
 
       <TextBlock
         Grid.Row="3"
