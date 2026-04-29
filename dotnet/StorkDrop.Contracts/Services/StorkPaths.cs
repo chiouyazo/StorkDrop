@@ -41,6 +41,48 @@ public static class StorkPaths
             "StorkDrop"
         );
 
+    /// <summary>
+    /// Gets the plugin settings file path for a StorkDrop platform plugin.
+    /// </summary>
     public static string PluginConfigFile(string pluginId) =>
         Path.Combine(ConfigDir, $"plugin-settings-{pluginId}.json");
+
+    /// <summary>
+    /// Gets the file manifest path for a specific product instance.
+    /// </summary>
+    public static string FileManifestPath(string productId, string instanceId) =>
+        Path.Combine(StorkConfigDir, $"{productId}_{instanceId}.files.json");
+
+    /// <summary>
+    /// Gets the plugin configuration values path for a specific product instance.
+    /// </summary>
+    public static string InstancePluginConfigPath(string productId, string instanceId) =>
+        Path.Combine(StorkConfigDir, $"plugin-config-{productId}_{instanceId}.json");
+
+    /// <summary>
+    /// Gets the environment variable tracking path for a specific product instance.
+    /// </summary>
+    public static string EnvVarsPath(string productId, string instanceId) =>
+        Path.Combine(StorkConfigDir, $"{productId}_{instanceId}.envvars.json");
+
+    /// <summary>
+    /// Gets the legacy file manifest path (pre-instance-aware).
+    /// Used as fallback during migration from older versions.
+    /// </summary>
+    public static string LegacyFileManifestPath(string productId) =>
+        Path.Combine(StorkConfigDir, $"{productId}.files.json");
+
+    /// <summary>
+    /// Gets the legacy plugin config path (pre-instance-aware).
+    /// Used as fallback during migration from older versions.
+    /// </summary>
+    public static string LegacyPluginConfigPath(string productId) =>
+        Path.Combine(StorkConfigDir, $"plugin-config-{productId}.json");
+
+    /// <summary>
+    /// Gets the legacy environment variable tracking path (pre-instance-aware).
+    /// Used as fallback during migration from older versions.
+    /// </summary>
+    public static string LegacyEnvVarsPath(string productId) =>
+        Path.Combine(StorkConfigDir, $"{productId}.envvars.json");
 }

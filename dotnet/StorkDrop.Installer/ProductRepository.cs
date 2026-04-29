@@ -84,7 +84,18 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             >(json, JsonOptions);
             _products = deserialized ?? [];
 
+            bool migrated = MigrateInstanceIds(_products);
             ValidateNoDuplicateProducts(_products);
+
+            if (migrated)
+            {
+                _logger.LogInformation("Migrated legacy products to include InstanceId, saving");
+                string migratedJson = JsonSerializer.Serialize(_products, JsonOptions);
+                await SafeFileWriter
+                    .WriteAtomicAsync(_filePath, migratedJson, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             _logger.LogInformation(
                 "Loaded {Count} installed products from repository",
                 _products.Count
@@ -120,7 +131,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 
     public async Task<InstalledProduct?> GetByIdAsync(
         string productId,
-        string? feedId = null,
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
         CancellationToken cancellationToken = default
     )
     {
@@ -128,11 +139,26 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            if (feedId is not null)
-                return _products.FirstOrDefault(p =>
-                    p.ProductId == productId && p.FeedId == feedId
-                );
-            return _products.FirstOrDefault(p => p.ProductId == productId);
+            return _products.FirstOrDefault(p =>
+                p.ProductId == productId && p.InstanceId == instanceId
+            );
+        }
+        finally
+        {
+            _lock.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<InstalledProduct>> GetInstancesAsync(
+        string productId,
+        CancellationToken cancellationToken = default
+    )
+    {
+        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            return _products.Where(p => p.ProductId == productId).ToList();
         }
         finally
         {
@@ -146,8 +172,9 @@ public sealed class ProductRepository : IProductRepository, IDisposable
     )
     {
         _logger.LogInformation(
-            "Adding product {ProductId} v{Version} to repository",
+            "Adding product {ProductId}/{InstanceId} v{Version} to repository",
             product.ProductId,
+            product.InstanceId,
             product.Version
         );
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -155,7 +182,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             _products.RemoveAll(p =>
-                p.ProductId == product.ProductId && p.FeedId == product.FeedId
+                p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
             );
             _products.Add(product);
             await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -176,7 +203,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
             int index = _products.FindIndex(p =>
-                p.ProductId == product.ProductId && p.FeedId == product.FeedId
+                p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
             );
             if (index >= 0)
             {
@@ -192,18 +219,22 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 
     public async Task RemoveAsync(
         string productId,
-        string? feedId = null,
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
         CancellationToken cancellationToken = default
     )
     {
-        _logger.LogInformation("Removing product {ProductId} from repository", productId);
+        _logger.LogInformation(
+            "Removing product {ProductId}/{InstanceId} from repository",
+            productId,
+            instanceId
+        );
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            int removed = feedId is not null
-                ? _products.RemoveAll(p => p.ProductId == productId && p.FeedId == feedId)
-                : _products.RemoveAll(p => p.ProductId == productId);
+            int removed = _products.RemoveAll(p =>
+                p.ProductId == productId && p.InstanceId == instanceId
+            );
             if (removed > 0)
             {
                 await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -224,15 +255,60 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             .ConfigureAwait(false);
     }
 
+    private bool MigrateInstanceIds(List<InstalledProduct> products)
+    {
+        bool migrated = false;
+        for (int i = 0; i < products.Count; i++)
+        {
+            if (string.IsNullOrEmpty(products[i].InstanceId))
+            {
+                _logger.LogWarning(
+                    "Product {ProductId} has no InstanceId, migrating to 'default'",
+                    products[i].ProductId
+                );
+                products[i] = products[i] with { InstanceId = InstanceIdHelper.DefaultInstanceId };
+                migrated = true;
+            }
+        }
+
+        // Deduplicate: if multiple entries have the same (ProductId, InstanceId) after migration,
+        // keep the most recently installed one
+        List<InstalledProduct> deduped = products
+            .GroupBy(p => (p.ProductId, p.InstanceId))
+            .Select(g =>
+            {
+                if (g.Count() > 1)
+                {
+                    _logger.LogWarning(
+                        "Duplicate entries for {ProductId}/{InstanceId}, keeping most recent",
+                        g.Key.ProductId,
+                        g.Key.InstanceId
+                    );
+                    migrated = true;
+                    return g.OrderByDescending(p => p.InstalledDate).First();
+                }
+                return g.First();
+            })
+            .ToList();
+
+        if (migrated)
+        {
+            products.Clear();
+            products.AddRange(deduped);
+        }
+
+        return migrated;
+    }
+
     private static void ValidateNoDuplicateProducts(List<InstalledProduct> products)
     {
-        HashSet<(string, string?)> seen = [];
+        HashSet<(string, string)> seen = [];
         foreach (InstalledProduct product in products)
         {
-            if (!seen.Add((product.ProductId, product.FeedId)))
+            if (!seen.Add((product.ProductId, product.InstanceId)))
             {
                 throw new InvalidOperationException(
-                    $"Doppelte ProductId/FeedId in installierter Produktliste: {product.ProductId} ({product.FeedId})"
+                    $"Duplicate ProductId/InstanceId in installed product list: {product.ProductId} ({product.InstanceId})"
                 );
             }
         }

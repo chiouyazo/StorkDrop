@@ -70,6 +70,8 @@
   <!-- Install -->
   <system:String x:Key="Install_Title">Installation</system:String>
   <system:String x:Key="Install_Button">Installieren</system:String>
+  <system:String x:Key="Installed_Status">Installiert</system:String>
+  <system:String x:Key="Manage_Button">Verwalten</system:String>
   <system:String x:Key="Install_Download">Herunterladen</system:String>
   <system:String x:Key="Install_AsAdmin">Als Administrator installieren</system:String>
   <system:String x:Key="Install_AdminHint"
@@ -80,6 +82,7 @@
   <system:String x:Key="Install_Installing">Wird installiert...</system:String>
   <system:String x:Key="Install_Installed">Installiert</system:String>
   <system:String x:Key="Install_Update">Aktualisieren</system:String>
+  <system:String x:Key="Install_SwitchChannel">Kanal wechseln</system:String>
 
   <!-- Marketplace -->
   <system:String x:Key="Marketplace_Search">Suchen...</system:String>
@@ -94,6 +97,7 @@
   <system:String x:Key="Installed_GroupActions">Aktionen</system:String>
   <system:String x:Key="Installed_GroupProducts">Installierte Produkte</system:String>
   <system:String x:Key="Installed_Downloaded">Heruntergeladen</system:String>
+  <system:String x:Key="Installed_SwitchChannel">Kanal wechseln</system:String>
 
   <!-- Re-execute -->
   <system:String x:Key="ReExecute_Run">Ausfuhren</system:String>
@@ -297,6 +301,7 @@
   >
 
   <!-- Product detail -->
+  <system:String x:Key="ProductDetail_Channel">Kanal</system:String>
   <system:String x:Key="ProductDetail_Version">Version</system:String>
   <system:String x:Key="ProductDetail_VersionHistory">Versionsverlauf</system:String>
   <system:String x:Key="ProductDetail_ReleaseNotes">Versionshinweise</system:String>

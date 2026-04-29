@@ -1,7 +1,12 @@
 namespace StorkDrop.Contracts.Models;
 
+/// <summary>
+/// Represents a product instance that has been installed on the system.
+/// Identity is determined by the combination of <see cref="ProductId"/> and <see cref="InstanceId"/>.
+/// </summary>
 public sealed record InstalledProduct(
     string ProductId,
+    string InstanceId,
     string Title,
     string Version,
     string InstalledPath,

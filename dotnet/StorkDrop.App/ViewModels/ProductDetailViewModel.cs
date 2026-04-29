@@ -49,6 +49,18 @@ public partial class ProductDetailViewModel : ObservableObject
     private string _feedName = string.Empty;
 
     [ObservableProperty]
+    private ObservableCollection<ChannelInfo> _availableChannels =
+        new ObservableCollection<ChannelInfo>();
+
+    [ObservableProperty]
+    private ChannelInfo? _selectedChannel;
+
+    public bool HasMultipleChannels => AvailableChannels.Count > 1;
+
+    private string? _installedFeedId;
+    private bool _isInitialLoad;
+
+    [ObservableProperty]
     private ProductManifest? _manifest;
 
     [ObservableProperty]
@@ -95,6 +107,53 @@ public partial class ProductDetailViewModel : ObservableObject
     partial void OnManifestChanged(ProductManifest? value) =>
         OnPropertyChanged(nameof(VersionDisplay));
 
+    partial void OnAvailableChannelsChanged(ObservableCollection<ChannelInfo> value) =>
+        OnPropertyChanged(nameof(HasMultipleChannels));
+
+    partial void OnSelectedChannelChanged(ChannelInfo? value)
+    {
+        if (value is null || Manifest is null)
+            return;
+
+        if (_isInitialLoad)
+            return;
+
+        FeedId = value.FeedId;
+        FeedName = value.FeedName;
+        OnPropertyChanged(nameof(FeedDisplay));
+        OnPropertyChanged(nameof(HasFeedDisplay));
+        _ = ReloadManifestForChannelAsync(value, Manifest.ProductId);
+    }
+
+    private async Task ReloadManifestForChannelAsync(ChannelInfo channel, string productId)
+    {
+        try
+        {
+            IRegistryClient client = _feedRegistry.GetClient(channel.FeedId);
+            ProductManifest? manifest = await client.GetProductManifestAsync(productId);
+            if (manifest is null)
+                return;
+
+            Manifest = manifest;
+
+            IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync(productId);
+            AvailableVersions = new ObservableCollection<string>(versions);
+            SelectedVersion = manifest.Version;
+            SelectedVersionReleaseNotes = manifest.ReleaseNotes ?? string.Empty;
+            RecommendedInstallPath = manifest.RecommendedInstallPath ?? string.Empty;
+            HasPlugins = manifest.Plugins is { Length: > 0 };
+            UpdateInstallButtonText();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to reload manifest for channel {FeedId}",
+                channel.FeedId
+            );
+        }
+    }
+
     partial void OnIsInstallingChanged(bool value)
     {
         OnPropertyChanged(nameof(CanInstallSelectedVersion));
@@ -121,7 +180,12 @@ public partial class ProductDetailViewModel : ObservableObject
     {
         bool isExecutable = Manifest?.InstallType == InstallType.Executable;
 
-        if (IsInstalled && SelectedVersion == InstalledVersion)
+        if (IsInstalled && _installedFeedId is not null && FeedId != _installedFeedId)
+        {
+            IsSelectedVersionInstalled = false;
+            InstallButtonText = LocalizationManager.GetString("Install_SwitchChannel");
+        }
+        else if (IsInstalled && SelectedVersion == InstalledVersion)
         {
             IsSelectedVersionInstalled = true;
             InstallButtonText = isExecutable
@@ -145,23 +209,82 @@ public partial class ProductDetailViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAsync(string productId)
     {
-        IRegistryClient client = _feedRegistry.GetClient(FeedId);
-        FeedName =
-            _feedRegistry.GetFeeds().FirstOrDefault(f => f.Id == FeedId)?.Name ?? string.Empty;
-        Manifest = await client.GetProductManifestAsync(productId);
+        List<ChannelInfo> channels = new List<ChannelInfo>();
+        IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
+
+        foreach (FeedInfo feed in feeds)
+        {
+            try
+            {
+                IRegistryClient client = _feedRegistry.GetClient(feed.Id);
+                ProductManifest? manifest = await client.GetProductManifestAsync(productId);
+                if (manifest is not null)
+                {
+                    ChannelInfo channel = new ChannelInfo(
+                        FeedId: feed.Id,
+                        FeedName: feed.Name,
+                        BadgeText: manifest.BadgeText,
+                        BadgeColor: manifest.BadgeColor,
+                        LatestVersion: manifest.Version
+                    );
+                    channels.Add(channel);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to check feed {FeedId} for product {ProductId}",
+                    feed.Id,
+                    productId
+                );
+            }
+        }
+
+        AvailableChannels = new ObservableCollection<ChannelInfo>(channels);
+
+        IReadOnlyList<InstalledProduct> instances = await _productRepository.GetInstancesAsync(
+            productId
+        );
+        InstalledProduct? installed = instances.FirstOrDefault();
+        IsInstalled = installed is not null;
+        InstalledVersion = installed?.Version ?? string.Empty;
+        _installedFeedId = installed?.FeedId;
+
+        ChannelInfo? selectedChannel =
+            (
+                installed?.FeedId is not null
+                    ? channels.FirstOrDefault(c => c.FeedId == installed.FeedId)
+                    : null
+            )
+            ?? (
+                !string.IsNullOrEmpty(FeedId)
+                    ? channels.FirstOrDefault(c => c.FeedId == FeedId)
+                    : null
+            )
+            ?? channels.FirstOrDefault();
+
+        if (selectedChannel is null)
+            return;
+
+        FeedId = selectedChannel.FeedId;
+        FeedName = selectedChannel.FeedName;
+
+        IRegistryClient selectedClient = _feedRegistry.GetClient(selectedChannel.FeedId);
+        Manifest = await selectedClient.GetProductManifestAsync(productId);
         if (Manifest is null)
             return;
 
-        IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync(productId);
+        IReadOnlyList<string> versions = await selectedClient.GetAvailableVersionsAsync(productId);
         AvailableVersions = new ObservableCollection<string>(versions);
         SelectedVersion = Manifest.Version;
         SelectedVersionReleaseNotes = Manifest.ReleaseNotes ?? string.Empty;
         RecommendedInstallPath = Manifest.RecommendedInstallPath ?? string.Empty;
         HasPlugins = Manifest.Plugins is { Length: > 0 };
 
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
-        IsInstalled = installed is not null;
-        InstalledVersion = installed?.Version ?? string.Empty;
+        _isInitialLoad = true;
+        SelectedChannel = selectedChannel;
+        _isInitialLoad = false;
         UpdateInstallButtonText();
     }
 
@@ -270,10 +393,11 @@ public partial class ProductDetailViewModel : ObservableObject
                     {
                         await InstallPostProductAsync(reqProduct);
 
-                        InstalledProduct? check = await _productRepository.GetByIdAsync(
-                            reqProduct.Manifest.ProductId
-                        );
-                        if (check is null)
+                        IReadOnlyList<InstalledProduct> checkInstances =
+                            await _productRepository.GetInstancesAsync(
+                                reqProduct.Manifest.ProductId
+                            );
+                        if (checkInstances.Count == 0)
                         {
                             _logger.LogWarning(
                                 "Required product {ProductId} was not installed successfully, aborting",
@@ -534,7 +658,10 @@ public partial class ProductDetailViewModel : ObservableObject
 
         try
         {
-            InstalledProduct? installed = await _productRepository.GetByIdAsync(Manifest.ProductId);
+            IReadOnlyList<InstalledProduct> instances = await _productRepository.GetInstancesAsync(
+                Manifest.ProductId
+            );
+            InstalledProduct? installed = instances.FirstOrDefault();
             if (installed is null)
                 return;
 

@@ -29,6 +29,12 @@ public sealed class PluginContext
     public string StorkConfigDirectory { get; set; } = string.Empty;
 
     /// <summary>
+    /// Gets or sets the instance identifier for multi-instance products.
+    /// Plugins can use this to differentiate service names, database schemas, etc.
+    /// </summary>
+    public string InstanceId { get; set; } = "default";
+
+    /// <summary>
     /// The values the user entered in the dynamic config UI, keyed by <see cref="PluginConfigField.Key"/>.
     /// For <see cref="PluginFieldType.MultiSelect"/>, values are comma-separated.
     /// </summary>
@@ -38,4 +44,10 @@ public sealed class PluginContext
     /// Extra data provided by <see cref="IStorkDropPlugin"/> implementations.
     /// </summary>
     public Dictionary<string, object> PluginData { get; set; } = new Dictionary<string, object>();
+
+    /// <summary>
+    /// Optional callback that plugins can invoke to log messages during execution.
+    /// Messages are forwarded to the installation tracker's log entries.
+    /// </summary>
+    public Action<string>? Log { get; set; }
 }

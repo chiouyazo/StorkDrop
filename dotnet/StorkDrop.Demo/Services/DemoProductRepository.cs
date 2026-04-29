@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Demo.Data;
 
 namespace StorkDrop.Demo.Services;
@@ -22,9 +23,17 @@ internal sealed class DemoProductRepository : IProductRepository
 
     public Task<InstalledProduct?> GetByIdAsync(
         string productId,
-        string? feedId = null,
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
         CancellationToken cancellationToken = default
     ) => Task.FromResult(_products.GetValueOrDefault(productId));
+
+    public Task<IReadOnlyList<InstalledProduct>> GetInstancesAsync(
+        string productId,
+        CancellationToken cancellationToken = default
+    ) =>
+        Task.FromResult<IReadOnlyList<InstalledProduct>>(
+            _products.Values.Where(p => p.ProductId == productId).ToList()
+        );
 
     public Task AddAsync(InstalledProduct product, CancellationToken cancellationToken = default)
     {
@@ -40,7 +49,7 @@ internal sealed class DemoProductRepository : IProductRepository
 
     public Task RemoveAsync(
         string productId,
-        string? feedId = null,
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
         CancellationToken cancellationToken = default
     )
     {

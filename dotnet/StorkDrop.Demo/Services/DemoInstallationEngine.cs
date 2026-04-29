@@ -1,6 +1,7 @@
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Demo.Plugins;
 
 namespace StorkDrop.Demo.Services;
@@ -346,6 +347,7 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         await _productRepository.AddAsync(
             new InstalledProduct(
                 manifest.ProductId,
+                options.InstanceId,
                 manifest.Title,
                 manifest.Version,
                 resolvedPath,
@@ -411,7 +413,11 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
-        await _productRepository.RemoveAsync(product.ProductId, product.FeedId, cancellationToken);
+        await _productRepository.RemoveAsync(
+            product.ProductId,
+            product.InstanceId,
+            cancellationToken
+        );
         await _activityLog.LogAsync(
             new ActivityLogEntry(
                 Guid.NewGuid().ToString(),
@@ -602,5 +608,18 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         );
 
         return new InstallResult { Success = true };
+    }
+
+    public Task<InstallResult> SwitchChannelAsync(
+        InstalledProduct installed,
+        ProductManifest newChannelManifest,
+        InstallOptions options,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    )
+    {
+        throw new NotImplementedException(
+            "Channel switching will be implemented in a later phase."
+        );
     }
 }

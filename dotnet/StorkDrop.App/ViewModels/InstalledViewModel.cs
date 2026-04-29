@@ -54,6 +54,13 @@ public partial class InstalledViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLoading;
 
+    [ObservableProperty]
+    private string _searchText = string.Empty;
+
+    private List<InstalledProductViewModel> _allProducts = [];
+
+    public event Action<string>? NavigateToProductDetail;
+
     /// <summary>
     /// Gets a value indicating whether there are installed products.
     /// </summary>
@@ -146,6 +153,7 @@ public partial class InstalledViewModel : ObservableObject
                     new InstalledProductViewModel
                     {
                         ProductId = p.ProductId,
+                        InstanceId = p.InstanceId,
                         Title = p.Title,
                         Version = p.Version,
                         InstalledPath = p.InstalledPath,
@@ -159,7 +167,8 @@ public partial class InstalledViewModel : ObservableObject
                     }
                 );
             }
-            Products = new ObservableCollection<InstalledProductViewModel>(productVms);
+            _allProducts = productVms;
+            ApplySearchFilter();
         }
         finally
         {
@@ -167,6 +176,32 @@ public partial class InstalledViewModel : ObservableObject
             OnPropertyChanged(nameof(HasProducts));
             OnPropertyChanged(nameof(HasNoProducts));
         }
+    }
+
+    partial void OnSearchTextChanged(string value)
+    {
+        ApplySearchFilter();
+    }
+
+    private void ApplySearchFilter()
+    {
+        if (string.IsNullOrWhiteSpace(SearchText))
+        {
+            Products = new ObservableCollection<InstalledProductViewModel>(_allProducts);
+        }
+        else
+        {
+            List<InstalledProductViewModel> filtered = _allProducts
+                .Where(p =>
+                    p.Title.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                    || p.ProductId.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                    || p.InstanceId.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+                )
+                .ToList();
+            Products = new ObservableCollection<InstalledProductViewModel>(filtered);
+        }
+        OnPropertyChanged(nameof(HasProducts));
+        OnPropertyChanged(nameof(HasNoProducts));
     }
 
     /// <summary>
@@ -190,12 +225,13 @@ public partial class InstalledViewModel : ObservableObject
         if (!_dialogService.ShowConfirmation(confirmMessage))
             return;
 
+        TrackedInstallation? tracked = null;
         try
         {
             if (needsAdmin)
             {
                 bool elevated = await Task.Run(() =>
-                    ElevationHelper.RunElevatedUninstall(product.ProductId, product.FeedId)
+                    ElevationHelper.RunElevatedUninstall(product.ProductId, product.InstanceId)
                 );
 
                 if (!elevated)
@@ -206,7 +242,6 @@ public partial class InstalledViewModel : ObservableObject
                     return;
                 }
 
-                // Reload repository from disk (elevated process modified it)
                 await _productRepository.ReloadAsync();
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
@@ -224,14 +259,32 @@ public partial class InstalledViewModel : ObservableObject
 
             InstalledProduct? installed = await _productRepository.GetByIdAsync(
                 product.ProductId,
-                product.FeedId,
+                product.InstanceId,
                 cancellationToken
             );
             if (installed is not null)
             {
+                tracked = _tracker.StartInstallation(
+                    product.ProductId,
+                    $"Uninstalling: {product.DisplayName}"
+                );
+                tracked.AddLog($"Uninstalling {product.Title} v{product.Version}");
+
+                Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+                {
+                    tracked.Percentage = p.Percentage;
+                    tracked.StatusMessage = p.Message;
+                    if (!string.IsNullOrEmpty(p.Message))
+                        tracked.AddLog(p.Message);
+                });
+
                 try
                 {
-                    await _coordinator.UninstallWithIsolationAsync(installed, cancellationToken);
+                    await _coordinator.UninstallWithIsolationAsync(
+                        installed,
+                        progress,
+                        cancellationToken
+                    );
                 }
                 catch (UnauthorizedAccessException)
                 {
@@ -240,10 +293,12 @@ public partial class InstalledViewModel : ObservableObject
                         product.ProductId
                     );
                     bool elevated = await Task.Run(() =>
-                        ElevationHelper.RunElevatedUninstall(product.ProductId, product.FeedId)
+                        ElevationHelper.RunElevatedUninstall(product.ProductId, product.InstanceId)
                     );
                     if (!elevated)
                     {
+                        tracked.Complete(false, "Administrator rights denied");
+                        _tracker.NotifyChanged();
                         _dialogService.ShowError(
                             LocalizationManager.GetString("Error_AdminDenied_Uninstall")
                         );
@@ -251,6 +306,9 @@ public partial class InstalledViewModel : ObservableObject
                     }
                     await _productRepository.ReloadAsync();
                 }
+
+                tracked.Complete(true);
+                _tracker.NotifyChanged();
 
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
@@ -268,6 +326,8 @@ public partial class InstalledViewModel : ObservableObject
         }
         catch (FileLockedException ex)
         {
+            tracked?.Complete(false, $"File locked: {ex.FileName}");
+            _tracker.NotifyChanged();
             string message = string.IsNullOrEmpty(ex.ProcessNames)
                 ? LocalizationManager.GetString("Error_FileInUse", ex.FileName, "?")
                 : LocalizationManager.GetString(
@@ -279,10 +339,18 @@ public partial class InstalledViewModel : ObservableObject
         }
         catch (Exception ex)
         {
+            tracked?.Complete(false, ex.Message);
+            _tracker.NotifyChanged();
             _dialogService.ShowError(
                 LocalizationManager.GetString("Error_UninstallFailed") + ": " + ex.Message
             );
         }
+    }
+
+    [RelayCommand]
+    private void SwitchChannel(InstalledProductViewModel product)
+    {
+        NavigateToProductDetail?.Invoke(product.ProductId);
     }
 
     [RelayCommand]
@@ -292,7 +360,7 @@ public partial class InstalledViewModel : ObservableObject
         {
             InstalledProduct? installed = await _productRepository.GetByIdAsync(
                 product.ProductId,
-                product.FeedId
+                product.InstanceId
             );
             if (installed is null)
                 return;

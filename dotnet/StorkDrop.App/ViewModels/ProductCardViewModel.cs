@@ -66,9 +66,24 @@ public partial class ProductCardViewModel : ObservableObject
     [ObservableProperty]
     private string? _badgeColor;
 
+    [ObservableProperty]
+    private int _channelCount;
+
+    [ObservableProperty]
+    private int _instanceCount;
+
+    [ObservableProperty]
+    private bool _allowMultipleInstances;
+
     public bool IsExecutable => InstallType == InstallType.Executable;
 
-    public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
+    public bool HasBadge => false;
+
+    public bool HasInstances => InstanceCount > 0;
+
+    public bool ShowManageButton => HasInstances && AllowMultipleInstances;
+
+    public bool ShowInstalledLabel => HasInstances && !AllowMultipleInstances;
 
     public bool HasFeedDisplay => !string.IsNullOrEmpty(FeedName);
 
@@ -76,7 +91,18 @@ public partial class ProductCardViewModel : ObservableObject
 
     public string VersionDisplay => $"v{Version}";
 
-    partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
+    partial void OnInstanceCountChanged(int value)
+    {
+        OnPropertyChanged(nameof(HasInstances));
+        OnPropertyChanged(nameof(ShowManageButton));
+        OnPropertyChanged(nameof(ShowInstalledLabel));
+    }
+
+    partial void OnAllowMultipleInstancesChanged(bool value)
+    {
+        OnPropertyChanged(nameof(ShowManageButton));
+        OnPropertyChanged(nameof(ShowInstalledLabel));
+    }
 
     /// <summary>
     /// Loads the product image from the specified URL asynchronously.

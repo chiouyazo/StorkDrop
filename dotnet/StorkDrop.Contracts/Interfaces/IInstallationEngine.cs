@@ -142,6 +142,24 @@ public interface IInstallationEngine
     Task UninstallAsync(InstalledProduct product, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Switches an installed instance to a different channel (feed), preserving files
+    /// that match the PreserveOnSwitch patterns defined in the product manifest.
+    /// </summary>
+    /// <param name="installed">The currently installed product instance.</param>
+    /// <param name="newChannelManifest">The manifest from the target channel.</param>
+    /// <param name="options">Options controlling how the switch is performed.</param>
+    /// <param name="progress">Progress reporter for status updates.</param>
+    /// <param name="cancellationToken">A token to cancel the operation.</param>
+    /// <returns>An <see cref="InstallResult"/> indicating success or failure with details.</returns>
+    Task<InstallResult> SwitchChannelAsync(
+        InstalledProduct installed,
+        ProductManifest newChannelManifest,
+        InstallOptions options,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Re-executes plugin actions (PreInstall + PostInstall) on an already-installed product.
     /// Loads the plugin from .stork/, shows the config dialog pre-filled with previous values,
     /// and runs the plugin lifecycle without re-copying files.

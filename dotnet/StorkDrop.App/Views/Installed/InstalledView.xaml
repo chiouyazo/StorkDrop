@@ -22,6 +22,7 @@
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
     </Grid.RowDefinitions>
 
@@ -46,10 +47,17 @@
       />
     </Grid>
 
+    <TextBox
+      Grid.Row="1"
+      Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+      Padding="8,6"
+      Margin="0,0,0,12"
+    />
+
     <!-- Notification area -->
     <Border
       x:Name="NotificationBanner"
-      Grid.Row="1"
+      Grid.Row="2"
       Background="#FFF3E0"
       CornerRadius="6"
       Padding="12,8"
@@ -60,7 +68,7 @@
     </Border>
 
     <ListView
-      Grid.Row="2"
+      Grid.Row="3"
       ItemsSource="{Binding Source={StaticResource GroupedProducts}}"
       BorderThickness="0"
       Background="Transparent"
@@ -116,7 +124,7 @@
 
               <StackPanel>
                 <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-                  <TextBlock Text="{Binding Title}" Style="{DynamicResource HeadingSmall}" />
+                  <TextBlock Text="{Binding DisplayName}" Style="{DynamicResource HeadingSmall}" />
                   <Border
                     Background="{Binding BadgeColor, Converter={StaticResource BadgeColorConverter}}"
                     Visibility="{Binding HasBadge, Converter={StaticResource BoolToVisibilityConverter}}"
@@ -213,6 +221,15 @@
                 </Button>
                 <Button
                   Style="{DynamicResource OutlinedButton}"
+                  Command="{Binding DataContext.SwitchChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"
+                  Content="{DynamicResource Installed_SwitchChannel}"
+                  Padding="12,6"
+                  Margin="0,0,8,0"
+                  Visibility="{Binding HasFeed, Converter={StaticResource BoolToVisibilityConverter}}"
+                />
+                <Button
+                  Style="{DynamicResource OutlinedButton}"
                   Command="{Binding DataContext.UninstallCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   CommandParameter="{Binding}"
                   Padding="12,6"
@@ -241,7 +258,7 @@
 
     <!-- Empty State -->
     <StackPanel
-      Grid.Row="2"
+      Grid.Row="3"
       HorizontalAlignment="Center"
       VerticalAlignment="Center"
       Visibility="{Binding HasNoProducts, Converter={StaticResource BoolToVisibilityConverter}}"

@@ -217,6 +217,7 @@ public sealed class EnvironmentVariableService
 
     public async Task SaveAppliedAsync(
         string productId,
+        string instanceId,
         List<AppliedEnvironmentVariable> applied,
         CancellationToken cancellationToken
     )
@@ -228,7 +229,7 @@ public sealed class EnvironmentVariableService
         {
             string configDir = GetStorkConfigDir();
             Directory.CreateDirectory(configDir);
-            string path = Path.Combine(configDir, $"{productId}.envvars.json");
+            string path = StorkPaths.EnvVarsPath(productId, instanceId);
             string json = JsonSerializer.Serialize(applied, JsonOptions);
             await File.WriteAllTextAsync(path, json, cancellationToken);
         }
@@ -240,12 +241,19 @@ public sealed class EnvironmentVariableService
 
     public async Task<List<AppliedEnvironmentVariable>> LoadAppliedAsync(
         string productId,
+        string instanceId,
         CancellationToken cancellationToken
     )
     {
-        string path = Path.Combine(GetStorkConfigDir(), $"{productId}.envvars.json");
+        string path = StorkPaths.EnvVarsPath(productId, instanceId);
         if (!File.Exists(path))
-            return [];
+        {
+            string legacyPath = StorkPaths.LegacyEnvVarsPath(productId);
+            if (File.Exists(legacyPath))
+                path = legacyPath;
+            else
+                return [];
+        }
 
         try
         {
@@ -258,13 +266,17 @@ public sealed class EnvironmentVariableService
         }
     }
 
-    public void DeleteTracking(string productId)
+    public void DeleteTracking(string productId, string instanceId)
     {
         try
         {
-            string path = Path.Combine(GetStorkConfigDir(), $"{productId}.envvars.json");
+            string path = StorkPaths.EnvVarsPath(productId, instanceId);
             if (File.Exists(path))
                 File.Delete(path);
+
+            string legacyPath = StorkPaths.LegacyEnvVarsPath(productId);
+            if (File.Exists(legacyPath))
+                File.Delete(legacyPath);
         }
         catch
         {

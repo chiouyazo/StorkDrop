@@ -38,12 +38,10 @@ public sealed class PostProductResolver
 
         foreach (OptionalPostProduct postProduct in postProducts)
         {
-            InstalledProduct? installed = await _productRepository.GetByIdAsync(
-                postProduct.Id,
-                cancellationToken: cancellationToken
-            );
+            IReadOnlyList<InstalledProduct> existingInstances =
+                await _productRepository.GetInstancesAsync(postProduct.Id, cancellationToken);
 
-            if (installed is not null)
+            if (existingInstances.Count > 0)
             {
                 ResolvedPostProduct? resolvedInstalled = await FindInFeedsAsync(
                     postProduct.Id,

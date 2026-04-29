@@ -58,11 +58,14 @@ internal sealed class CliRunner
     private async Task<int> InstallAsync(string[] args)
     {
         if (args.Length < 4)
-            return Error("Missing product ID. Usage: storkdrop --cli install <productId>");
+            return Error(
+                "Missing product ID. Usage: storkdrop --cli install <productId> [--instance <id>]"
+            );
 
         string productId = args[3];
         string? version = GetFlag(args, "--version");
         string? path = GetFlag(args, "--path");
+        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
         Dictionary<string, string> configValues = ParseConfigValues(args);
 
         (ProductManifest? manifest, string? feedId) = await FindManifestInFeedsAsync(
@@ -92,6 +95,7 @@ internal sealed class CliRunner
 
         InstallOptions options = new InstallOptions(
             TargetPath: targetPath,
+            InstanceId: instanceId,
             FeedId: feedId,
             PluginConfigValues: configValues.Count > 0 ? configValues : null
         );
@@ -118,10 +122,13 @@ internal sealed class CliRunner
     private async Task<int> UninstallAsync(string[] args)
     {
         if (args.Length < 4)
-            return Error("Missing product ID. Usage: storkdrop --cli uninstall <productId>");
+            return Error(
+                "Missing product ID. Usage: storkdrop --cli uninstall <productId> [--instance <id>]"
+            );
 
         string productId = args[3];
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
+        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
+        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId, instanceId);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
@@ -134,13 +141,16 @@ internal sealed class CliRunner
     private async Task<int> UpdateAsync(string[] args)
     {
         if (args.Length < 4)
-            return Error("Missing product ID. Usage: storkdrop --cli update <productId>");
+            return Error(
+                "Missing product ID. Usage: storkdrop --cli update <productId> [--instance <id>]"
+            );
 
         string productId = args[3];
         string? version = GetFlag(args, "--version");
+        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
         Dictionary<string, string> configValues = ParseConfigValues(args);
 
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
+        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId, instanceId);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
@@ -194,15 +204,18 @@ internal sealed class CliRunner
     private async Task<int> ReExecuteAsync(string[] args)
     {
         if (args.Length < 4)
-            return Error("Missing product ID. Usage: storkdrop --cli re-execute <productId>");
+            return Error(
+                "Missing product ID. Usage: storkdrop --cli re-execute <productId> [--instance <id>]"
+            );
 
         string productId = args[3];
+        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
         Dictionary<string, string> configValues = ParseConfigValues(args);
         bool skipPre = args.Any(a => a == "--skip-pre");
         bool skipPost = args.Any(a => a == "--skip-post");
         bool runFiles = args.Any(a => a == "--run-files");
 
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId);
+        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId, instanceId);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
@@ -243,10 +256,23 @@ internal sealed class CliRunner
 
     private async Task<int> ListAsync()
     {
-        Console.WriteLine(
-            $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Feed", -20} {"Type"}"
-        );
-        Console.WriteLine(new string('-', 115));
+        IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync();
+        bool hasNonDefault = installed.Any(p => p.InstanceId != InstanceIdHelper.DefaultInstanceId);
+
+        if (hasNonDefault)
+        {
+            Console.WriteLine(
+                $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Instance", -16} {"Feed", -20} {"Type"}"
+            );
+            Console.WriteLine(new string('-', 135));
+        }
+        else
+        {
+            Console.WriteLine(
+                $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Feed", -20} {"Type"}"
+            );
+            Console.WriteLine(new string('-', 115));
+        }
 
         foreach (FeedInfo feed in _feedRegistry.GetFeeds())
         {
@@ -256,9 +282,33 @@ internal sealed class CliRunner
                 IReadOnlyList<ProductManifest> products = await client.GetAllProductsAsync();
                 foreach (ProductManifest p in products)
                 {
-                    Console.WriteLine(
-                        $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {feed.Name, -20} {p.InstallType}"
-                    );
+                    if (hasNonDefault)
+                    {
+                        // Find installed instances for this product to show instance info
+                        IReadOnlyList<InstalledProduct> instances =
+                            await _productRepository.GetInstancesAsync(p.ProductId);
+                        if (instances.Count > 0)
+                        {
+                            foreach (InstalledProduct inst in instances)
+                            {
+                                Console.WriteLine(
+                                    $"{p.ProductId, -40} {p.Title, -30} {inst.Version, -12} {inst.InstanceId, -16} {feed.Name, -20} {p.InstallType}"
+                                );
+                            }
+                        }
+                        else
+                        {
+                            Console.WriteLine(
+                                $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {"", -16} {feed.Name, -20} {p.InstallType}"
+                            );
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine(
+                            $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {feed.Name, -20} {p.InstallType}"
+                        );
+                    }
                 }
             }
             catch (Exception ex)
@@ -445,6 +495,11 @@ internal sealed class CliRunner
         Console.WriteLine("  versions <productId>     List available versions for a product");
         Console.WriteLine("  help [command]           Show help for a command");
         Console.WriteLine();
+        Console.WriteLine("Global Options:");
+        Console.WriteLine(
+            "  --instance <id>          Target a specific instance (default: \"default\")"
+        );
+        Console.WriteLine();
         Console.WriteLine(
             "Run 'storkdrop --cli help <command>' for details on a specific command."
         );
@@ -464,6 +519,7 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --path <path>           Install path (default: manifest's recommendedInstallPath)"
                 );
+                Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"
@@ -477,7 +533,10 @@ internal sealed class CliRunner
                 break;
 
             case "uninstall":
-                Console.WriteLine("Usage: storkdrop --cli uninstall <productId>");
+                Console.WriteLine("Usage: storkdrop --cli uninstall <productId> [options]");
+                Console.WriteLine();
+                Console.WriteLine("Options:");
+                Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 break;
 
             case "update":
@@ -487,6 +546,7 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --version <version>     Update to a specific version (default: latest)"
                 );
+                Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"
@@ -501,6 +561,7 @@ internal sealed class CliRunner
                 );
                 Console.WriteLine();
                 Console.WriteLine("Options:");
+                Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"

@@ -11,6 +11,7 @@ using StorkDrop.App.Views.SetupWizard;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.App;
 
@@ -35,30 +36,27 @@ public partial class App : Application
 
         if (args.Length >= 5 && args[1] == "--install")
         {
-            await RunElevatedInstallAsync(args[2], args[3], args[4]);
+            string installInstanceId =
+                GetArgValue(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
+            await RunElevatedInstallAsync(args[2], args[3], args[4], installInstanceId);
             Shutdown();
             return;
         }
 
         if (args.Length >= 3 && args[1] == "--uninstall")
         {
-            string? feedId = null;
-            for (int i = 3; i < args.Length - 1; i++)
-            {
-                if (args[i] == "--feed")
-                {
-                    feedId = args[i + 1];
-                    break;
-                }
-            }
-            await RunElevatedUninstallAsync(args[2], feedId);
+            string uninstallInstanceId =
+                GetArgValue(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
+            await RunElevatedUninstallAsync(args[2], uninstallInstanceId);
             Shutdown();
             return;
         }
 
         if (args.Length >= 5 && args[1] == "--update")
         {
-            await RunElevatedUpdateAsync(args[2], args[3], args[4]);
+            string updateInstanceId =
+                GetArgValue(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
+            await RunElevatedUpdateAsync(args[2], args[3], args[4], updateInstanceId);
             Shutdown();
             return;
         }
@@ -359,7 +357,12 @@ public partial class App : Application
         }
     }
 
-    private Task RunElevatedInstallAsync(string productId, string targetPath, string feedId)
+    private Task RunElevatedInstallAsync(
+        string productId,
+        string targetPath,
+        string feedId,
+        string instanceId
+    )
     {
         Dictionary<string, string>? configValues = LoadElevationConfigFile();
 
@@ -376,6 +379,7 @@ public partial class App : Application
                 {
                     InstallOptions options = new InstallOptions(
                         TargetPath: targetPath,
+                        InstanceId: instanceId,
                         FeedId: feedId,
                         SkipFileHandlers: true,
                         PluginConfigValues: configValues
@@ -387,7 +391,7 @@ public partial class App : Application
         );
     }
 
-    private Task RunElevatedUninstallAsync(string productId, string? feedId = null)
+    private Task RunElevatedUninstallAsync(string productId, string instanceId)
     {
         return RunElevatedAsync(
             "uninstall",
@@ -399,7 +403,7 @@ public partial class App : Application
 
                 InstalledProduct? installed = await productRepository.GetByIdAsync(
                     productId,
-                    feedId
+                    instanceId
                 );
                 if (installed is not null)
                     await engine.UninstallAsync(installed);
@@ -407,7 +411,12 @@ public partial class App : Application
         );
     }
 
-    private Task RunElevatedUpdateAsync(string productId, string targetPath, string feedId)
+    private Task RunElevatedUpdateAsync(
+        string productId,
+        string targetPath,
+        string feedId,
+        string instanceId
+    )
     {
         return RunElevatedAsync(
             "update",
@@ -419,13 +428,17 @@ public partial class App : Application
                 IProductRepository productRepository =
                     services.GetRequiredService<IProductRepository>();
 
-                InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
+                InstalledProduct? installed = await productRepository.GetByIdAsync(
+                    productId,
+                    instanceId
+                );
                 ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
 
                 if (installed is not null && manifest is not null)
                 {
                     InstallOptions options = new InstallOptions(
                         TargetPath: targetPath,
+                        InstanceId: instanceId,
                         FeedId: feedId
                     );
                     Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
@@ -496,6 +509,16 @@ public partial class App : Application
             }
             catch { }
         }
+    }
+
+    private static string? GetArgValue(string[] args, string flag)
+    {
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == flag)
+                return args[i + 1];
+        }
+        return null;
     }
 
     private static Dictionary<string, string>? LoadElevationConfigFile()

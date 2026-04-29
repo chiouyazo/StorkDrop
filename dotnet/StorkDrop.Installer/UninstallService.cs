@@ -53,6 +53,7 @@ public sealed class UninstallService
     /// <returns>A task representing the asynchronous operation.</returns>
     public async Task UninstallAsync(
         InstalledProduct product,
+        IProgress<InstallProgress>? progress = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -64,7 +65,9 @@ public sealed class UninstallService
 
         RequiresReboot = false;
 
-        // Run PreUninstall plugin hooks if manifest is available
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 5, "Running pre-uninstall hooks...")
+        );
         await RunUninstallPluginPhaseAsync(product, "PreUninstall", cancellationToken);
 
         // Force GC to release plugin assembly file locks after PreUninstall
@@ -72,13 +75,20 @@ public sealed class UninstallService
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
-        await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 15, "Removing environment variables...")
+        );
+        await RemoveEnvironmentVariablesAsync(
+            product.ProductId,
+            product.InstanceId,
+            cancellationToken
+        );
 
         if (Directory.Exists(product.InstalledPath))
         {
             List<string>? trackedFiles = await LoadFileManifestAsync(
                 product.ProductId,
+                product.InstanceId,
                 cancellationToken
             );
 
@@ -90,6 +100,8 @@ public sealed class UninstallService
                     product.ProductId
                 );
 
+                int totalFiles = trackedFiles.Count;
+                int deletedCount = 0;
                 foreach (string relativePath in trackedFiles)
                 {
                     string fullPath = Path.Combine(product.InstalledPath, relativePath);
@@ -97,11 +109,17 @@ public sealed class UninstallService
                     {
                         await DeleteFileWithRetryAsync(fullPath, cancellationToken);
                     }
-                    else
+
+                    deletedCount++;
+                    if (deletedCount % 50 == 0 || deletedCount == totalFiles)
                     {
-                        _logger.LogInformation(
-                            "Tracked file no longer exists, skipping: {FilePath}",
-                            relativePath
+                        int percentage = 20 + (int)(55.0 * deletedCount / totalFiles);
+                        progress?.Report(
+                            new InstallProgress(
+                                InstallStage.Uninstalling,
+                                percentage,
+                                $"Deleting files... ({deletedCount}/{totalFiles})"
+                            )
                         );
                     }
                 }
@@ -115,17 +133,32 @@ public sealed class UninstallService
                     product.ProductId
                 );
 
+                progress?.Report(
+                    new InstallProgress(
+                        InstallStage.Uninstalling,
+                        40,
+                        "Deleting installation directory..."
+                    )
+                );
                 await DeleteDirectoryWithRetryAsync(product.InstalledPath, cancellationToken);
             }
 
-            DeleteFileManifest(product.ProductId);
+            DeleteFileManifest(product.ProductId, product.InstanceId);
         }
 
-        _logger.LogDebug("Removing shortcuts for {ProductTitle}", product.Title);
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 80, "Removing shortcuts...")
+        );
         RemoveShortcuts(product.Title);
 
-        _logger.LogDebug("Removing {ProductId} from product repository", product.ProductId);
-        await _productRepository.RemoveAsync(product.ProductId, product.FeedId, cancellationToken);
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 85, "Updating product registry...")
+        );
+        await _productRepository.RemoveAsync(
+            product.ProductId,
+            product.InstanceId,
+            cancellationToken
+        );
 
         ActivityLogEntry entry = new ActivityLogEntry(
             Id: Guid.NewGuid().ToString(),
@@ -137,10 +170,12 @@ public sealed class UninstallService
         );
         await _activityLog.LogAsync(entry, cancellationToken);
 
-        // Run PostUninstall plugin hooks
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 90, "Running post-uninstall hooks...")
+        );
         await RunUninstallPluginPhaseAsync(product, "PostUninstall", cancellationToken);
 
-        // Clean up .stork/ directory (plugins + manifest) last
+        progress?.Report(new InstallProgress(InstallStage.Uninstalling, 95, "Cleaning up..."));
         string storkDir = Path.Combine(product.InstalledPath, ".stork");
         if (Directory.Exists(storkDir))
         {
@@ -154,6 +189,7 @@ public sealed class UninstallService
             }
         }
 
+        progress?.Report(new InstallProgress(InstallStage.Uninstalling, 100, "Uninstall complete"));
         _logger.LogInformation(
             "Uninstall of {ProductId} v{Version} complete",
             product.ProductId,
@@ -190,10 +226,12 @@ public sealed class UninstallService
             PluginContext context = new()
             {
                 ProductId = product.ProductId,
+                InstanceId = product.InstanceId,
                 Version = product.Version,
                 InstallPath = product.InstalledPath,
                 StorkConfigDirectory = StorkPaths.ConfigDir,
                 ConfigValues = new Dictionary<string, string>(),
+                Log = message => _logger.LogInformation("[Plugin] {Message}", message),
             };
 
             foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
@@ -286,13 +324,20 @@ public sealed class UninstallService
 
     private static async Task<List<string>?> LoadFileManifestAsync(
         string productId,
+        string instanceId,
         CancellationToken cancellationToken
     )
     {
-        string manifestPath = Path.Combine(StorkPaths.ConfigDir, $"{productId}.files.json");
+        string manifestPath = StorkPaths.FileManifestPath(productId, instanceId);
 
         if (!File.Exists(manifestPath))
-            return null;
+        {
+            string legacyPath = StorkPaths.LegacyFileManifestPath(productId);
+            if (File.Exists(legacyPath))
+                manifestPath = legacyPath;
+            else
+                return null;
+        }
 
         try
         {
@@ -305,13 +350,18 @@ public sealed class UninstallService
         }
     }
 
-    private static void DeleteFileManifest(string productId)
+    private static void DeleteFileManifest(string productId, string instanceId)
     {
         try
         {
-            string manifestPath = Path.Combine(StorkPaths.ConfigDir, $"{productId}.files.json");
+            string manifestPath = StorkPaths.FileManifestPath(productId, instanceId);
             if (File.Exists(manifestPath))
                 File.Delete(manifestPath);
+
+            // Also clean up legacy path if it exists
+            string legacyPath = StorkPaths.LegacyFileManifestPath(productId);
+            if (File.Exists(legacyPath))
+                File.Delete(legacyPath);
         }
         catch
         {
@@ -459,6 +509,7 @@ public sealed class UninstallService
 
     private async Task RemoveEnvironmentVariablesAsync(
         string productId,
+        string instanceId,
         CancellationToken cancellationToken
     )
     {
@@ -466,13 +517,14 @@ public sealed class UninstallService
         {
             List<AppliedEnvironmentVariable> applied = await _envVarService.LoadAppliedAsync(
                 productId,
+                instanceId,
                 cancellationToken
             );
 
             if (applied.Count > 0)
                 await _envVarService.RemoveAsync(applied);
 
-            _envVarService.DeleteTracking(productId);
+            _envVarService.DeleteTracking(productId, instanceId);
         }
         catch
         {

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -36,6 +37,9 @@ public partial class InstalledProductViewModel : ObservableObject
     private string? _feedId;
 
     [ObservableProperty]
+    private string _instanceId = string.Empty;
+
+    [ObservableProperty]
     private string? _badgeText;
 
     [ObservableProperty]
@@ -44,6 +48,23 @@ public partial class InstalledProductViewModel : ObservableObject
     public bool IsExecutable => InstallType == InstallType.Executable;
     public bool HasActions => HasPlugins || HasFileHandlerData;
     public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
+    public bool HasFeed => !string.IsNullOrEmpty(FeedId);
+    public bool IsDefaultInstance => InstanceId == InstanceIdHelper.DefaultInstanceId;
+    public string DisplayName => IsDefaultInstance ? Title : $"{Title} ({InstanceId})";
 
     partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
+
+    partial void OnFeedIdChanged(string? value) => OnPropertyChanged(nameof(HasFeed));
+
+    partial void OnTitleChanged(string value)
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(IsDefaultInstance));
+    }
+
+    partial void OnInstanceIdChanged(string value)
+    {
+        OnPropertyChanged(nameof(DisplayName));
+        OnPropertyChanged(nameof(IsDefaultInstance));
+    }
 }

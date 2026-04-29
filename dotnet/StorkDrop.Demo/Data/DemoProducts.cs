@@ -1,4 +1,5 @@
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Demo.Data;
 
@@ -135,6 +136,7 @@ internal static class DemoProducts
     public static InstalledProduct PreInstalledCliTools =>
         new(
             ProductId: "nova-cli-tools",
+            InstanceId: InstanceIdHelper.DefaultInstanceId,
             Title: "Nova CLI Tools",
             Version: "2.0.0-rc.2",
             InstalledPath: @"C:\Users\Demo\StorkDrop\CLI",

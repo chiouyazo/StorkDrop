@@ -572,6 +572,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 {
                     Dictionary<string, string> previousValues = await LoadPluginConfigValues(
                         manifest.ProductId,
+                        options.InstanceId,
                         cancellationToken
                     );
                     Dictionary<string, string>? userValues = OnActionGroupConfigNeeded(
@@ -608,7 +609,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 CurrentInteractivePlugin = null;
                 PluginEnvironment env = await BuildPluginEnvironmentAsync(
                     manifest,
-                    cancellationToken
+                    cancellationToken,
+                    options.InstanceId
                 );
 
                 foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
@@ -980,6 +982,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 manifest.Version,
                 targetPath,
                 options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
+                options.InstanceId,
                 configFilePath
             );
 
@@ -1006,7 +1009,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 targetPath,
                 options.FeedId,
                 "(elevated)",
-                cancellationToken
+                cancellationToken,
+                options.InstanceId
             );
             return new InstallResult { Success = true };
         }
@@ -1028,11 +1032,13 @@ public sealed class InstallationEngine : IInstallationEngine
         string installPath,
         string? feedId,
         string suffix,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string instanceId = InstanceIdHelper.DefaultInstanceId
     )
     {
         InstalledProduct product = new InstalledProduct(
             ProductId: manifest.ProductId,
+            InstanceId: instanceId,
             Title: manifest.Title,
             Version: manifest.Version,
             InstalledPath: installPath,
@@ -1421,6 +1427,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     manifest.Version,
                     resolvedTargetPath,
                     options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
+                    options.InstanceId,
                     configFilePath
                 );
                 if (!elevated)
@@ -1452,7 +1459,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 resolvedTargetPath,
                 options.FeedId,
                 "(elevated, resolved path)",
-                cancellationToken
+                cancellationToken,
+                options.InstanceId
             );
             progress.Report(
                 new InstallProgress(
@@ -1723,10 +1731,16 @@ public sealed class InstallationEngine : IInstallationEngine
         progress.Report(
             new InstallProgress(InstallStage.Installing, 85, "Applying environment variables...")
         );
-        await ApplyEnvironmentVariablesAsync(manifest, resolvedPath, cancellationToken);
+        await ApplyEnvironmentVariablesAsync(
+            manifest,
+            options.InstanceId,
+            resolvedPath,
+            cancellationToken
+        );
 
         await SavePluginConfigValues(
             manifest.ProductId,
+            options.InstanceId,
             options.PluginConfigValues,
             cancellationToken
         );
@@ -1734,7 +1748,12 @@ public sealed class InstallationEngine : IInstallationEngine
         progress.Report(
             new InstallProgress(InstallStage.Installing, 90, "Saving file manifest...")
         );
-        await SaveFileManifestAsync(manifest.ProductId, resolvedPath, cancellationToken);
+        await SaveFileManifestAsync(
+            manifest.ProductId,
+            options.InstanceId,
+            resolvedPath,
+            cancellationToken
+        );
 
         progress.Report(new InstallProgress(InstallStage.Installing, 95, "Registering product..."));
         await RegisterElevatedInstallAsync(
@@ -1742,7 +1761,8 @@ public sealed class InstallationEngine : IInstallationEngine
             resolvedPath,
             options.FeedId,
             "",
-            cancellationToken
+            cancellationToken,
+            options.InstanceId
         );
     }
 
@@ -1888,11 +1908,12 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 List<AppliedEnvironmentVariable> oldEnvVars = await _envVarService.LoadAppliedAsync(
                     installed.ProductId,
+                    installed.InstanceId,
                     cancellationToken
                 );
                 if (oldEnvVars.Count > 0)
                     await _envVarService.RemoveAsync(oldEnvVars);
-                _envVarService.DeleteTracking(installed.ProductId);
+                _envVarService.DeleteTracking(installed.ProductId, installed.InstanceId);
             }
             catch
             {
@@ -1908,6 +1929,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
                 List<string>? trackedFiles = await LoadFileManifest(
                     installed.ProductId,
+                    installed.InstanceId,
                     cancellationToken
                 );
 
@@ -1966,7 +1988,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 InstalledProduct? updated = await _productRepository.GetByIdAsync(
                     newManifest.ProductId,
-                    options.FeedId,
+                    options.InstanceId,
                     cancellationToken
                 );
                 if (updated is not null)
@@ -2011,6 +2033,20 @@ public sealed class InstallationEngine : IInstallationEngine
     }
 
     /// <inheritdoc />
+    public Task<InstallResult> SwitchChannelAsync(
+        InstalledProduct installed,
+        ProductManifest newChannelManifest,
+        InstallOptions options,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    )
+    {
+        throw new NotImplementedException(
+            "Channel switching will be implemented in a later phase."
+        );
+    }
+
+    /// <inheritdoc />
     public async Task UninstallAsync(
         InstalledProduct product,
         CancellationToken cancellationToken = default
@@ -2020,7 +2056,7 @@ public sealed class InstallationEngine : IInstallationEngine
             "Delegating uninstall of {ProductId} to UninstallService",
             product.ProductId
         );
-        await _uninstallService.UninstallAsync(product, cancellationToken);
+        await _uninstallService.UninstallAsync(product, progress: null, cancellationToken);
     }
 
     public async Task<InstallResult> ReExecutePluginsAsync(
@@ -2086,7 +2122,8 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 PluginEnvironment environment = await BuildPluginEnvironmentAsync(
                     manifest!,
-                    cancellationToken
+                    cancellationToken,
+                    product.InstanceId
                 );
 
                 foreach (StorkPluginInfo pluginInfo in manifest!.Plugins!)
@@ -2273,6 +2310,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
             Dictionary<string, string> previousValues = await LoadPluginConfigValues(
                 product.ProductId,
+                product.InstanceId,
                 cancellationToken
             );
             Dictionary<string, string>? configValues = options.PluginConfigValues;
@@ -2387,7 +2425,12 @@ public sealed class InstallationEngine : IInstallationEngine
             }
 
             ReportProgress(InstallStage.RunningPlugins, 90, "Saving configuration...");
-            await SavePluginConfigValues(product.ProductId, configValues, cancellationToken);
+            await SavePluginConfigValues(
+                product.ProductId,
+                product.InstanceId,
+                configValues,
+                cancellationToken
+            );
 
             ReportProgress(
                 InstallStage.Verifying,
@@ -2727,6 +2770,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task SaveFileManifestAsync(
         string productId,
+        string instanceId,
         string installPath,
         CancellationToken cancellationToken
     )
@@ -2735,7 +2779,7 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             string configDir = GetStorkConfigDir();
             Directory.CreateDirectory(configDir);
-            string manifestPath = Path.Combine(configDir, $"{productId}.files.json");
+            string manifestPath = StorkPaths.FileManifestPath(productId, instanceId);
 
             string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
             List<string> relativePaths = new List<string>();
@@ -2875,15 +2919,18 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task<PluginEnvironment> BuildPluginEnvironmentAsync(
         ProductManifest manifest,
-        CancellationToken cancellationToken
+        CancellationToken cancellationToken,
+        string instanceId = InstanceIdHelper.DefaultInstanceId
     )
     {
         Dictionary<string, string> previousValues = await LoadPluginConfigValues(
             manifest.ProductId,
+            instanceId,
             cancellationToken
         );
         InstalledProduct? previousInstall = await _productRepository.GetByIdAsync(
             manifest.ProductId,
+            instanceId,
             cancellationToken: cancellationToken
         );
 
@@ -2904,10 +2951,18 @@ public sealed class InstallationEngine : IInstallationEngine
         return new PluginContext
         {
             ProductId = manifest.ProductId,
+            InstanceId = options.InstanceId,
             Version = manifest.Version,
             InstallPath = options.TargetPath,
             StorkConfigDirectory = GetStorkConfigDir(),
             ConfigValues = options.PluginConfigValues ?? new Dictionary<string, string>(),
+            Log = message =>
+            {
+                _logger.LogInformation("[Plugin] {Message}", message);
+                _currentProgress?.Report(
+                    new InstallProgress(InstallStage.RunningPlugins, 0, message)
+                );
+            },
         };
     }
 
@@ -2915,6 +2970,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task SavePluginConfigValues(
         string productId,
+        string instanceId,
         Dictionary<string, string>? values,
         CancellationToken cancellationToken
     )
@@ -2924,7 +2980,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
         string configDir = GetStorkConfigDir();
         Directory.CreateDirectory(configDir);
-        string filePath = Path.Combine(configDir, $"plugin-config-{productId}.json");
+        string filePath = StorkPaths.InstancePluginConfigPath(productId, instanceId);
         string json = System.Text.Json.JsonSerializer.Serialize(
             values,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
@@ -2934,12 +2990,19 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private static async Task<List<string>?> LoadFileManifest(
         string productId,
+        string instanceId,
         CancellationToken cancellationToken
     )
     {
-        string path = Path.Combine(StorkPaths.ConfigDir, $"{productId}.files.json");
+        string path = StorkPaths.FileManifestPath(productId, instanceId);
         if (!File.Exists(path))
-            return null;
+        {
+            string legacyPath = StorkPaths.LegacyFileManifestPath(productId);
+            if (File.Exists(legacyPath))
+                path = legacyPath;
+            else
+                return null;
+        }
 
         string json = await File.ReadAllTextAsync(path, cancellationToken);
         return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json);
@@ -2952,12 +3015,19 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task<Dictionary<string, string>> LoadPluginConfigValues(
         string productId,
+        string instanceId,
         CancellationToken cancellationToken
     )
     {
-        string filePath = Path.Combine(GetStorkConfigDir(), $"plugin-config-{productId}.json");
+        string filePath = StorkPaths.InstancePluginConfigPath(productId, instanceId);
         if (!File.Exists(filePath))
-            return new Dictionary<string, string>();
+        {
+            string legacyPath = StorkPaths.LegacyPluginConfigPath(productId);
+            if (File.Exists(legacyPath))
+                filePath = legacyPath;
+            else
+                return new Dictionary<string, string>();
+        }
 
         string json = await File.ReadAllTextAsync(filePath, cancellationToken);
         return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json)
@@ -2993,6 +3063,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task ApplyEnvironmentVariablesAsync(
         ProductManifest manifest,
+        string instanceId,
         string installPath,
         CancellationToken cancellationToken
     )
@@ -3006,7 +3077,12 @@ public sealed class InstallationEngine : IInstallationEngine
                 manifest.EnvironmentVariables,
                 installPath
             );
-            await _envVarService.SaveAppliedAsync(manifest.ProductId, applied, cancellationToken);
+            await _envVarService.SaveAppliedAsync(
+                manifest.ProductId,
+                instanceId,
+                applied,
+                cancellationToken
+            );
         }
         catch (Exception ex)
         {

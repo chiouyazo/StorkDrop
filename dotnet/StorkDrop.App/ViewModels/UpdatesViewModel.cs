@@ -60,46 +60,47 @@ public partial class UpdatesViewModel : ObservableObject
                 cancellationToken
             );
 
-            Dictionary<string, (ProductManifest Manifest, string FeedId)> latestByProduct =
-                new Dictionary<string, (ProductManifest Manifest, string FeedId)>();
-            foreach (FeedInfo feed in _feedRegistry.GetFeeds())
-            {
-                try
-                {
-                    IRegistryClient client = _feedRegistry.GetClient(feed.Id);
-                    IReadOnlyList<ProductManifest> available = await client.GetAllProductsAsync(
-                        cancellationToken
-                    );
-                    foreach (ProductManifest m in available)
-                        latestByProduct[m.ProductId] = (m, feed.Id);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to load products from feed {FeedId}", feed.Id);
-                }
-            }
-
             List<UpdateItemViewModel> updateItems = [];
             foreach (InstalledProduct product in installed)
             {
-                if (
-                    latestByProduct.TryGetValue(
-                        product.ProductId,
-                        out (ProductManifest Manifest, string FeedId) latest
-                    ) && VersionComparer.IsNewer(latest.Manifest.Version, product.Version)
-                )
+                if (string.IsNullOrEmpty(product.FeedId))
+                    continue;
+
+                try
                 {
-                    updateItems.Add(
-                        new UpdateItemViewModel
-                        {
-                            ProductId = product.ProductId,
-                            Title = product.Title,
-                            CurrentVersion = product.Version,
-                            AvailableVersion = latest.Manifest.Version,
-                            ReleaseNotes = latest.Manifest.ReleaseNotes ?? string.Empty,
-                            InstalledPath = product.InstalledPath,
-                            FeedId = latest.FeedId,
-                        }
+                    IRegistryClient client = _feedRegistry.GetClient(product.FeedId);
+                    ProductManifest? latest = await client.GetProductManifestAsync(
+                        product.ProductId,
+                        cancellationToken
+                    );
+
+                    if (
+                        latest is not null
+                        && VersionComparer.IsNewer(latest.Version, product.Version)
+                    )
+                    {
+                        updateItems.Add(
+                            new UpdateItemViewModel
+                            {
+                                ProductId = product.ProductId,
+                                Title = product.Title,
+                                CurrentVersion = product.Version,
+                                AvailableVersion = latest.Version,
+                                ReleaseNotes = latest.ReleaseNotes ?? string.Empty,
+                                InstalledPath = product.InstalledPath,
+                                FeedId = product.FeedId,
+                                InstanceId = product.InstanceId,
+                            }
+                        );
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to check updates for {ProductId} on feed {FeedId}",
+                        product.ProductId,
+                        product.FeedId
                     );
                 }
             }
@@ -150,7 +151,8 @@ public partial class UpdatesViewModel : ObservableObject
 
             InstalledProduct? installed = await _productRepository.GetByIdAsync(
                 update.ProductId,
-                cancellationToken: cancellationToken
+                update.InstanceId,
+                cancellationToken
             );
             IRegistryClient client = _feedRegistry.GetClient(update.FeedId);
             ProductManifest? manifest = await client.GetProductManifestAsync(
@@ -175,7 +177,8 @@ public partial class UpdatesViewModel : ObservableObject
                         ElevationHelper.RunElevatedUpdate(
                             update.ProductId,
                             installed.InstalledPath,
-                            update.FeedId
+                            update.FeedId,
+                            installed.InstanceId
                         ),
                     cancellationToken
                 );

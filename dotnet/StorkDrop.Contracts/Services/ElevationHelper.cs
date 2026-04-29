@@ -64,6 +64,7 @@ public static class ElevationHelper
         string version,
         string targetPath,
         string feedId,
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
         string? configFilePath = null
     )
     {
@@ -85,7 +86,7 @@ public static class ElevationHelper
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments =
-                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" {pluginDirArgs} {configFileArg}".Trim(),
+                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" {pluginDirArgs} {configFileArg}".Trim(),
             };
 
             Process? process = Process.Start(startInfo);
@@ -101,7 +102,10 @@ public static class ElevationHelper
         }
     }
 
-    public static bool RunElevatedUninstall(string productId, string? feedId = null)
+    public static bool RunElevatedUninstall(
+        string productId,
+        string instanceId = InstanceIdHelper.DefaultInstanceId
+    )
     {
         try
         {
@@ -111,13 +115,13 @@ public static class ElevationHelper
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
-            string feedArg = feedId is not null ? $"--feed \"{feedId}\"" : "";
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--uninstall \"{productId}\" {feedArg} {GetPluginDirArgs()}".Trim(),
+                Arguments =
+                    $"--uninstall \"{productId}\" --instance \"{instanceId}\" {GetPluginDirArgs()}".Trim(),
             };
 
             Process? process = Process.Start(startInfo);
@@ -137,6 +141,7 @@ public static class ElevationHelper
         string productId,
         string targetPath,
         string feedId,
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
         string? configFilePath = null
     )
     {
@@ -157,7 +162,7 @@ public static class ElevationHelper
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments =
-                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
+                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
             };
 
             Process? process = Process.Start(startInfo);

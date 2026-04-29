@@ -12,16 +12,19 @@ namespace StorkDrop.Installer;
 public sealed class InstallationCoordinator
 {
     private readonly IInstallationEngine _engine;
+    private readonly UninstallService _uninstallService;
     private readonly ILogger<InstallationCoordinator> _logger;
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _productLocks =
         new ConcurrentDictionary<string, SemaphoreSlim>();
 
     public InstallationCoordinator(
         IInstallationEngine engine,
+        UninstallService uninstallService,
         ILogger<InstallationCoordinator> logger
     )
     {
         _engine = engine;
+        _uninstallService = uninstallService;
         _logger = logger;
     }
 
@@ -158,10 +161,11 @@ public sealed class InstallationCoordinator
 
     public async Task UninstallWithIsolationAsync(
         InstalledProduct product,
+        IProgress<InstallProgress>? progress,
         CancellationToken cancellationToken
     )
     {
-        SemaphoreSlim productLock = GetProductLock(product.ProductId);
+        SemaphoreSlim productLock = GetProductLock($"{product.ProductId}_{product.InstanceId}");
 
         if (!await productLock.WaitAsync(TimeSpan.Zero, cancellationToken))
         {
@@ -173,13 +177,21 @@ public sealed class InstallationCoordinator
         try
         {
             _logger.LogInformation("Uninstall lock acquired for {ProductId}", product.ProductId);
-            await _engine.UninstallAsync(product, cancellationToken);
+            await _uninstallService.UninstallAsync(product, progress, cancellationToken);
         }
         finally
         {
             productLock.Release();
             _logger.LogInformation("Uninstall lock released for {ProductId}", product.ProductId);
         }
+    }
+
+    public Task UninstallWithIsolationAsync(
+        InstalledProduct product,
+        CancellationToken cancellationToken
+    )
+    {
+        return UninstallWithIsolationAsync(product, null, cancellationToken);
     }
 
     public async Task<InstallResult> ReExecutePluginsWithIsolationAsync(

@@ -25,5 +25,7 @@ public sealed record ProductManifest(
     string[]? RequiredProductIds = null,
     OptionalPostProduct[]? OptionalPostProducts = null,
     string? BadgeText = null,
-    string? BadgeColor = null
+    string? BadgeColor = null,
+    string[]? PreserveOnSwitch = null,
+    bool AllowMultipleInstances = false
 );

@@ -19,4 +19,7 @@ public enum InstallStage
 
     /// <summary>The installation is being verified.</summary>
     Verifying,
+
+    /// <summary>The product is being uninstalled.</summary>
+    Uninstalling,
 }

@@ -60,6 +60,8 @@ public partial class MainWindowViewModel : ObservableObject
         _pluginLoadStatus = pluginLoadStatus;
 
         _marketplaceViewModel.NavigateToProductDetail += OnNavigateToProductDetail;
+        _marketplaceViewModel.NavigateToManageProduct += OnNavigateToManageProduct;
+        _installedViewModel.NavigateToProductDetail += OnNavigateToProductDetail;
 
         BuildPluginNavTabs();
         BuildPluginStatusText();
@@ -271,13 +273,29 @@ public partial class MainWindowViewModel : ObservableObject
         NavigateTo("Plugins");
     }
 
-    private void OnNavigateToProductDetail(string productId, string feedId)
+    private void OnNavigateToProductDetail(string productId)
     {
         ProductDetailViewModel detailVm = App.Services.GetRequiredService<ProductDetailViewModel>();
+        string feedId = FindBestFeedForProduct(productId);
         detailVm.FeedId = feedId;
         detailVm.GoBackRequested += () => NavigateTo("Marketplace");
         detailVm.LoadCommand.Execute(productId);
         CurrentContent = detailVm;
+    }
+
+    private void OnNavigateToManageProduct(string productId)
+    {
+        _installedViewModel.SearchText = productId;
+        NavigateTo("Installed");
+    }
+
+    private string FindBestFeedForProduct(string productId)
+    {
+        IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
+        if (feeds.Count == 1)
+            return feeds[0].Id;
+
+        return feeds.FirstOrDefault()?.Id ?? string.Empty;
     }
 
     private async Task CheckConnectionSafeAsync()

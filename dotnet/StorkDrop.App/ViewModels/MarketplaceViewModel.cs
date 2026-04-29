@@ -11,6 +11,11 @@ using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
 using StorkDrop.Installer;
+using ChannelEntry = (
+    StorkDrop.Contracts.Models.ProductManifest Manifest,
+    string FeedName,
+    string FeedId
+);
 
 namespace StorkDrop.App.ViewModels;
 
@@ -85,6 +90,7 @@ public partial class MarketplaceViewModel : ObservableObject
     public bool ShowFeedFilter => AvailableFeedFilters.Count > 1;
 
     private List<(ProductManifest Manifest, string FeedName, string FeedId)> _allProducts = [];
+    private Dictionary<string, List<ChannelEntry>> _channelsByProduct = new();
     private List<ProductCardViewModel> _allCards = [];
     private IReadOnlyList<InstalledProduct> _installedProducts = Array.Empty<InstalledProduct>();
     private CancellationTokenSource? _loadCts;
@@ -92,7 +98,12 @@ public partial class MarketplaceViewModel : ObservableObject
     /// <summary>
     /// Event raised when the user wants to navigate to a product detail view.
     /// </summary>
-    public event Action<string, string>? NavigateToProductDetail;
+    public event Action<string>? NavigateToProductDetail;
+
+    /// <summary>
+    /// Event raised when the user wants to navigate to the installed view for a product.
+    /// </summary>
+    public event Action<string>? NavigateToManageProduct;
 
     private CancellationTokenSource? _searchDebounce;
 
@@ -131,7 +142,19 @@ public partial class MarketplaceViewModel : ObservableObject
     [RelayCommand]
     private void NavigateToDetail(ProductCardViewModel product)
     {
-        NavigateToProductDetail?.Invoke(product.ProductId, product.FeedId);
+        NavigateToProductDetail?.Invoke(product.ProductId);
+    }
+
+    private static string ExtractBaseFeedName(string feedName)
+    {
+        int separatorIndex = feedName.IndexOf(" / ", StringComparison.Ordinal);
+        return separatorIndex > 0 ? feedName[..separatorIndex] : feedName;
+    }
+
+    [RelayCommand]
+    private void ManageProduct(ProductCardViewModel product)
+    {
+        NavigateToManageProduct?.Invoke(product.ProductId);
     }
 
     /// <summary>
@@ -211,10 +234,11 @@ public partial class MarketplaceViewModel : ObservableObject
                     {
                         await InstallPostProductAsync(reqProduct);
 
-                        InstalledProduct? check = await _productRepository.GetByIdAsync(
-                            reqProduct.Manifest.ProductId
-                        );
-                        if (check is null)
+                        IReadOnlyList<InstalledProduct> checkInstances =
+                            await _productRepository.GetInstancesAsync(
+                                reqProduct.Manifest.ProductId
+                            );
+                        if (checkInstances.Count == 0)
                         {
                             _logger.LogWarning(
                                 "Required product {ProductId} was not installed successfully, aborting",
@@ -623,15 +647,25 @@ public partial class MarketplaceViewModel : ObservableObject
 
     private void RebuildCardCache()
     {
-        _allCards = _allProducts
-            .Select(entry =>
+        _channelsByProduct = _allProducts
+            .GroupBy(entry => entry.Manifest.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        _allCards = _channelsByProduct
+            .Select(group =>
             {
-                ProductManifest manifest = entry.Manifest;
-                InstalledProduct? installed =
-                    _installedProducts.FirstOrDefault(i =>
-                        i.ProductId == manifest.ProductId && i.FeedId == entry.FeedId
-                    ) ?? _installedProducts.FirstOrDefault(i => i.ProductId == manifest.ProductId);
-                bool isInstalled = installed is not null;
+                List<ChannelEntry> channels = group.Value;
+                ChannelEntry best = channels
+                    .OrderByDescending(c => c.Manifest.Version, VersionComparer.Instance)
+                    .First();
+                ProductManifest manifest = best.Manifest;
+
+                IEnumerable<InstalledProduct> instances = _installedProducts.Where(i =>
+                    i.ProductId == group.Key
+                );
+                int instanceCount = instances.Count();
+                bool isInstalled = instanceCount > 0;
+                InstalledProduct? installed = instances.FirstOrDefault();
                 bool hasUpdate =
                     isInstalled && VersionComparer.IsNewer(manifest.Version, installed!.Version);
 
@@ -647,10 +681,13 @@ public partial class MarketplaceViewModel : ObservableObject
                     InstalledVersion = isInstalled ? installed!.Version : string.Empty,
                     ImageUrl = manifest.ImageUrl,
                     Publisher = manifest.Publisher,
-                    FeedName = entry.FeedName,
-                    FeedId = entry.FeedId,
-                    BadgeText = manifest.BadgeText,
-                    BadgeColor = manifest.BadgeColor,
+                    FeedName = ExtractBaseFeedName(best.FeedName),
+                    FeedId = best.FeedId,
+                    BadgeText = null,
+                    BadgeColor = null,
+                    ChannelCount = channels.Count,
+                    InstanceCount = instanceCount,
+                    AllowMultipleInstances = manifest.AllowMultipleInstances,
                 };
 
                 if (!string.IsNullOrEmpty(manifest.ImageUrl))
@@ -680,7 +717,10 @@ public partial class MarketplaceViewModel : ObservableObject
             && SelectedFeedFilter != LocalizationManager.GetString("Filter_AllFeeds")
         )
         {
-            filtered = filtered.Where(c => c.FeedName == SelectedFeedFilter);
+            filtered = filtered.Where(c =>
+                _channelsByProduct.TryGetValue(c.ProductId, out List<ChannelEntry>? channels)
+                && channels.Any(ch => ch.FeedName == SelectedFeedFilter)
+            );
         }
 
         if (

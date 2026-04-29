@@ -39,4 +39,7 @@ public partial class UpdateItemViewModel : ObservableObject
 
     [ObservableProperty]
     private string _feedId = string.Empty;
+
+    [ObservableProperty]
+    private string _instanceId = string.Empty;
 }
