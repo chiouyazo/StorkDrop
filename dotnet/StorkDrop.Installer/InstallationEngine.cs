@@ -1275,9 +1275,19 @@ public sealed class InstallationEngine : IInstallationEngine
 
             if (!handlerResult.Success)
             {
+                List<string> failedDetails = handlerResult
+                    .FileResults.Where(fr => !fr.Success)
+                    .Select(fr => $"{Path.GetFileName(fr.FilePath)}: {fr.ErrorMessage}")
+                    .ToList();
+
+                string detailedError =
+                    failedDetails.Count > 0
+                        ? string.Join("\n", failedDetails)
+                        : handlerResult.ErrorMessage ?? "File handler failed";
+
                 _logger.LogError(
                     "File handler failed, aborting installation: {Error}",
-                    handlerResult.ErrorMessage
+                    detailedError
                 );
                 return (
                     handledFiles,
@@ -1285,7 +1295,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     new InstallResult
                     {
                         Success = false,
-                        ErrorMessage = handlerResult.ErrorMessage,
+                        ErrorMessage = detailedError,
                         FailedStep = "FileHandler",
                     }
                 );

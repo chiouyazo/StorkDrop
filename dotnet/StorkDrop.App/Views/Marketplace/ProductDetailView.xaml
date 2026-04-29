@@ -44,10 +44,17 @@
             Foreground="{DynamicResource OnSurfaceVariantBrush}"
           />
           <TextBlock
+            Text="{Binding FeedDisplay}"
+            FontSize="12"
+            Foreground="#AAAAAA"
+            Margin="0,4,0,0"
+            Visibility="{Binding HasFeedDisplay, Converter={StaticResource BoolToVisibilityConverter}}"
+          />
+          <TextBlock
             Text="{Binding VersionDisplay}"
             FontSize="13"
             Foreground="#999999"
-            Margin="0,4,0,0"
+            Margin="0,2,0,0"
           />
         </StackPanel>
       </Grid>

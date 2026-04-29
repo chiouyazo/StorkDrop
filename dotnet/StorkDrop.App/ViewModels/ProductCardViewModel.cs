@@ -70,8 +70,11 @@ public partial class ProductCardViewModel : ObservableObject
 
     public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
 
-    public string VersionDisplay =>
-        string.IsNullOrEmpty(FeedName) ? $"v{Version}" : $"{FeedName} / v{Version}";
+    public bool HasFeedDisplay => !string.IsNullOrEmpty(FeedName);
+
+    public string FeedDisplay => FeedName ?? string.Empty;
+
+    public string VersionDisplay => $"v{Version}";
 
     partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
 

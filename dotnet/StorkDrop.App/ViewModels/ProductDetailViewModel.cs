@@ -81,10 +81,11 @@ public partial class ProductDetailViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasPlugins;
 
-    public string VersionDisplay =>
-        string.IsNullOrEmpty(FeedName)
-            ? $"v{Manifest?.Version}"
-            : $"{FeedName} / v{Manifest?.Version}";
+    public string VersionDisplay => $"v{Manifest?.Version}";
+
+    public string FeedDisplay => FeedName ?? string.Empty;
+
+    public bool HasFeedDisplay => !string.IsNullOrEmpty(FeedName);
 
     public bool CanInstallSelectedVersion => !IsInstalling && !IsSelectedVersionInstalled;
     public bool CanReExecutePlugins => IsInstalled && HasPlugins && !IsInstalling;
