@@ -20,6 +20,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IEncryptionService _encryptionService;
     private readonly IFeedConnectionService _connectionService;
     private readonly ISelfUpdateChecker _selfUpdateChecker;
+    private readonly Services.SelfUpdateService _selfUpdateService;
     private readonly DialogService _dialogService;
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
     private readonly IFeedRegistry _feedRegistry;
@@ -30,6 +31,7 @@ public partial class SettingsViewModel : ObservableObject
         IEncryptionService encryptionService,
         IFeedConnectionService connectionService,
         ISelfUpdateChecker selfUpdateChecker,
+        Services.SelfUpdateService selfUpdateService,
         DialogService dialogService,
         IEnumerable<IStorkDropPlugin> plugins,
         IFeedRegistry feedRegistry,
@@ -40,6 +42,7 @@ public partial class SettingsViewModel : ObservableObject
         _encryptionService = encryptionService;
         _connectionService = connectionService;
         _selfUpdateChecker = selfUpdateChecker;
+        _selfUpdateService = selfUpdateService;
         _dialogService = dialogService;
         _plugins = plugins;
         _feedRegistry = feedRegistry;
@@ -410,9 +413,34 @@ public partial class SettingsViewModel : ObservableObject
 
             if (update is not null)
             {
-                UpdateCheckResult = LocalizationManager
-                    .GetString("Settings_UpdateAvailable")
-                    .Replace("{0}", update.Version);
+                bool shouldUpdate = false;
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    Views.UpdateNotificationDialog dialog = new(
+                        update.Version,
+                        update.ReleaseNotes ?? ""
+                    )
+                    {
+                        Owner = System.Windows.Application.Current.MainWindow,
+                    };
+                    shouldUpdate = dialog.ShowDialog() == true;
+                });
+
+                if (shouldUpdate)
+                {
+                    UpdateCheckResult =
+                        LocalizationManager
+                            .GetString("Settings_UpdateAvailable")
+                            .Replace("{0}", update.Version) + " - Downloading...";
+
+                    await _selfUpdateService.DownloadAndLaunchInstallerAsync(update);
+                }
+                else
+                {
+                    UpdateCheckResult = LocalizationManager
+                        .GetString("Settings_UpdateAvailable")
+                        .Replace("{0}", update.Version);
+                }
             }
             else
             {
