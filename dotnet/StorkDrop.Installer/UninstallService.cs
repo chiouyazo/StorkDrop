@@ -279,6 +279,7 @@ public sealed class UninstallService
         }
         finally
         {
+            loadContext.FreeNativeLibraries();
             loadContext.Unload();
         }
     }

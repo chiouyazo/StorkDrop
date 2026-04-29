@@ -746,6 +746,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
+                    ctx.FreeNativeLibraries();
                     ctx.Unload();
                 }
                 catch { }
@@ -1756,6 +1757,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
+                    ctx.FreeNativeLibraries();
                     ctx.Unload();
                 }
                 catch { }
@@ -2427,6 +2429,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
+                    ctx.FreeNativeLibraries();
                     ctx.Unload();
                 }
                 catch { }
