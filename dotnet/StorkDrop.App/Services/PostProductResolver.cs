@@ -24,6 +24,12 @@ public sealed class PostProductResolver
     public async Task<PostProductResolution> ResolveAsync(
         OptionalPostProduct[] postProducts,
         CancellationToken cancellationToken = default
+    ) => await ResolveAsync(postProducts, null, cancellationToken);
+
+    public async Task<PostProductResolution> ResolveAsync(
+        OptionalPostProduct[] postProducts,
+        string? requiredBadge,
+        CancellationToken cancellationToken = default
     )
     {
         List<ResolvedPostProduct> available = [];
@@ -41,6 +47,7 @@ public sealed class PostProductResolver
             {
                 ResolvedPostProduct? resolvedInstalled = await FindInFeedsAsync(
                     postProduct.Id,
+                    requiredBadge,
                     cancellationToken
                 );
                 if (resolvedInstalled is not null)
@@ -50,6 +57,7 @@ public sealed class PostProductResolver
 
             ResolvedPostProduct? resolved = await FindInFeedsAsync(
                 postProduct.Id,
+                requiredBadge,
                 cancellationToken
             );
 
@@ -75,9 +83,12 @@ public sealed class PostProductResolver
 
     private async Task<ResolvedPostProduct?> FindInFeedsAsync(
         string productId,
+        string? requiredBadge,
         CancellationToken cancellationToken
     )
     {
+        ResolvedPostProduct? fallback = null;
+
         foreach (FeedInfo feed in _feedRegistry.GetFeeds())
         {
             try
@@ -87,8 +98,19 @@ public sealed class PostProductResolver
                     productId,
                     cancellationToken
                 );
-                if (manifest is not null)
+                if (manifest is null)
+                    continue;
+
+                bool badgeMatches = string.Equals(
+                    manifest.BadgeText ?? string.Empty,
+                    requiredBadge ?? string.Empty,
+                    StringComparison.OrdinalIgnoreCase
+                );
+
+                if (badgeMatches)
                     return new ResolvedPostProduct(manifest, feed.Id, feed.Name);
+
+                fallback ??= new ResolvedPostProduct(manifest, feed.Id, feed.Name);
             }
             catch (Exception ex)
             {
@@ -101,6 +123,6 @@ public sealed class PostProductResolver
             }
         }
 
-        return null;
+        return fallback;
     }
 }

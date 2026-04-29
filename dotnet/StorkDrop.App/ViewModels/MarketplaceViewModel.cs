@@ -170,7 +170,8 @@ public partial class MarketplaceViewModel : ObservableObject
                     .ToArray();
 
                 PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                    requiredAsOptional
+                    requiredAsOptional,
+                    manifest.BadgeText
                 );
 
                 if (resolution.Available.Count > 0 || resolution.Warnings.Count > 0)
@@ -344,7 +345,8 @@ public partial class MarketplaceViewModel : ObservableObject
         try
         {
             PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                parentManifest.OptionalPostProducts
+                parentManifest.OptionalPostProducts,
+                parentManifest.BadgeText
             );
 
             foreach (string warning in resolution.Warnings)

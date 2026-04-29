@@ -247,7 +247,8 @@ public partial class ProductDetailViewModel : ObservableObject
                     .ToArray();
 
                 PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                    requiredAsOptional
+                    requiredAsOptional,
+                    Manifest?.BadgeText
                 );
 
                 if (resolution.Available.Count > 0 || resolution.Warnings.Count > 0)
@@ -388,7 +389,8 @@ public partial class ProductDetailViewModel : ObservableObject
         try
         {
             PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                parentManifest.OptionalPostProducts
+                parentManifest.OptionalPostProducts,
+                parentManifest.BadgeText
             );
 
             foreach (string warning in resolution.Warnings)
