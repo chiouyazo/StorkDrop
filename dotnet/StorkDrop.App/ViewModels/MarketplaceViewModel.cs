@@ -85,6 +85,7 @@ public partial class MarketplaceViewModel : ObservableObject
     public bool ShowFeedFilter => AvailableFeedFilters.Count > 1;
 
     private List<(ProductManifest Manifest, string FeedName, string FeedId)> _allProducts = [];
+    private List<ProductCardViewModel> _allCards = [];
     private IReadOnlyList<InstalledProduct> _installedProducts = Array.Empty<InstalledProduct>();
     private CancellationTokenSource? _loadCts;
 
@@ -93,7 +94,24 @@ public partial class MarketplaceViewModel : ObservableObject
     /// </summary>
     public event Action<string, string>? NavigateToProductDetail;
 
-    partial void OnSearchTextChanged(string value) => ApplyFilters();
+    private CancellationTokenSource? _searchDebounce;
+
+    partial void OnSearchTextChanged(string value)
+    {
+        _searchDebounce?.Cancel();
+        _searchDebounce = new CancellationTokenSource();
+        CancellationToken token = _searchDebounce.Token;
+
+        Task.Delay(250, token)
+            .ContinueWith(
+                _ =>
+                {
+                    if (!token.IsCancellationRequested)
+                        System.Windows.Application.Current?.Dispatcher.Invoke(ApplyFilters);
+                },
+                TaskScheduler.Default
+            );
+    }
 
     partial void OnSelectedFilterNameChanged(string? value) => ApplyFilters();
 
@@ -585,6 +603,7 @@ public partial class MarketplaceViewModel : ObservableObject
             AvailablePublisherFilters = publisherFilters;
             SelectedPublisherFilter = LocalizationManager.GetString("Filter_AllPublishers");
 
+            RebuildCardCache();
             ApplyFilters();
         }
         catch (OperationCanceledException)
@@ -602,55 +621,10 @@ public partial class MarketplaceViewModel : ObservableObject
         }
     }
 
-    private void ApplyFilters()
+    private void RebuildCardCache()
     {
-        IEnumerable<(ProductManifest Manifest, string FeedName, string FeedId)> filtered =
-            _allProducts;
-
-        if (!string.IsNullOrWhiteSpace(SearchText))
-        {
-            string search = SearchText.ToLowerInvariant();
-            filtered = filtered.Where(p =>
-                p.Manifest.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || p.Manifest.ProductId.Contains(search, StringComparison.OrdinalIgnoreCase)
-                || (
-                    p.Manifest.Description?.Contains(search, StringComparison.OrdinalIgnoreCase)
-                    ?? false
-                )
-            );
-        }
-
-        if (
-            SelectedFeedFilter is not null
-            && SelectedFeedFilter != LocalizationManager.GetString("Filter_AllFeeds")
-        )
-        {
-            filtered = filtered.Where(p => p.FeedName == SelectedFeedFilter);
-        }
-
-        if (
-            SelectedFilterName is not null
-            && SelectedFilterName != LocalizationManager.GetString("Filter_AllTypes")
-            && Enum.TryParse<InstallType>(
-                SelectedFilterName,
-                ignoreCase: true,
-                out InstallType filterType
-            )
-        )
-        {
-            filtered = filtered.Where(p => p.Manifest.InstallType == filterType);
-        }
-
-        if (
-            SelectedPublisherFilter is not null
-            && SelectedPublisherFilter != LocalizationManager.GetString("Filter_AllPublishers")
-        )
-        {
-            filtered = filtered.Where(p => p.Manifest.Publisher == SelectedPublisherFilter);
-        }
-
-        Products = new ObservableCollection<ProductCardViewModel>(
-            filtered.Select(entry =>
+        _allCards = _allProducts
+            .Select(entry =>
             {
                 ProductManifest manifest = entry.Manifest;
                 InstalledProduct? installed =
@@ -679,14 +653,57 @@ public partial class MarketplaceViewModel : ObservableObject
                     BadgeColor = manifest.BadgeColor,
                 };
 
-                // Fire and forget image loading
                 if (!string.IsNullOrEmpty(manifest.ImageUrl))
-                {
                     _ = card.LoadImageAsync();
-                }
 
                 return card;
             })
-        );
+            .ToList();
+    }
+
+    private void ApplyFilters()
+    {
+        IEnumerable<ProductCardViewModel> filtered = _allCards;
+
+        if (!string.IsNullOrWhiteSpace(SearchText))
+        {
+            string search = SearchText.ToLowerInvariant();
+            filtered = filtered.Where(c =>
+                c.Title.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || c.ProductId.Contains(search, StringComparison.OrdinalIgnoreCase)
+                || c.Description.Contains(search, StringComparison.OrdinalIgnoreCase)
+            );
+        }
+
+        if (
+            SelectedFeedFilter is not null
+            && SelectedFeedFilter != LocalizationManager.GetString("Filter_AllFeeds")
+        )
+        {
+            filtered = filtered.Where(c => c.FeedName == SelectedFeedFilter);
+        }
+
+        if (
+            SelectedFilterName is not null
+            && SelectedFilterName != LocalizationManager.GetString("Filter_AllTypes")
+            && Enum.TryParse<InstallType>(
+                SelectedFilterName,
+                ignoreCase: true,
+                out InstallType filterType
+            )
+        )
+        {
+            filtered = filtered.Where(c => c.InstallType == filterType);
+        }
+
+        if (
+            SelectedPublisherFilter is not null
+            && SelectedPublisherFilter != LocalizationManager.GetString("Filter_AllPublishers")
+        )
+        {
+            filtered = filtered.Where(c => c.Publisher == SelectedPublisherFilter);
+        }
+
+        Products = new ObservableCollection<ProductCardViewModel>(filtered);
     }
 }
