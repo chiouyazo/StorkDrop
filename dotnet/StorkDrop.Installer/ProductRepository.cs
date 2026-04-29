@@ -84,7 +84,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             >(json, JsonOptions);
             _products = deserialized ?? [];
 
-            ValidateNoDuplicateProductIds(_products);
+            ValidateNoDuplicateProducts(_products);
             _logger.LogInformation(
                 "Loaded {Count} installed products from repository",
                 _products.Count
@@ -120,6 +120,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
 
     public async Task<InstalledProduct?> GetByIdAsync(
         string productId,
+        string? feedId = null,
         CancellationToken cancellationToken = default
     )
     {
@@ -127,6 +128,10 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            if (feedId is not null)
+                return _products.FirstOrDefault(p =>
+                    p.ProductId == productId && p.FeedId == feedId
+                );
             return _products.FirstOrDefault(p => p.ProductId == productId);
         }
         finally
@@ -149,7 +154,9 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            _products.RemoveAll(p => p.ProductId == product.ProductId);
+            _products.RemoveAll(p =>
+                p.ProductId == product.ProductId && p.FeedId == product.FeedId
+            );
             _products.Add(product);
             await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
@@ -168,7 +175,9 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            int index = _products.FindIndex(p => p.ProductId == product.ProductId);
+            int index = _products.FindIndex(p =>
+                p.ProductId == product.ProductId && p.FeedId == product.FeedId
+            );
             if (index >= 0)
             {
                 _products[index] = product;
@@ -181,14 +190,20 @@ public sealed class ProductRepository : IProductRepository, IDisposable
         }
     }
 
-    public async Task RemoveAsync(string productId, CancellationToken cancellationToken = default)
+    public async Task RemoveAsync(
+        string productId,
+        string? feedId = null,
+        CancellationToken cancellationToken = default
+    )
     {
         _logger.LogInformation("Removing product {ProductId} from repository", productId);
         await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
             await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            int removed = _products.RemoveAll(p => p.ProductId == productId);
+            int removed = feedId is not null
+                ? _products.RemoveAll(p => p.ProductId == productId && p.FeedId == feedId)
+                : _products.RemoveAll(p => p.ProductId == productId);
             if (removed > 0)
             {
                 await SaveAsync(cancellationToken).ConfigureAwait(false);
@@ -209,15 +224,15 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             .ConfigureAwait(false);
     }
 
-    private static void ValidateNoDuplicateProductIds(List<InstalledProduct> products)
+    private static void ValidateNoDuplicateProducts(List<InstalledProduct> products)
     {
-        HashSet<string> seen = [];
+        HashSet<(string, string?)> seen = [];
         foreach (InstalledProduct product in products)
         {
-            if (!seen.Add(product.ProductId))
+            if (!seen.Add((product.ProductId, product.FeedId)))
             {
                 throw new InvalidOperationException(
-                    $"Doppelte ProductId in installierter Produktliste: {product.ProductId}"
+                    $"Doppelte ProductId/FeedId in installierter Produktliste: {product.ProductId} ({product.FeedId})"
                 );
             }
         }

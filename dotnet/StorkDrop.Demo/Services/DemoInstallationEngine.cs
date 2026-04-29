@@ -352,7 +352,9 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
                 DateTime.UtcNow,
                 options.FeedId,
                 BackupPath: null,
-                InstallType: manifest.InstallType
+                InstallType: manifest.InstallType,
+                BadgeText: manifest.BadgeText,
+                BadgeColor: manifest.BadgeColor
             ),
             cancellationToken
         );
@@ -409,7 +411,7 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
-        await _productRepository.RemoveAsync(product.ProductId, cancellationToken);
+        await _productRepository.RemoveAsync(product.ProductId, product.FeedId, cancellationToken);
         await _activityLog.LogAsync(
             new ActivityLogEntry(
                 Guid.NewGuid().ToString(),

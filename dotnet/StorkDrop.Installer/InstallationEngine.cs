@@ -1038,7 +1038,9 @@ public sealed class InstallationEngine : IInstallationEngine
             InstalledDate: DateTime.UtcNow,
             FeedId: feedId,
             BackupPath: null,
-            InstallType: manifest.InstallType
+            InstallType: manifest.InstallType,
+            BadgeText: manifest.BadgeText,
+            BadgeColor: manifest.BadgeColor
         );
         await _productRepository.AddAsync(product, cancellationToken);
 
@@ -1962,6 +1964,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 InstalledProduct? updated = await _productRepository.GetByIdAsync(
                     newManifest.ProductId,
+                    options.FeedId,
                     cancellationToken
                 );
                 if (updated is not null)
@@ -2878,7 +2881,7 @@ public sealed class InstallationEngine : IInstallationEngine
         );
         InstalledProduct? previousInstall = await _productRepository.GetByIdAsync(
             manifest.ProductId,
-            cancellationToken
+            cancellationToken: cancellationToken
         );
 
         return new PluginEnvironment

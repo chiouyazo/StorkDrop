@@ -32,6 +32,18 @@ public partial class InstalledProductViewModel : ObservableObject
     [ObservableProperty]
     private InstallType _installType;
 
+    [ObservableProperty]
+    private string? _feedId;
+
+    [ObservableProperty]
+    private string? _badgeText;
+
+    [ObservableProperty]
+    private string? _badgeColor;
+
     public bool IsExecutable => InstallType == InstallType.Executable;
     public bool HasActions => HasPlugins || HasFileHandlerData;
+    public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
+
+    partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
 }

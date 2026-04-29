@@ -42,7 +42,16 @@ public partial class App : Application
 
         if (args.Length >= 3 && args[1] == "--uninstall")
         {
-            await RunElevatedUninstallAsync(args[2]);
+            string? feedId = null;
+            for (int i = 3; i < args.Length - 1; i++)
+            {
+                if (args[i] == "--feed")
+                {
+                    feedId = args[i + 1];
+                    break;
+                }
+            }
+            await RunElevatedUninstallAsync(args[2], feedId);
             Shutdown();
             return;
         }
@@ -378,7 +387,7 @@ public partial class App : Application
         );
     }
 
-    private Task RunElevatedUninstallAsync(string productId)
+    private Task RunElevatedUninstallAsync(string productId, string? feedId = null)
     {
         return RunElevatedAsync(
             "uninstall",
@@ -388,7 +397,10 @@ public partial class App : Application
                 IProductRepository productRepository =
                     services.GetRequiredService<IProductRepository>();
 
-                InstalledProduct? installed = await productRepository.GetByIdAsync(productId);
+                InstalledProduct? installed = await productRepository.GetByIdAsync(
+                    productId,
+                    feedId
+                );
                 if (installed is not null)
                     await engine.UninstallAsync(installed);
             }

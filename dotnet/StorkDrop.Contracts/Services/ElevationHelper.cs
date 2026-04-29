@@ -101,7 +101,7 @@ public static class ElevationHelper
         }
     }
 
-    public static bool RunElevatedUninstall(string productId)
+    public static bool RunElevatedUninstall(string productId, string? feedId = null)
     {
         try
         {
@@ -111,12 +111,13 @@ public static class ElevationHelper
             if (string.IsNullOrEmpty(exePath))
                 return false;
 
+            string feedArg = feedId is not null ? $"--feed \"{feedId}\"" : "";
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = $"--uninstall \"{productId}\" {GetPluginDirArgs()}",
+                Arguments = $"--uninstall \"{productId}\" {feedArg} {GetPluginDirArgs()}".Trim(),
             };
 
             Process? process = Process.Start(startInfo);

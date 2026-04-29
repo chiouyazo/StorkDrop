@@ -150,7 +150,7 @@ public partial class UpdatesViewModel : ObservableObject
 
             InstalledProduct? installed = await _productRepository.GetByIdAsync(
                 update.ProductId,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
             IRegistryClient client = _feedRegistry.GetClient(update.FeedId);
             ProductManifest? manifest = await client.GetProductManifestAsync(

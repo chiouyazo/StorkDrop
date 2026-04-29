@@ -3,9 +3,11 @@
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:scm="clr-namespace:System.ComponentModel;assembly=WindowsBase"
+  xmlns:converters="clr-namespace:StorkDrop.App.Converters"
   Loaded="OnLoaded"
 >
   <UserControl.Resources>
+    <converters:BadgeColorConverter x:Key="BadgeColorConverter" />
     <CollectionViewSource x:Key="GroupedProducts" Source="{Binding Products}">
       <CollectionViewSource.SortDescriptions>
         <scm:SortDescription PropertyName="IsExecutable" Direction="Descending" />
@@ -113,11 +115,24 @@
               </Grid.ColumnDefinitions>
 
               <StackPanel>
-                <TextBlock
-                  Text="{Binding Title}"
-                  Style="{DynamicResource HeadingSmall}"
-                  Margin="0,0,0,4"
-                />
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                  <TextBlock Text="{Binding Title}" Style="{DynamicResource HeadingSmall}" />
+                  <Border
+                    Background="{Binding BadgeColor, Converter={StaticResource BadgeColorConverter}}"
+                    Visibility="{Binding HasBadge, Converter={StaticResource BoolToVisibilityConverter}}"
+                    CornerRadius="4"
+                    Padding="6,2"
+                    Margin="8,0,0,0"
+                    VerticalAlignment="Center"
+                  >
+                    <TextBlock
+                      Text="{Binding BadgeText}"
+                      FontSize="10"
+                      FontWeight="SemiBold"
+                      Foreground="{Binding BadgeColor, Converter={StaticResource BadgeColorConverter}, ConverterParameter=foreground}"
+                    />
+                  </Border>
+                </StackPanel>
                 <StackPanel Orientation="Horizontal">
                   <TextBlock
                     Text="{DynamicResource Installed_Version}"

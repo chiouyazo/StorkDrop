@@ -40,7 +40,7 @@ public sealed class PostProductResolver
         {
             InstalledProduct? installed = await _productRepository.GetByIdAsync(
                 postProduct.Id,
-                cancellationToken
+                cancellationToken: cancellationToken
             );
 
             if (installed is not null)

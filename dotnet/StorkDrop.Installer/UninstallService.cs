@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts;
@@ -66,6 +67,11 @@ public sealed class UninstallService
         // Run PreUninstall plugin hooks if manifest is available
         await RunUninstallPluginPhaseAsync(product, "PreUninstall", cancellationToken);
 
+        // Force GC to release plugin assembly file locks after PreUninstall
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
         _logger.LogDebug("Removing environment variables for {ProductId}", product.ProductId);
         await RemoveEnvironmentVariablesAsync(product.ProductId, cancellationToken);
 
@@ -119,7 +125,7 @@ public sealed class UninstallService
         RemoveShortcuts(product.Title);
 
         _logger.LogDebug("Removing {ProductId} from product repository", product.ProductId);
-        await _productRepository.RemoveAsync(product.ProductId, cancellationToken);
+        await _productRepository.RemoveAsync(product.ProductId, product.FeedId, cancellationToken);
 
         ActivityLogEntry entry = new ActivityLogEntry(
             Id: Guid.NewGuid().ToString(),
@@ -207,41 +213,18 @@ public sealed class UninstallService
                         continue;
                     }
 
-                    ProductPluginLoadContext loadContext = new(
-                        Path.GetDirectoryName(assemblyPath)!
-                    );
-                    System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(
-                        assemblyPath
-                    );
-                    Type? pluginType = assembly.GetType(pluginInfo.TypeName, throwOnError: true);
-
-                    if (
-                        pluginType is null
-                        || Activator.CreateInstance(pluginType) is not IStorkPlugin plugin
-                    )
-                        continue;
-
                     _logger.LogInformation(
                         "Running {Phase} for {TypeName}",
                         phase,
                         pluginInfo.TypeName
                     );
 
-                    if (phase == "PreUninstall")
-                    {
-                        PluginPreInstallResult result = await plugin.PreUninstallAsync(
-                            context,
-                            cancellationToken
-                        );
-                        if (!result.Success)
-                            _logger.LogWarning("{Phase} failed: {Message}", phase, result.Message);
-                    }
-                    else if (phase == "PostUninstall")
-                    {
-                        await plugin.PostUninstallAsync(context, cancellationToken);
-                    }
-
-                    loadContext.Unload();
+                    // Run the plugin in a non-inlined method on a thread pool thread
+                    // so all assembly/plugin references die on the stack before
+                    // GC.Collect in the caller, and no SyncContext deadlock occurs.
+                    await Task.Run(() =>
+                        ExecutePluginPhase(assemblyPath, pluginInfo.TypeName, phase, context)
+                    );
                 }
                 catch (Exception ex)
                 {
@@ -257,6 +240,46 @@ public sealed class UninstallService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Could not run {Phase} plugins", phase);
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecutePluginPhase(
+        string assemblyPath,
+        string typeName,
+        string phase,
+        PluginContext context
+    )
+    {
+        ProductPluginLoadContext loadContext = new(Path.GetDirectoryName(assemblyPath)!);
+        try
+        {
+            System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
+            Type? pluginType = assembly.GetType(typeName, throwOnError: true);
+
+            if (
+                pluginType is null
+                || Activator.CreateInstance(pluginType) is not IStorkPlugin plugin
+            )
+                return;
+
+            if (phase == "PreUninstall")
+            {
+                PluginPreInstallResult result = plugin
+                    .PreUninstallAsync(context, CancellationToken.None)
+                    .GetAwaiter()
+                    .GetResult();
+                if (!result.Success)
+                    _logger.LogWarning("{Phase} failed: {Message}", phase, result.Message);
+            }
+            else if (phase == "PostUninstall")
+            {
+                plugin.PostUninstallAsync(context, CancellationToken.None).GetAwaiter().GetResult();
+            }
+        }
+        finally
+        {
+            loadContext.Unload();
         }
     }
 

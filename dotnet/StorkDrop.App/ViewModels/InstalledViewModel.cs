@@ -153,6 +153,9 @@ public partial class InstalledViewModel : ObservableObject
                         HasPlugins = hasPlugins,
                         HasFileHandlerData = hasFileHandlerData,
                         InstallType = p.InstallType ?? InstallType.Plugin,
+                        FeedId = p.FeedId,
+                        BadgeText = p.BadgeText,
+                        BadgeColor = p.BadgeColor,
                     }
                 );
             }
@@ -192,7 +195,7 @@ public partial class InstalledViewModel : ObservableObject
             if (needsAdmin)
             {
                 bool elevated = await Task.Run(() =>
-                    ElevationHelper.RunElevatedUninstall(product.ProductId)
+                    ElevationHelper.RunElevatedUninstall(product.ProductId, product.FeedId)
                 );
 
                 if (!elevated)
@@ -221,6 +224,7 @@ public partial class InstalledViewModel : ObservableObject
 
             InstalledProduct? installed = await _productRepository.GetByIdAsync(
                 product.ProductId,
+                product.FeedId,
                 cancellationToken
             );
             if (installed is not null)
@@ -236,7 +240,7 @@ public partial class InstalledViewModel : ObservableObject
                         product.ProductId
                     );
                     bool elevated = await Task.Run(() =>
-                        ElevationHelper.RunElevatedUninstall(product.ProductId)
+                        ElevationHelper.RunElevatedUninstall(product.ProductId, product.FeedId)
                     );
                     if (!elevated)
                     {
@@ -286,7 +290,10 @@ public partial class InstalledViewModel : ObservableObject
     {
         try
         {
-            InstalledProduct? installed = await _productRepository.GetByIdAsync(product.ProductId);
+            InstalledProduct? installed = await _productRepository.GetByIdAsync(
+                product.ProductId,
+                product.FeedId
+            );
             if (installed is null)
                 return;
 

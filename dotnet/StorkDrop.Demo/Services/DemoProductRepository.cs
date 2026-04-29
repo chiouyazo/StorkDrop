@@ -22,6 +22,7 @@ internal sealed class DemoProductRepository : IProductRepository
 
     public Task<InstalledProduct?> GetByIdAsync(
         string productId,
+        string? feedId = null,
         CancellationToken cancellationToken = default
     ) => Task.FromResult(_products.GetValueOrDefault(productId));
 
@@ -37,7 +38,11 @@ internal sealed class DemoProductRepository : IProductRepository
         return Task.CompletedTask;
     }
 
-    public Task RemoveAsync(string productId, CancellationToken cancellationToken = default)
+    public Task RemoveAsync(
+        string productId,
+        string? feedId = null,
+        CancellationToken cancellationToken = default
+    )
     {
         _products.TryRemove(productId, out _);
         return Task.CompletedTask;
