@@ -2,12 +2,27 @@
 
 ## Marketplace
 
-The marketplace shows all available products from all configured feeds. Users can:
+The marketplace shows all available products from all configured feeds. Products with the same `productId` across different feeds are merged into a single card. Users can:
 
 - **Search** products by name, ID, or description
 - **Filter** by feed, publisher, or product type (Suite, Plugin, Bundle)
 - **Browse** product details with version history and release notes
-- **Install** any version - not just the latest
+- **Install** any version from any channel - not just the latest
+- **Manage** multi-instance products via the gear icon
+
+Each card shows the product title, feed name, latest version, and description. Products that support multiple installations (`allowMultipleInstances`) show a gear icon to manage existing instances.
+
+## Channels
+
+Products published to multiple Nexus repositories with different badges (STABLE, DEV, FEATURE) appear as a single card in the marketplace. The product detail view shows a **channel dropdown** where users pick which channel to install from. Each channel shows its badge as a colored pill.
+
+- Updates only check within the currently installed channel
+- Switching channels preserves files defined in `preserveOnSwitch`
+- The installed products view shows the current channel badge next to the product title
+
+## Multi-instance
+
+Products that set `allowMultipleInstances: true` can be installed multiple times. Each installation has a unique instance name (e.g. "production", "test"). Instances are fully isolated - own install path, own config, own service registration. The installed view shows all instances, and the search box filters by product name, ID, or instance name.
 
 When a product has a plugin connected to it, the install dialog shows a hint:
 
@@ -15,10 +30,10 @@ When a product has a plugin connected to it, the install dialog shows a hint:
 
 ## Installation tracking
 
-Installations run in the background. A status indicator in the bottom bar shows active installations - like a browser's download bar:
+Installations, updates, and uninstalls run in the background. A status indicator in the bottom bar shows active operations - like a browser's download bar:
 
-- Click it to see all active and completed installations
-- Click any installation to open a **live log viewer** with a dark terminal-style UI
+- Click it to see all active and completed operations
+- Click any operation to open a **live log viewer** with a dark terminal-style UI
 - Logs show every step: download, extract, plugin processing, file copy, shortcut creation
 - Completed installations stay in the list with their full log history
 - Supports native text selection and Ctrl+C for copying log output

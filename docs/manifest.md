@@ -117,12 +117,59 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "optionalPostProducts": [
     { "id": "my-example-data", "hideNoAccess": true },
   ],
+  "badgeText": "STABLE",
+  "badgeColor": "#2E7D32",
+  "allowMultipleInstances": false,
+  "preserveOnSwitch": ["config.json", "secret.key"],
   "cleanup": {
     "registryKeys": [],
     "dataLocations": ["%APPDATA%\\MyProduct"],
   },
 }
 ```
+
+## Channels (badges)
+
+Products can be published to multiple Nexus repositories with different badges. StorkDrop merges them into a single card in the marketplace:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `badgeText` | string | Badge label displayed in the channel dropdown (e.g. "STABLE", "DEV", "FEATURE") |
+| `badgeColor` | string | Hex color for the badge pill (e.g. "#2E7D32" for green, "#E53935" for red) |
+
+Same `productId` across different repos = one product with multiple channels. The channel dropdown in the product detail view lets users pick which channel to install from.
+
+Pipeline example:
+
+```yaml
+# Stable channel (v* tags without pre-release suffix)
+stork-manifest-update --badge-text "STABLE" --badge-color "#2E7D32"
+stork-publish --repository Prod_MyProduct
+
+# Dev channel (v*-dev* tags)
+stork-manifest-update --badge-text "DEV" --badge-color "#E53935"
+stork-publish --repository Prod_MyProduct_Develop
+```
+
+## Multi-instance
+
+Products that support multiple simultaneous installations (e.g. a production instance and a test instance) set `allowMultipleInstances: true`. This enables the manage button (gear icon) on the marketplace card.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `allowMultipleInstances` | bool | `false` | Enables multi-instance support |
+
+Each instance has a unique `InstanceId` (e.g. "production", "test"). Plugins receive `context.InstanceId` to differentiate service names, configs, etc.
+
+## Channel switching
+
+When switching between channels, files matching `preserveOnSwitch` patterns are kept across the switch:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `preserveOnSwitch` | string[] | Glob patterns for files to preserve (e.g. `["config.json", "data/**"]`) |
+
+Without this field, all files are replaced during a channel switch.
 
 ## Environment variables
 

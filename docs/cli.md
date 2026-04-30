@@ -18,6 +18,7 @@ storkdrop --cli install <productId> [options]
 |--------|-------------|
 | `--version <version>` | Install a specific version (default: latest) |
 | `--path <path>` | Install path (default: manifest's recommendedInstallPath) |
+| `--instance <id>` | Instance name for multi-instance products (default: "default") |
 | `--config-file <path>` | JSON file with plugin config values |
 | `--config key=value` | Set a plugin config value (repeatable) |
 
@@ -28,6 +29,9 @@ storkdrop --cli install my-product
 storkdrop --cli install my-product --version 1.2.3
 storkdrop --cli install my-product --path "C:\Program Files\MyProduct"
 storkdrop --cli install my-product --config target-database=Production --config smtp-port=587
+
+# Multi-instance: install a second instance
+storkdrop --cli install my-product --instance test --path "C:\MyProduct-Test"
 storkdrop --cli install my-product --config-file install-config.json
 ```
 
@@ -36,7 +40,7 @@ storkdrop --cli install my-product --config-file install-config.json
 Uninstall an installed product.
 
 ```
-storkdrop --cli uninstall <productId>
+storkdrop --cli uninstall <productId> [--instance <id>]
 ```
 
 ### update
@@ -44,7 +48,7 @@ storkdrop --cli uninstall <productId>
 Update an installed product to the latest (or specific) version.
 
 ```
-storkdrop --cli update <productId> [options]
+storkdrop --cli update <productId> [--instance <id>] [options]
 ```
 
 | Option | Description |
@@ -74,7 +78,7 @@ storkdrop --cli versions <productId>
 Re-run plugin actions (PreInstall + PostInstall) on an installed product without re-downloading or re-copying files. Previous configuration values are pre-filled in the dialog.
 
 ```
-storkdrop --cli re-execute <productId> [options]
+storkdrop --cli re-execute <productId> [--instance <id>] [options]
 ```
 
 | Option | Description |

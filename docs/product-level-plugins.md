@@ -161,11 +161,13 @@ The `PluginContext` passed to pre/post methods contains:
 | Property | Type | Description |
 |----------|------|-------------|
 | `ProductId` | `string` | The product being installed |
+| `InstanceId` | `string` | Instance identifier (default: `"default"`) |
 | `Version` | `string` | Version being installed |
 | `InstallPath` | `string` | Target installation directory |
 | `StorkConfigDirectory` | `string` | StorkDrop's config directory |
 | `ConfigValues` | `Dictionary<string, string>` | User's choices from the config form |
 | `PluginData` | `Dictionary<string, object>` | Extra data from app-level plugins |
+| `Log` | `Action<string>?` | Callback to write messages to the tracker panel |
 
 ## PluginEnvironment
 
@@ -312,3 +314,54 @@ new PluginConfigField
 ```
 
 These properties can also be set dynamically via `IInteractiveStorkPlugin.OnButtonClicked` when returning `UpdatedSchema`.
+
+## Plugin logging
+
+Plugins can write messages to StorkDrop's installation tracker panel. Messages appear with timestamps in the live log viewer.
+
+```csharp
+public async Task PostInstallAsync(PluginContext context, CancellationToken ct)
+{
+    context.Log?.Invoke("Writing configuration...");
+    WriteConfig(context);
+
+    context.Log?.Invoke("Running database migration...");
+    await MigrateDatabase(context, ct);
+
+    context.Log?.Invoke("Registering telemetry...");
+    await RegisterTelemetry(context, ct);
+}
+```
+
+Use `context.Log?.Invoke()` (null-conditional) for backward compatibility with older StorkDrop versions that don't have the `Log` property.
+
+## Resource cleanup
+
+Plugins that create native resources (SQL connection pools, file handles, native libraries) must release them in the `Cleanup()` method. This is called automatically after each plugin phase, before the assembly is unloaded.
+
+```csharp
+public void Cleanup()
+{
+    SqlConnection.ClearAllPools();
+}
+```
+
+If you use the `StorkDrop.Steps` SDK, this is handled automatically. Only implement `Cleanup()` if you manage native resources directly.
+
+Failing to clean up can cause file locks on the install directory or native access violations during assembly unloading.
+
+## Multi-instance support
+
+When a product sets `"allowMultipleInstances": true` in its manifest, users can install it multiple times with different configurations. Each instance has a unique `InstanceId` available via `context.InstanceId`.
+
+Use this to differentiate service names, database schemas, log paths, etc:
+
+```csharp
+public async Task PostInstallAsync(PluginContext context, CancellationToken ct)
+{
+    string serviceName = $"myservice-{context.InstanceId}";
+    ServiceInstaller.Install(exePath, installPath, serviceName);
+}
+```
+
+The default `InstanceId` is `"default"` for single-instance products.
