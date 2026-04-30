@@ -2552,6 +2552,30 @@ public sealed class InstallationEngine : IInstallationEngine
 
                 if (phase == PluginPhase.PreInstall)
                 {
+                    if (plugin is IValidatingStorkPlugin validating)
+                    {
+                        IReadOnlyList<PluginValidationError> errors =
+                            validating.ValidateConfiguration(context);
+                        if (errors.Count > 0)
+                        {
+                            string errorText = string.Join(
+                                "; ",
+                                errors.Select(e => $"{e.FieldKey}: {e.Message}")
+                            );
+                            await LogPluginResult(
+                                manifest.ProductId,
+                                $"Validation failed ({pluginInfo.TypeName}): {errorText}",
+                                false,
+                                cancellationToken
+                            );
+                            return new PluginPhaseResult
+                            {
+                                Success = false,
+                                ErrorMessage = errorText,
+                            };
+                        }
+                    }
+
                     PluginPreInstallResult preResult = await plugin.PreInstallAsync(
                         context,
                         cancellationToken

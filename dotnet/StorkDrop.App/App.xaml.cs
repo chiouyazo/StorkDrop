@@ -4,6 +4,7 @@ using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Serilog;
 using StorkDrop.App.Services;
 using StorkDrop.App.ViewModels;
 using StorkDrop.App.Views;
@@ -12,6 +13,7 @@ using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
+using Log = Serilog.Log;
 
 namespace StorkDrop.App;
 
@@ -78,6 +80,24 @@ public partial class App : Application
 
         base.OnStartup(e);
 
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log.Fatal(args.Exception, "Unhandled exception on UI thread");
+            Log.CloseAndFlush();
+        };
+
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+        {
+            if (args.ExceptionObject is Exception ex)
+                Log.Fatal(ex, "Unhandled domain exception");
+            Log.CloseAndFlush();
+        };
+
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log.Error(args.Exception, "Unobserved task exception");
+        };
+
         try
         {
             _host = AppHostBuilder.Build();
@@ -120,17 +140,27 @@ public partial class App : Application
             engine.OnFileHandlerConfigNeeded = (fields, currentValues) =>
             {
                 Dictionary<string, string>? result = null;
-                Dispatcher.Invoke(() =>
+                try
                 {
-                    ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
-                        fields,
-                        currentValues
-                    );
-                    Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
-                    dialog.Owner = MainWindow;
-                    if (dialog.ShowDialog() == true)
-                        result = vm.GetValues();
-                });
+                    Dispatcher.Invoke(() =>
+                    {
+                        PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                            fields,
+                            currentValues
+                        );
+                        Views.PluginConfigDialog dialog = new PluginConfigDialog
+                        {
+                            DataContext = vm,
+                        };
+                        dialog.Owner = MainWindow;
+                        if (dialog.ShowDialog() == true)
+                            result = vm.GetValues();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "File handler config dialog failed");
+                }
                 return result;
             };
 
