@@ -748,7 +748,6 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
-                    ctx.FreeNativeLibraries();
                     ctx.Unload();
                 }
                 catch { }
@@ -1777,7 +1776,6 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
-                    ctx.FreeNativeLibraries();
                     ctx.Unload();
                 }
                 catch { }
@@ -2472,7 +2470,6 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
-                    ctx.FreeNativeLibraries();
                     ctx.Unload();
                 }
                 catch { }
@@ -2511,6 +2508,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
         foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
         {
+            IStorkPlugin? plugin = null;
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -2525,11 +2523,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     pluginSearchPath = extractPath;
                 else
                     pluginSearchPath = Path.Combine(options.TargetPath, ".stork");
-                IStorkPlugin? plugin = LoadPlugin(
-                    pluginSearchPath,
-                    pluginInfo,
-                    _activePluginContexts
-                );
+                plugin = LoadPlugin(pluginSearchPath, pluginInfo, _activePluginContexts);
                 if (plugin is null)
                 {
                     await LogPluginResult(
@@ -2649,6 +2643,21 @@ public sealed class InstallationEngine : IInstallationEngine
                     continue;
 
                 return new PluginPhaseResult { Success = false, ErrorMessage = ex.Message };
+            }
+            finally
+            {
+                try
+                {
+                    plugin?.Cleanup();
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(
+                        cleanupEx,
+                        "Plugin cleanup failed for {TypeName}",
+                        pluginInfo.TypeName
+                    );
+                }
             }
         }
 

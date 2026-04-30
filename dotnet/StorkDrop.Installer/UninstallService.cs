@@ -28,6 +28,12 @@ public sealed class UninstallService
     /// </summary>
     public bool RequiresReboot { get; private set; }
 
+    /// <summary>
+    /// Callback invoked when locked files are detected during uninstall.
+    /// Allows the UI to show a dialog asking the user to close the locking processes.
+    /// </summary>
+    public LockedFilesCallback? OnLockedFilesDetected { get; set; }
+
     public UninstallService(
         IProductRepository productRepository,
         IActivityLog activityLog,
@@ -74,6 +80,38 @@ public sealed class UninstallService
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
+
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 10, "Checking for locked files...")
+        );
+        if (Directory.Exists(product.InstalledPath))
+        {
+            IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
+                product.InstalledPath
+            );
+            if (lockedFiles.Count > 0)
+            {
+                if (OnLockedFilesDetected is not null)
+                {
+                    OnLockedFilesDetected(lockedFiles, _fileLockDetector, product.InstalledPath);
+                }
+                else
+                {
+                    foreach (LockedFileInfo lockedFile in lockedFiles)
+                    {
+                        string processNames = string.Join(
+                            ", ",
+                            lockedFile.Processes.Select(p => p.ProcessName)
+                        );
+                        _logger.LogWarning(
+                            "Locked file during uninstall: {File} (used by {Processes})",
+                            lockedFile.FileName,
+                            processNames
+                        );
+                    }
+                }
+            }
+        }
 
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 15, "Removing environment variables...")
@@ -289,36 +327,90 @@ public sealed class UninstallService
         PluginContext context
     )
     {
-        ProductPluginLoadContext loadContext = new(Path.GetDirectoryName(assemblyPath)!);
+        string originalDir = Path.GetDirectoryName(assemblyPath)!;
+        string tempDir = Path.Combine(StorkPaths.PluginTempDir, $"uninstall-{Guid.NewGuid():N}");
+
         try
         {
-            System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
-            Type? pluginType = assembly.GetType(typeName, throwOnError: true);
+            Directory.CreateDirectory(tempDir);
+            CopyDirectoryRecursive(originalDir, tempDir);
 
-            if (
-                pluginType is null
-                || Activator.CreateInstance(pluginType) is not IStorkPlugin plugin
-            )
-                return;
+            string tempAssemblyPath = Path.Combine(
+                tempDir,
+                Path.GetRelativePath(originalDir, assemblyPath)
+            );
 
-            if (phase == "PreUninstall")
+            ProductPluginLoadContext loadContext = new(tempDir);
+            try
             {
-                PluginPreInstallResult result = plugin
-                    .PreUninstallAsync(context, CancellationToken.None)
-                    .GetAwaiter()
-                    .GetResult();
-                if (!result.Success)
-                    _logger.LogWarning("{Phase} failed: {Message}", phase, result.Message);
+                System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(
+                    tempAssemblyPath
+                );
+                Type? pluginType = assembly.GetType(typeName, throwOnError: true);
+
+                if (
+                    pluginType is null
+                    || Activator.CreateInstance(pluginType) is not IStorkPlugin plugin
+                )
+                    return;
+
+                if (phase == "PreUninstall")
+                {
+                    PluginPreInstallResult result = plugin
+                        .PreUninstallAsync(context, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                    if (!result.Success)
+                        _logger.LogWarning("{Phase} failed: {Message}", phase, result.Message);
+                }
+                else if (phase == "PostUninstall")
+                {
+                    plugin
+                        .PostUninstallAsync(context, CancellationToken.None)
+                        .GetAwaiter()
+                        .GetResult();
+                }
+
+                try
+                {
+                    plugin.Cleanup();
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "Plugin cleanup failed for {TypeName}", typeName);
+                }
             }
-            else if (phase == "PostUninstall")
+            finally
             {
-                plugin.PostUninstallAsync(context, CancellationToken.None).GetAwaiter().GetResult();
+                loadContext.Unload();
             }
         }
         finally
         {
-            loadContext.FreeNativeLibraries();
-            loadContext.Unload();
+            try
+            {
+                if (Directory.Exists(tempDir))
+                    Directory.Delete(tempDir, true);
+            }
+            catch
+            {
+                _logger.LogDebug(
+                    "Could not clean up temp plugin directory {TempDir}, will be cleaned on restart",
+                    tempDir
+                );
+            }
+        }
+    }
+
+    private static void CopyDirectoryRecursive(string source, string destination)
+    {
+        foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
+        {
+            Directory.CreateDirectory(dir.Replace(source, destination));
+        }
+        foreach (string file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
+        {
+            File.Copy(file, file.Replace(source, destination), true);
         }
     }
 

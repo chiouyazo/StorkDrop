@@ -13,6 +13,7 @@ using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
+using StorkDrop.Installer;
 using Log = Serilog.Log;
 
 namespace StorkDrop.App;
@@ -79,6 +80,13 @@ public partial class App : Application
         }
 
         base.OnStartup(e);
+
+        Environment.SetEnvironmentVariable("DOTNET_DbgEnableMiniDump", "1");
+        Environment.SetEnvironmentVariable("DOTNET_DbgMiniDumpType", "2");
+        Environment.SetEnvironmentVariable(
+            "DOTNET_DbgMiniDumpName",
+            Path.Combine(StorkPaths.LogDir, "crash-%p-%e.dmp")
+        );
 
         DispatcherUnhandledException += (_, args) =>
         {
@@ -200,7 +208,7 @@ public partial class App : Application
                 return result;
             };
 
-            engine.OnLockedFilesDetected = (lockedFiles, detector, directory) =>
+            LockedFilesCallback lockedFilesHandler = (lockedFiles, detector, directory) =>
             {
                 LockedFilesAction result = LockedFilesAction.Skip;
                 Dispatcher.Invoke(() =>
@@ -218,6 +226,11 @@ public partial class App : Application
                 });
                 return result;
             };
+
+            engine.OnLockedFilesDetected = lockedFilesHandler;
+
+            UninstallService uninstallService = Services.GetRequiredService<UninstallService>();
+            uninstallService.OnLockedFilesDetected = lockedFilesHandler;
 
             // Install path resolution via plugins (e.g., {ACMEPath} -> actual directory)
             IEnumerable<IStorkDropPlugin> allPlugins = Services.GetServices<IStorkDropPlugin>();

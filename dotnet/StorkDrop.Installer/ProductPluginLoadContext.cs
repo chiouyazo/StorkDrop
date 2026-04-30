@@ -12,29 +12,6 @@ internal sealed class ProductPluginLoadContext(string pluginDirectory)
         "StorkDrop.Contracts",
     };
 
-    private readonly List<IntPtr> _nativeHandles = [];
-
-    /// <summary>
-    /// Frees all native library handles loaded by this context.
-    /// Must be called before or alongside <see cref="AssemblyLoadContext.Unload"/>
-    /// because Unload does not release native handles.
-    /// </summary>
-    public void FreeNativeLibraries()
-    {
-        foreach (IntPtr handle in _nativeHandles)
-        {
-            try
-            {
-                NativeLibrary.Free(handle);
-            }
-            catch
-            {
-                // Best effort
-            }
-        }
-        _nativeHandles.Clear();
-    }
-
     protected override Assembly? Load(AssemblyName assemblyName)
     {
         string name = assemblyName.Name ?? "";
@@ -69,7 +46,7 @@ internal sealed class ProductPluginLoadContext(string pluginDirectory)
         string rid = RuntimeInformation.RuntimeIdentifier;
         string? nativePath = FindNativeLibrary(unmanagedDllName, rid);
         if (nativePath is not null)
-            return LoadAndTrackNative(nativePath);
+            return NativeLibrary.Load(nativePath);
 
         // Try architecture-specific RID (e.g., win-x64)
         string arch = RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
@@ -78,18 +55,10 @@ internal sealed class ProductPluginLoadContext(string pluginDirectory)
         {
             nativePath = FindNativeLibrary(unmanagedDllName, osRid);
             if (nativePath is not null)
-                return LoadAndTrackNative(nativePath);
+                return NativeLibrary.Load(nativePath);
         }
 
         return IntPtr.Zero;
-    }
-
-    private IntPtr LoadAndTrackNative(string path)
-    {
-        IntPtr handle = NativeLibrary.Load(path);
-        if (handle != IntPtr.Zero)
-            _nativeHandles.Add(handle);
-        return handle;
     }
 
     private Assembly? LoadFromRuntimesDirectory(string assemblyName)

@@ -57,4 +57,12 @@ public interface IStorkPlugin
     /// <param name="cancellationToken">A token to cancel the operation.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     Task PostUninstallAsync(PluginContext context, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Called before the plugin's assembly load context is unloaded.
+    /// Release all native resources, close connection pools, dispose handles, etc.
+    /// This prevents native access violations during assembly unloading.
+    /// Default implementation does nothing.
+    /// </summary>
+    void Cleanup() { }
 }
