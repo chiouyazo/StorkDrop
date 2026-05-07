@@ -67,7 +67,7 @@ public partial class PluginConfigDialogViewModel : ObservableObject
                 if (HasActionGroups)
                     RebuildGroupFields(result.UpdatedSchema, currentValues);
                 else
-                    BuildFields(result.UpdatedSchema, currentValues);
+                    MergeFields(result.UpdatedSchema, currentValues);
             }
         }
         catch (Exception ex)
@@ -152,6 +152,68 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             }
         }
         EvaluateEnabledConditions();
+    }
+
+    private void MergeFields(
+        IReadOnlyList<PluginConfigField> updatedSchema,
+        Dictionary<string, string> currentValues
+    )
+    {
+        Dictionary<string, PluginConfigField> updatedByKey =
+            new Dictionary<string, PluginConfigField>();
+        foreach (PluginConfigField field in updatedSchema)
+            updatedByKey[field.Key] = field;
+
+        HashSet<string> processedKeys = new HashSet<string>();
+
+        foreach (PluginConfigFieldViewModel fieldVm in Fields)
+        {
+            if (updatedByKey.TryGetValue(fieldVm.Key, out PluginConfigField? updated))
+            {
+                if (!OptionsEqual(fieldVm.Options, updated.Options))
+                    fieldVm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
+
+                if (!currentValues.ContainsKey(fieldVm.Key) && updated.DefaultValue is not null)
+                    fieldVm.Value = updated.DefaultValue;
+
+                fieldVm.Description = updated.Description ?? string.Empty;
+                fieldVm.IsReadOnly = updated.IsReadOnly;
+                fieldVm.EnabledWhen = updated.EnabledWhen;
+                processedKeys.Add(fieldVm.Key);
+            }
+        }
+
+        for (int i = Fields.Count - 1; i >= 0; i--)
+        {
+            if (!updatedByKey.ContainsKey(Fields[i].Key))
+                Fields.RemoveAt(i);
+        }
+
+        foreach (PluginConfigField newField in updatedSchema)
+        {
+            if (!processedKeys.Contains(newField.Key))
+            {
+                PluginConfigFieldViewModel fieldVm = CreateFieldViewModel(newField, currentValues);
+                Fields.Add(fieldVm);
+            }
+        }
+
+        EvaluateEnabledConditions();
+    }
+
+    private static bool OptionsEqual(
+        ObservableCollection<PluginOptionItem> existing,
+        List<PluginOptionItem> updated
+    )
+    {
+        if (existing.Count != updated.Count)
+            return false;
+        for (int i = 0; i < existing.Count; i++)
+        {
+            if (existing[i].Value != updated[i].Value || existing[i].Label != updated[i].Label)
+                return false;
+        }
+        return true;
     }
 
     private PluginConfigFieldViewModel CreateFieldViewModel(
