@@ -46,6 +46,25 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         BuildActionGroups(groups, previousValues);
     }
 
+    public async Task HandleConfigurationLoadedAsync()
+    {
+        if (InteractivePlugin is null)
+            return;
+
+        PluginButtonResult? result = await Task.Run(() =>
+            InteractivePlugin.OnConfigurationLoaded(GetValues())
+        );
+
+        if (result?.UpdatedSchema is not null)
+        {
+            Dictionary<string, string> currentValues = GetValues();
+            if (HasActionGroups)
+                RebuildGroupFields(result.UpdatedSchema, currentValues);
+            else
+                MergeFields(result.UpdatedSchema, currentValues);
+        }
+    }
+
     public void HandleButtonClick(PluginConfigFieldViewModel field)
     {
         if (InteractivePlugin is null)
@@ -141,7 +160,14 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             {
                 if (updatedByKey.TryGetValue(fieldVm.Key, out PluginConfigField? updated))
                 {
-                    fieldVm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
+                    if (!OptionsEqual(fieldVm.Options, updated.Options))
+                    {
+                        string savedValue = fieldVm.Value;
+                        fieldVm.Options = new ObservableCollection<PluginOptionItem>(
+                            updated.Options
+                        );
+                        fieldVm.Value = savedValue;
+                    }
                     if (updated.DefaultValue is not null && !currentValues.ContainsKey(fieldVm.Key))
                         fieldVm.Value = updated.DefaultValue;
                     fieldVm.Description = updated.Description ?? string.Empty;
@@ -171,7 +197,11 @@ public partial class PluginConfigDialogViewModel : ObservableObject
             if (updatedByKey.TryGetValue(fieldVm.Key, out PluginConfigField? updated))
             {
                 if (!OptionsEqual(fieldVm.Options, updated.Options))
+                {
+                    string savedValue = fieldVm.Value;
                     fieldVm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
+                    fieldVm.Value = savedValue;
+                }
 
                 if (!currentValues.ContainsKey(fieldVm.Key) && updated.DefaultValue is not null)
                     fieldVm.Value = updated.DefaultValue;

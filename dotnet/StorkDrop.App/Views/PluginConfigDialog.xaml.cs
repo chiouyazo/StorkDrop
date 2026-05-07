@@ -10,6 +10,13 @@ public partial class PluginConfigDialog : Window
     public PluginConfigDialog()
     {
         InitializeComponent();
+        Loaded += OnDialogLoaded;
+    }
+
+    private async void OnDialogLoaded(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is PluginConfigDialogViewModel viewModel)
+            await viewModel.HandleConfigurationLoadedAsync();
     }
 
     public Dictionary<string, string>? ResultValues { get; private set; }

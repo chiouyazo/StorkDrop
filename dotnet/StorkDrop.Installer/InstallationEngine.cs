@@ -2697,40 +2697,12 @@ public sealed class InstallationEngine : IInstallationEngine
             if (targetFileDir is not null)
                 Directory.CreateDirectory(targetFileDir);
 
+            bool deferred = false;
+
             if (File.Exists(targetPath) && _fileLockDetector.IsFileLocked(targetPath))
             {
-                _logger.LogInformation(
-                    "File {File} is locked, deferring replacement",
-                    Path.GetFileName(targetPath)
-                );
-                DeferLockedFile(
-                    fileOps,
-                    deferredOps,
-                    deferredRenames,
-                    file.FullName,
-                    targetPath,
-                    cancellationToken
-                );
-                await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
-            }
-            else
-            {
-                try
+                if (!TryResolveLockedFile(targetPath))
                 {
-                    await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
-                }
-                catch (Exception ex)
-                    when (File.Exists(targetPath)
-                        && (ex is IOException or UnauthorizedAccessException)
-                    )
-                {
-                    // Copy failed because the file is in use (lock check was too lenient).
-                    // Fall back to rename + deferred delete.
-                    _logger.LogWarning(
-                        "Copy failed for {File}, falling back to deferred replace: {Error}",
-                        Path.GetFileName(targetPath),
-                        ex.Message
-                    );
                     ReportProgress(
                         InstallStage.Installing,
                         0,
@@ -2744,7 +2716,41 @@ public sealed class InstallationEngine : IInstallationEngine
                         targetPath,
                         cancellationToken
                     );
+                    deferred = true;
+                }
+            }
+
+            if (!deferred)
+            {
+                try
+                {
                     await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
+                }
+                catch (Exception ex)
+                    when (File.Exists(targetPath)
+                        && (ex is IOException or UnauthorizedAccessException)
+                    )
+                {
+                    if (!TryResolveLockedFile(targetPath))
+                    {
+                        ReportProgress(
+                            InstallStage.Installing,
+                            0,
+                            $"Warning: {Path.GetFileName(targetPath)} is in use, will be replaced on restart"
+                        );
+                        DeferLockedFile(
+                            fileOps,
+                            deferredOps,
+                            deferredRenames,
+                            file.FullName,
+                            targetPath,
+                            cancellationToken
+                        );
+                    }
+                    else
+                    {
+                        await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
+                    }
                 }
             }
 
@@ -2753,6 +2759,27 @@ public sealed class InstallationEngine : IInstallationEngine
                 totalFiles > 0 ? (int)((double)processedFiles / totalFiles * 100) : 100;
             progress?.Report(percentage);
         }
+    }
+
+    private bool TryResolveLockedFile(string filePath)
+    {
+        if (OnLockedFilesDetected is null)
+            return false;
+
+        IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
+            Path.GetDirectoryName(filePath)!
+        );
+
+        if (lockedFiles.Count == 0)
+            return true;
+
+        LockedFilesAction action = OnLockedFilesDetected(
+            lockedFiles,
+            _fileLockDetector,
+            Path.GetDirectoryName(filePath)!
+        );
+
+        return action == LockedFilesAction.Retry && !_fileLockDetector.IsFileLocked(filePath);
     }
 
     private static void DeferLockedFile(
@@ -2764,35 +2791,22 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
-        string delFileName = $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(targetPath)}";
-        string delPath = Path.Combine(Path.GetDirectoryName(targetPath)!, delFileName);
-        File.Move(targetPath, delPath);
-        deferredRenames.Add(delPath);
-        deferredOps.ScheduleDeleteOnReboot(delPath);
+        string pendingFileName = $"NEW_{Guid.NewGuid():N}_{Path.GetFileName(targetPath)}";
+        string pendingPath = Path.Combine(Path.GetDirectoryName(targetPath)!, pendingFileName);
+
+        File.Copy(sourceFile, pendingPath, true);
+        deferredRenames.Add(pendingPath);
+        deferredOps.ScheduleMoveOnReboot(pendingPath, targetPath);
     }
 
     private static void RevertDeferredRenames(List<string> deferredRenames, string targetDir)
     {
-        foreach (string delPath in deferredRenames)
+        foreach (string pendingPath in deferredRenames)
         {
             try
             {
-                string fileName = Path.GetFileName(delPath);
-                int secondUnderscore = fileName.IndexOf('_', 4);
-                if (secondUnderscore >= 0 && secondUnderscore + 1 < fileName.Length)
-                {
-                    string originalName = fileName.Substring(secondUnderscore + 1);
-                    string originalPath = Path.Combine(
-                        Path.GetDirectoryName(delPath)!,
-                        originalName
-                    );
-
-                    if (File.Exists(originalPath))
-                        File.Delete(originalPath);
-
-                    if (File.Exists(delPath))
-                        File.Move(delPath, originalPath);
-                }
+                if (File.Exists(pendingPath))
+                    File.Delete(pendingPath);
             }
             catch
             {

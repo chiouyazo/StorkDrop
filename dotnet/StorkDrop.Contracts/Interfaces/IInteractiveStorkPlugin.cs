@@ -13,4 +13,14 @@ public interface IInteractiveStorkPlugin
     /// Called when the user clicks a button in the plugin configuration dialog.
     /// </summary>
     PluginButtonResult OnButtonClicked(string fieldKey, Dictionary<string, string> currentValues);
+
+    /// <summary>
+    /// Called on a background thread after the configuration dialog opens.
+    /// Return a <see cref="PluginButtonResult"/> with <see cref="PluginButtonResult.UpdatedSchema"/>
+    /// to update fields, or null to do nothing.
+    /// </summary>
+    PluginButtonResult? OnConfigurationLoaded(Dictionary<string, string> currentValues)
+    {
+        return null;
+    }
 }
