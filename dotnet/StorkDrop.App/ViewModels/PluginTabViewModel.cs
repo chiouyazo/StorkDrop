@@ -49,12 +49,12 @@ public partial class PluginTabViewModel : ObservableObject
         Title = plugin.DisplayName;
         PluginId = plugin.PluginId;
 
-        LoadSections();
+        _ = LoadSectionsAsync();
     }
 
-    private void LoadSections()
+    private async Task LoadSectionsAsync()
     {
-        Dictionary<string, string> savedValues = LoadSavedValues();
+        Dictionary<string, string> savedValues = await LoadSavedValuesAsync();
         IReadOnlyList<PluginSettingsSection> pluginSections = _plugin.GetSettingsSections();
         ObservableCollection<PluginSettingsSectionViewModel> sectionVms = [];
 
@@ -196,7 +196,7 @@ public partial class PluginTabViewModel : ObservableObject
         try
         {
             Dictionary<string, string> values = CollectValues();
-            await _settingsStore.SaveAsync(_plugin.PluginId, values);
+            await Task.Run(() => _settingsStore.SaveAsync(_plugin.PluginId, values));
             StatusMessage = LocalizationManager.GetString("Status_TestSuccess");
         }
         catch (Exception ex)
@@ -235,17 +235,17 @@ public partial class PluginTabViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Refresh()
+    private async Task RefreshAsync()
     {
-        LoadSections();
+        await LoadSectionsAsync();
         StatusMessage = string.Empty;
     }
 
-    private Dictionary<string, string> LoadSavedValues()
+    private async Task<Dictionary<string, string>> LoadSavedValuesAsync()
     {
         try
         {
-            return Task.Run(() => _settingsStore.LoadAsync(_plugin.PluginId)).Result;
+            return await Task.Run(() => _settingsStore.LoadAsync(_plugin.PluginId));
         }
         catch (Exception ex)
         {

@@ -88,86 +88,97 @@ public partial class InstalledViewModel : ObservableObject
             CancellationToken cancellationToken = _loadCts.Token;
 
             IsLoading = true;
-            IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
-                cancellationToken
-            );
-            List<InstalledProductViewModel> productVms = [];
-            foreach (InstalledProduct p in installed)
+
+            bool hasFileHandlers;
+            try
             {
-                bool hasPlugins = false;
-                string manifestPath = Path.Combine(p.InstalledPath, ".stork", "manifest.json");
-                if (File.Exists(manifestPath))
+                hasFileHandlers = StorkDrop
+                    .App.App.Services.GetServices<IStorkDropPlugin>()
+                    .Any(plugin => plugin is IFileTypeHandler);
+            }
+            catch
+            {
+                hasFileHandlers = false;
+            }
+
+            List<InstalledProductViewModel> productVms = await Task.Run(async () =>
+            {
+                IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
+                    cancellationToken
+                );
+                List<InstalledProductViewModel> vms = [];
+                foreach (InstalledProduct p in installed)
                 {
-                    try
+                    bool hasPlugins = false;
+                    string manifestPath = Path.Combine(p.InstalledPath, ".stork", "manifest.json");
+                    if (File.Exists(manifestPath))
                     {
-                        string json = File.ReadAllText(manifestPath);
-                        ProductManifest? manifest = JsonSerializer.Deserialize<ProductManifest>(
-                            json,
-                            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
-                        );
-                        hasPlugins = manifest?.Plugins is { Length: > 0 };
+                        try
+                        {
+                            string json = File.ReadAllText(manifestPath);
+                            ProductManifest? manifest = JsonSerializer.Deserialize<ProductManifest>(
+                                json,
+                                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+                            );
+                            hasPlugins = manifest?.Plugins is { Length: > 0 };
+                        }
+                        catch { }
                     }
-                    catch { }
-                }
 
-                if (!hasPlugins && p.FeedId is not null)
-                {
-                    try
+                    if (!hasPlugins && p.FeedId is not null)
                     {
-                        IRegistryClient client = _feedRegistry.GetClient(p.FeedId);
-                        ProductManifest? feedManifest = await client.GetProductManifestAsync(
-                            p.ProductId,
-                            cancellationToken
-                        );
-                        hasPlugins = feedManifest?.Plugins is { Length: > 0 };
+                        try
+                        {
+                            IRegistryClient client = _feedRegistry.GetClient(p.FeedId);
+                            ProductManifest? feedManifest = await client.GetProductManifestAsync(
+                                p.ProductId,
+                                cancellationToken
+                            );
+                            hasPlugins = feedManifest?.Plugins is { Length: > 0 };
+                        }
+                        catch { }
                     }
-                    catch { }
-                }
 
-                bool hasFileHandlerData = false;
-                string storkFilesDir = Path.Combine(p.InstalledPath, ".stork", "files");
-                try
-                {
-                    if (
-                        Directory.Exists(storkFilesDir)
-                        && Directory.GetFiles(storkFilesDir).Length > 0
-                    )
-                        hasFileHandlerData = true;
-                }
-                catch { }
-
-                if (!hasFileHandlerData)
-                {
+                    bool hasFileHandlerData = false;
+                    string storkFilesDir = Path.Combine(p.InstalledPath, ".stork", "files");
                     try
                     {
-                        bool hasFileHandlers = StorkDrop
-                            .App.App.Services.GetServices<IStorkDropPlugin>()
-                            .Any(plugin => plugin is IFileTypeHandler);
-                        if (hasFileHandlers && p.FeedId is not null)
+                        if (
+                            Directory.Exists(storkFilesDir)
+                            && Directory.GetFiles(storkFilesDir).Length > 0
+                        )
                             hasFileHandlerData = true;
                     }
                     catch { }
-                }
 
-                productVms.Add(
-                    new InstalledProductViewModel
+                    if (!hasFileHandlerData)
                     {
-                        ProductId = p.ProductId,
-                        InstanceId = p.InstanceId,
-                        Title = p.Title,
-                        Version = p.Version,
-                        InstalledPath = p.InstalledPath,
-                        InstalledDate = p.InstalledDate,
-                        HasPlugins = hasPlugins,
-                        HasFileHandlerData = hasFileHandlerData,
-                        InstallType = p.InstallType ?? InstallType.Plugin,
-                        FeedId = p.FeedId,
-                        BadgeText = p.BadgeText,
-                        BadgeColor = p.BadgeColor,
-                        InstanceUniqueId = p.InstanceUniqueId ?? string.Empty,
+                        if (hasFileHandlers && p.FeedId is not null)
+                            hasFileHandlerData = true;
                     }
-                );
-            }
+
+                    vms.Add(
+                        new InstalledProductViewModel
+                        {
+                            ProductId = p.ProductId,
+                            InstanceId = p.InstanceId,
+                            Title = p.Title,
+                            Version = p.Version,
+                            InstalledPath = p.InstalledPath,
+                            InstalledDate = p.InstalledDate,
+                            HasPlugins = hasPlugins,
+                            HasFileHandlerData = hasFileHandlerData,
+                            InstallType = p.InstallType ?? InstallType.Plugin,
+                            FeedId = p.FeedId,
+                            BadgeText = p.BadgeText,
+                            BadgeColor = p.BadgeColor,
+                            InstanceUniqueId = p.InstanceUniqueId ?? string.Empty,
+                        }
+                    );
+                }
+                return vms;
+            });
+
             _allProducts = productVms;
             ApplySearchFilter();
         }
@@ -243,7 +254,7 @@ public partial class InstalledViewModel : ObservableObject
                     return;
                 }
 
-                await _productRepository.ReloadAsync();
+                await Task.Run(() => _productRepository.ReloadAsync());
                 Products.Remove(product);
                 OnPropertyChanged(nameof(HasProducts));
                 OnPropertyChanged(nameof(HasNoProducts));
@@ -258,10 +269,12 @@ public partial class InstalledViewModel : ObservableObject
             using CancellationTokenSource cts = new CancellationTokenSource();
             CancellationToken cancellationToken = cts.Token;
 
-            InstalledProduct? installed = await _productRepository.GetByIdAsync(
-                product.ProductId,
-                product.InstanceId,
-                cancellationToken
+            InstalledProduct? installed = await Task.Run(() =>
+                _productRepository.GetByIdAsync(
+                    product.ProductId,
+                    product.InstanceId,
+                    cancellationToken
+                )
             );
             if (installed is not null)
             {
@@ -307,7 +320,7 @@ public partial class InstalledViewModel : ObservableObject
                         );
                         return;
                     }
-                    await _productRepository.ReloadAsync();
+                    await Task.Run(() => _productRepository.ReloadAsync());
                 }
 
                 tracked.Complete(true);
@@ -361,9 +374,8 @@ public partial class InstalledViewModel : ObservableObject
     {
         try
         {
-            InstalledProduct? installed = await _productRepository.GetByIdAsync(
-                product.ProductId,
-                product.InstanceId
+            InstalledProduct? installed = await Task.Run(() =>
+                _productRepository.GetByIdAsync(product.ProductId, product.InstanceId)
             );
             if (installed is null)
                 return;

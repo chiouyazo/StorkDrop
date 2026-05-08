@@ -60,54 +60,59 @@ public partial class UpdatesViewModel : ObservableObject
 
             IsLoading = true;
             ErrorMessage = string.Empty;
-            IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
-                cancellationToken
-            );
 
-            List<UpdateItemViewModel> updateItems = [];
-            foreach (InstalledProduct product in installed)
+            List<UpdateItemViewModel> updateItems = await Task.Run(async () =>
             {
-                if (string.IsNullOrEmpty(product.FeedId))
-                    continue;
+                IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
+                    cancellationToken
+                );
 
-                try
+                List<UpdateItemViewModel> items = [];
+                foreach (InstalledProduct product in installed)
                 {
-                    IRegistryClient client = _feedRegistry.GetClient(product.FeedId);
-                    ProductManifest? latest = await client.GetProductManifestAsync(
-                        product.ProductId,
-                        cancellationToken
-                    );
+                    if (string.IsNullOrEmpty(product.FeedId))
+                        continue;
 
-                    if (
-                        latest is not null
-                        && VersionComparer.IsNewer(latest.Version, product.Version)
-                    )
+                    try
                     {
-                        updateItems.Add(
-                            new UpdateItemViewModel
-                            {
-                                ProductId = product.ProductId,
-                                Title = product.Title,
-                                CurrentVersion = product.Version,
-                                AvailableVersion = latest.Version,
-                                ReleaseNotes = latest.ReleaseNotes ?? string.Empty,
-                                InstalledPath = product.InstalledPath,
-                                FeedId = product.FeedId,
-                                InstanceId = product.InstanceId,
-                            }
+                        IRegistryClient client = _feedRegistry.GetClient(product.FeedId);
+                        ProductManifest? latest = await client.GetProductManifestAsync(
+                            product.ProductId,
+                            cancellationToken
+                        );
+
+                        if (
+                            latest is not null
+                            && VersionComparer.IsNewer(latest.Version, product.Version)
+                        )
+                        {
+                            items.Add(
+                                new UpdateItemViewModel
+                                {
+                                    ProductId = product.ProductId,
+                                    Title = product.Title,
+                                    CurrentVersion = product.Version,
+                                    AvailableVersion = latest.Version,
+                                    ReleaseNotes = latest.ReleaseNotes ?? string.Empty,
+                                    InstalledPath = product.InstalledPath,
+                                    FeedId = product.FeedId,
+                                    InstanceId = product.InstanceId,
+                                }
+                            );
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Failed to check updates for {ProductId} on feed {FeedId}",
+                            product.ProductId,
+                            product.FeedId
                         );
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to check updates for {ProductId} on feed {FeedId}",
-                        product.ProductId,
-                        product.FeedId
-                    );
-                }
-            }
+                return items;
+            });
 
             Updates = new ObservableCollection<UpdateItemViewModel>(updateItems);
         }
@@ -153,16 +158,23 @@ public partial class UpdatesViewModel : ObservableObject
             using CancellationTokenSource cts = new CancellationTokenSource();
             CancellationToken cancellationToken = cts.Token;
 
-            InstalledProduct? installed = await _productRepository.GetByIdAsync(
-                update.ProductId,
-                update.InstanceId,
-                cancellationToken
-            );
-            IRegistryClient client = _feedRegistry.GetClient(update.FeedId);
-            ProductManifest? manifest = await client.GetProductManifestAsync(
-                update.ProductId,
-                cancellationToken
-            );
+            var fetchResult = await Task.Run(async () =>
+            {
+                InstalledProduct? inst = await _productRepository.GetByIdAsync(
+                    update.ProductId,
+                    update.InstanceId,
+                    cancellationToken
+                );
+                IRegistryClient cl = _feedRegistry.GetClient(update.FeedId);
+                ProductManifest? man = await cl.GetProductManifestAsync(
+                    update.ProductId,
+                    cancellationToken
+                );
+                return (inst, man);
+            });
+
+            InstalledProduct? installed = fetchResult.inst;
+            ProductManifest? manifest = fetchResult.man;
 
             if (installed is null || manifest is null)
                 return;
@@ -195,7 +207,7 @@ public partial class UpdatesViewModel : ObservableObject
                     cancellationToken
                 );
 
-                await _productRepository.ReloadAsync(cancellationToken);
+                await Task.Run(() => _productRepository.ReloadAsync(cancellationToken));
 
                 update.IsUpdating = false;
 

@@ -50,7 +50,9 @@ public partial class ActivityLogViewModel : ObservableObject
         {
             IsLoading = true;
             ErrorMessage = string.Empty;
-            IReadOnlyList<ActivityLogEntry> logEntries = await _activityLog.GetEntriesAsync(500);
+            IReadOnlyList<ActivityLogEntry> logEntries = await Task.Run(() =>
+                _activityLog.GetEntriesAsync(500)
+            );
             Entries = new ObservableCollection<ActivityLogEntry>(logEntries);
         }
         catch (Exception ex)
@@ -70,7 +72,7 @@ public partial class ActivityLogViewModel : ObservableObject
     [RelayCommand]
     private async Task ClearLogAsync()
     {
-        await _activityLog.ClearAsync();
+        await Task.Run(() => _activityLog.ClearAsync());
         Entries.Clear();
     }
 

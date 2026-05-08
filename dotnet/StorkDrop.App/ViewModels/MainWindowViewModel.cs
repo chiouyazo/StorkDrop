@@ -330,22 +330,26 @@ public partial class MainWindowViewModel : ObservableObject
                 return;
             }
 
-            bool anyConnected = false;
-            foreach (FeedInfo feed in feeds)
+            bool anyConnected = await Task.Run(async () =>
             {
-                try
+                foreach (FeedInfo feed in feeds)
                 {
-                    if (await _feedRegistry.TestConnectionAsync(feed.Id, cts.Token))
+                    try
                     {
-                        anyConnected = true;
-                        break;
+                        if (await _feedRegistry.TestConnectionAsync(feed.Id, cts.Token))
+                            return true;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Failed to test connection for feed {FeedId}",
+                            feed.Id
+                        );
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Failed to test connection for feed {FeedId}", feed.Id);
-                }
-            }
+                return false;
+            });
 
             IsConnected = anyConnected;
             StatusMessage = IsConnected

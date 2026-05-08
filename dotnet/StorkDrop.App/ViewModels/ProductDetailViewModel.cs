@@ -129,19 +129,25 @@ public partial class ProductDetailViewModel : ObservableObject
     {
         try
         {
-            IRegistryClient client = _feedRegistry.GetClient(channel.FeedId);
-            ProductManifest? manifest = await client.GetProductManifestAsync(productId);
-            if (manifest is null)
+            var result = await Task.Run(async () =>
+            {
+                IRegistryClient client = _feedRegistry.GetClient(channel.FeedId);
+                ProductManifest? manifest = await client.GetProductManifestAsync(productId);
+                IReadOnlyList<string>? versions = null;
+                if (manifest is not null)
+                    versions = await client.GetAvailableVersionsAsync(productId);
+                return (manifest, versions);
+            });
+
+            if (result.manifest is null)
                 return;
 
-            Manifest = manifest;
-
-            IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync(productId);
-            AvailableVersions = new ObservableCollection<string>(versions);
-            SelectedVersion = manifest.Version;
-            SelectedVersionReleaseNotes = manifest.ReleaseNotes ?? string.Empty;
-            RecommendedInstallPath = manifest.RecommendedInstallPath ?? string.Empty;
-            HasPlugins = manifest.Plugins is { Length: > 0 };
+            Manifest = result.manifest;
+            AvailableVersions = new ObservableCollection<string>(result.versions!);
+            SelectedVersion = result.manifest.Version;
+            SelectedVersionReleaseNotes = result.manifest.ReleaseNotes ?? string.Empty;
+            RecommendedInstallPath = result.manifest.RecommendedInstallPath ?? string.Empty;
+            HasPlugins = result.manifest.Plugins is { Length: > 0 };
             UpdateInstallButtonText();
         }
         catch (Exception ex)
@@ -209,74 +215,91 @@ public partial class ProductDetailViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadAsync(string productId)
     {
-        List<ChannelInfo> channels = new List<ChannelInfo>();
-        IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
-
-        foreach (FeedInfo feed in feeds)
+        string currentFeedId = FeedId;
+        var loadResult = await Task.Run(async () =>
         {
-            try
+            List<ChannelInfo> channels = new List<ChannelInfo>();
+            IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
+
+            foreach (FeedInfo feed in feeds)
             {
-                IRegistryClient client = _feedRegistry.GetClient(feed.Id);
-                ProductManifest? manifest = await client.GetProductManifestAsync(productId);
-                if (manifest is not null)
+                try
                 {
-                    ChannelInfo channel = new ChannelInfo(
-                        FeedId: feed.Id,
-                        FeedName: feed.Name,
-                        BadgeText: manifest.BadgeText,
-                        BadgeColor: manifest.BadgeColor,
-                        LatestVersion: manifest.Version
+                    IRegistryClient client = _feedRegistry.GetClient(feed.Id);
+                    ProductManifest? manifest = await client.GetProductManifestAsync(productId);
+                    if (manifest is not null)
+                    {
+                        ChannelInfo channel = new ChannelInfo(
+                            FeedId: feed.Id,
+                            FeedName: feed.Name,
+                            BadgeText: manifest.BadgeText,
+                            BadgeColor: manifest.BadgeColor,
+                            LatestVersion: manifest.Version
+                        );
+                        channels.Add(channel);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "Failed to check feed {FeedId} for product {ProductId}",
+                        feed.Id,
+                        productId
                     );
-                    channels.Add(channel);
                 }
             }
-            catch (Exception ex)
+
+            IReadOnlyList<InstalledProduct> instances = await _productRepository.GetInstancesAsync(
+                productId
+            );
+            InstalledProduct? installed = instances.FirstOrDefault();
+
+            ChannelInfo? selectedChannel =
+                (
+                    installed?.FeedId is not null
+                        ? channels.FirstOrDefault(c => c.FeedId == installed.FeedId)
+                        : null
+                )
+                ?? (
+                    !string.IsNullOrEmpty(currentFeedId)
+                        ? channels.FirstOrDefault(c => c.FeedId == currentFeedId)
+                        : null
+                )
+                ?? channels.FirstOrDefault();
+
+            ProductManifest? selectedManifest = null;
+            IReadOnlyList<string>? versions = null;
+            if (selectedChannel is not null)
             {
-                _logger.LogWarning(
-                    ex,
-                    "Failed to check feed {FeedId} for product {ProductId}",
-                    feed.Id,
-                    productId
-                );
+                IRegistryClient selectedClient = _feedRegistry.GetClient(selectedChannel.FeedId);
+                selectedManifest = await selectedClient.GetProductManifestAsync(productId);
+                if (selectedManifest is not null)
+                    versions = await selectedClient.GetAvailableVersionsAsync(productId);
             }
-        }
 
-        AvailableChannels = new ObservableCollection<ChannelInfo>(channels);
+            return (channels, installed, selectedChannel, selectedManifest, versions);
+        });
 
-        IReadOnlyList<InstalledProduct> instances = await _productRepository.GetInstancesAsync(
-            productId
-        );
-        InstalledProduct? installed = instances.FirstOrDefault();
+        AvailableChannels = new ObservableCollection<ChannelInfo>(loadResult.channels);
+
+        InstalledProduct? installed = loadResult.installed;
         IsInstalled = installed is not null;
         InstalledVersion = installed?.Version ?? string.Empty;
         _installedFeedId = installed?.FeedId;
 
-        ChannelInfo? selectedChannel =
-            (
-                installed?.FeedId is not null
-                    ? channels.FirstOrDefault(c => c.FeedId == installed.FeedId)
-                    : null
-            )
-            ?? (
-                !string.IsNullOrEmpty(FeedId)
-                    ? channels.FirstOrDefault(c => c.FeedId == FeedId)
-                    : null
-            )
-            ?? channels.FirstOrDefault();
-
+        ChannelInfo? selectedChannel = loadResult.selectedChannel;
         if (selectedChannel is null)
             return;
 
         FeedId = selectedChannel.FeedId;
         FeedName = selectedChannel.FeedName;
 
-        IRegistryClient selectedClient = _feedRegistry.GetClient(selectedChannel.FeedId);
-        Manifest = await selectedClient.GetProductManifestAsync(productId);
+        Manifest = loadResult.selectedManifest;
         if (Manifest is null)
             return;
 
-        IReadOnlyList<string> versions = await selectedClient.GetAvailableVersionsAsync(productId);
-        AvailableVersions = new ObservableCollection<string>(versions);
+        AvailableVersions = new ObservableCollection<string>(loadResult.versions!);
         SelectedVersion = Manifest.Version;
         SelectedVersionReleaseNotes = Manifest.ReleaseNotes ?? string.Empty;
         RecommendedInstallPath = Manifest.RecommendedInstallPath ?? string.Empty;
@@ -302,9 +325,8 @@ public partial class ProductDetailViewModel : ObservableObject
         try
         {
             IRegistryClient client = _feedRegistry.GetClient(FeedId);
-            ProductManifest? versionManifest = await client.GetProductManifestAsync(
-                Manifest.ProductId,
-                version
+            ProductManifest? versionManifest = await Task.Run(() =>
+                client.GetProductManifestAsync(Manifest.ProductId, version)
             );
             SelectedVersionReleaseNotes = versionManifest?.ReleaseNotes ?? string.Empty;
         }
@@ -333,7 +355,9 @@ public partial class ProductDetailViewModel : ObservableObject
             ProductManifest? manifest =
                 SelectedVersion == Manifest.Version
                     ? Manifest
-                    : await client.GetProductManifestAsync(Manifest.ProductId, SelectedVersion);
+                    : await Task.Run(() =>
+                        client.GetProductManifestAsync(Manifest.ProductId, SelectedVersion)
+                    );
 
             if (manifest is null)
                 return;
@@ -369,9 +393,8 @@ public partial class ProductDetailViewModel : ObservableObject
                     ))
                     .ToArray();
 
-                PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                    requiredAsOptional,
-                    Manifest?.BadgeText
+                PostProductResolution resolution = await Task.Run(() =>
+                    _postProductResolver.ResolveAsync(requiredAsOptional, Manifest?.BadgeText)
                 );
 
                 if (resolution.Available.Count > 0 || resolution.Warnings.Count > 0)
@@ -393,10 +416,9 @@ public partial class ProductDetailViewModel : ObservableObject
                     {
                         await InstallPostProductAsync(reqProduct);
 
-                        IReadOnlyList<InstalledProduct> checkInstances =
-                            await _productRepository.GetInstancesAsync(
-                                reqProduct.Manifest.ProductId
-                            );
+                        IReadOnlyList<InstalledProduct> checkInstances = await Task.Run(() =>
+                            _productRepository.GetInstancesAsync(reqProduct.Manifest.ProductId)
+                        );
                         if (checkInstances.Count == 0)
                         {
                             _logger.LogWarning(
@@ -514,9 +536,11 @@ public partial class ProductDetailViewModel : ObservableObject
 
         try
         {
-            PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                parentManifest.OptionalPostProducts,
-                parentManifest.BadgeText
+            PostProductResolution resolution = await Task.Run(() =>
+                _postProductResolver.ResolveAsync(
+                    parentManifest.OptionalPostProducts,
+                    parentManifest.BadgeText
+                )
             );
 
             foreach (string warning in resolution.Warnings)
@@ -657,8 +681,8 @@ public partial class ProductDetailViewModel : ObservableObject
 
         try
         {
-            IReadOnlyList<InstalledProduct> instances = await _productRepository.GetInstancesAsync(
-                Manifest.ProductId
+            IReadOnlyList<InstalledProduct> instances = await Task.Run(() =>
+                _productRepository.GetInstancesAsync(Manifest.ProductId)
             );
             InstalledProduct? installed = instances.FirstOrDefault();
             if (installed is null)

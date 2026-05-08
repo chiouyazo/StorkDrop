@@ -160,7 +160,7 @@ public partial class SettingsViewModel : ObservableObject
         try
         {
             ErrorMessage = string.Empty;
-            AppConfiguration? config = await _configurationService.LoadAsync();
+            AppConfiguration? config = await Task.Run(() => _configurationService.LoadAsync());
             if (config is null)
                 return;
 
@@ -305,9 +305,9 @@ public partial class SettingsViewModel : ObservableObject
                 IncludeDevVersions: IncludeDevVersions
             );
 
-            await _configurationService.SaveAsync(config);
+            await Task.Run(() => _configurationService.SaveAsync(config));
 
-            await _feedRegistry.ReloadAsync();
+            await Task.Run(() => _feedRegistry.ReloadAsync());
 
             ErrorMessage = string.Empty;
         }
@@ -330,10 +330,8 @@ public partial class SettingsViewModel : ObservableObject
             feed.ConnectionTestMessage = LocalizationManager.GetString("Status_Connecting");
             feed.IsConnectionValid = false;
 
-            FeedConnectionResult result = await _connectionService.TestConnectionAsync(
-                feed.Url,
-                feed.Username,
-                feed.Password
+            FeedConnectionResult result = await Task.Run(() =>
+                _connectionService.TestConnectionAsync(feed.Url, feed.Username, feed.Password)
             );
 
             feed.IsConnectionValid = result.Success;
@@ -368,7 +366,7 @@ public partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await _configurationService.ExportAsync(filePath);
+            await Task.Run(() => _configurationService.ExportAsync(filePath));
         }
         catch (Exception ex)
         {
@@ -392,7 +390,7 @@ public partial class SettingsViewModel : ObservableObject
 
         try
         {
-            await _configurationService.ImportAsync(filePath);
+            await Task.Run(() => _configurationService.ImportAsync(filePath));
             await LoadAsync();
         }
         catch (Exception ex)
@@ -409,7 +407,9 @@ public partial class SettingsViewModel : ObservableObject
             IsCheckingForUpdates = true;
             UpdateCheckResult = string.Empty;
 
-            UpdateInfo? update = await _selfUpdateChecker.CheckForUpdateAsync(IncludeDevVersions);
+            UpdateInfo? update = await Task.Run(() =>
+                _selfUpdateChecker.CheckForUpdateAsync(IncludeDevVersions)
+            );
 
             if (update is not null)
             {
@@ -433,7 +433,9 @@ public partial class SettingsViewModel : ObservableObject
                             .GetString("Settings_UpdateAvailable")
                             .Replace("{0}", update.Version) + " - Downloading...";
 
-                    await _selfUpdateService.DownloadAndLaunchInstallerAsync(update);
+                    await Task.Run(() =>
+                        _selfUpdateService.DownloadAndLaunchInstallerAsync(update)
+                    );
                 }
                 else
                 {

@@ -168,7 +168,9 @@ public partial class MarketplaceViewModel : ObservableObject
         try
         {
             IRegistryClient feedClient = _feedRegistry.GetClient(product.FeedId);
-            ProductManifest? manifest = await feedClient.GetProductManifestAsync(product.ProductId);
+            ProductManifest? manifest = await Task.Run(() =>
+                feedClient.GetProductManifestAsync(product.ProductId)
+            );
             if (manifest is null)
             {
                 ErrorMessage = LocalizationManager
@@ -210,9 +212,8 @@ public partial class MarketplaceViewModel : ObservableObject
                     ))
                     .ToArray();
 
-                PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                    requiredAsOptional,
-                    manifest.BadgeText
+                PostProductResolution resolution = await Task.Run(() =>
+                    _postProductResolver.ResolveAsync(requiredAsOptional, manifest.BadgeText)
                 );
 
                 if (resolution.Available.Count > 0 || resolution.Warnings.Count > 0)
@@ -234,10 +235,9 @@ public partial class MarketplaceViewModel : ObservableObject
                     {
                         await InstallPostProductAsync(reqProduct);
 
-                        IReadOnlyList<InstalledProduct> checkInstances =
-                            await _productRepository.GetInstancesAsync(
-                                reqProduct.Manifest.ProductId
-                            );
+                        IReadOnlyList<InstalledProduct> checkInstances = await Task.Run(() =>
+                            _productRepository.GetInstancesAsync(reqProduct.Manifest.ProductId)
+                        );
                         if (checkInstances.Count == 0)
                         {
                             _logger.LogWarning(
@@ -388,9 +388,11 @@ public partial class MarketplaceViewModel : ObservableObject
 
         try
         {
-            PostProductResolution resolution = await _postProductResolver.ResolveAsync(
-                parentManifest.OptionalPostProducts,
-                parentManifest.BadgeText
+            PostProductResolution resolution = await Task.Run(() =>
+                _postProductResolver.ResolveAsync(
+                    parentManifest.OptionalPostProducts,
+                    parentManifest.BadgeText
+                )
             );
 
             foreach (string warning in resolution.Warnings)
@@ -561,37 +563,49 @@ public partial class MarketplaceViewModel : ObservableObject
             IsLoading = true;
             ErrorMessage = string.Empty;
 
-            _installedProducts = await _productRepository.GetAllAsync(cancellationToken);
+            var loadResult = await Task.Run(async () =>
+            {
+                IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
+                    cancellationToken
+                );
+                List<(ProductManifest Manifest, string FeedName, string FeedId)> allProducts = [];
+                List<string> feedNames = [];
 
-            // Load products from all configured feeds
-            _allProducts = [];
+                foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+                {
+                    try
+                    {
+                        IRegistryClient client = _feedRegistry.GetClient(feed.Id);
+                        IReadOnlyList<ProductManifest> products = await client.GetAllProductsAsync(
+                            cancellationToken
+                        );
+                        foreach (ProductManifest p in products)
+                            allProducts.Add((p, feed.Name, feed.Id));
+
+                        if (!feedNames.Contains(feed.Name))
+                            feedNames.Add(feed.Name);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Failed to load products from feed {FeedName}",
+                            feed.Name
+                        );
+                    }
+                }
+
+                return (installed, allProducts, feedNames);
+            });
+
+            _installedProducts = loadResult.installed;
+            _allProducts = loadResult.allProducts;
+
             ObservableCollection<string> feedFilters = new ObservableCollection<string>([
                 LocalizationManager.GetString("Filter_AllFeeds"),
             ]);
-
-            foreach (FeedInfo feed in _feedRegistry.GetFeeds())
-            {
-                try
-                {
-                    IRegistryClient client = _feedRegistry.GetClient(feed.Id);
-                    IReadOnlyList<ProductManifest> products = await client.GetAllProductsAsync(
-                        cancellationToken
-                    );
-                    foreach (ProductManifest p in products)
-                        _allProducts.Add((p, feed.Name, feed.Id));
-
-                    if (!feedFilters.Contains(feed.Name))
-                        feedFilters.Add(feed.Name);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to load products from feed {FeedName}",
-                        feed.Name
-                    );
-                }
-            }
+            foreach (string name in loadResult.feedNames)
+                feedFilters.Add(name);
 
             AvailableFeedFilters = feedFilters;
             SelectedFeedFilter = LocalizationManager.GetString("Filter_AllFeeds");
