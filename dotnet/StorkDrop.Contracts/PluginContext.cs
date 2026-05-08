@@ -35,6 +35,12 @@ public sealed class PluginContext
     public string InstanceId { get; set; } = "default";
 
     /// <summary>
+    /// Gets or sets the machine-generated 8-char unique identifier for this instance.
+    /// Used by the Steps SDK to generate instance-unique database keys (e.g. SD_{uniqueId}_{tag}).
+    /// </summary>
+    public string InstanceUniqueId { get; set; } = string.Empty;
+
+    /// <summary>
     /// The values the user entered in the dynamic config UI, keyed by <see cref="PluginConfigField.Key"/>.
     /// For <see cref="PluginFieldType.MultiSelect"/>, values are comma-separated.
     /// </summary>

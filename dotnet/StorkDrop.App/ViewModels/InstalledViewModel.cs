@@ -164,6 +164,7 @@ public partial class InstalledViewModel : ObservableObject
                         FeedId = p.FeedId,
                         BadgeText = p.BadgeText,
                         BadgeColor = p.BadgeColor,
+                        InstanceUniqueId = p.InstanceUniqueId ?? string.Empty,
                     }
                 );
             }

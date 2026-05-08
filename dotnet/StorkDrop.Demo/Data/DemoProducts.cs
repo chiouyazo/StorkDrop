@@ -141,6 +141,7 @@ internal static class DemoProducts
             Version: "2.0.0-rc.2",
             InstalledPath: @"C:\Users\Demo\StorkDrop\CLI",
             InstalledDate: new DateTime(2026, 1, 15, 10, 30, 0, DateTimeKind.Utc),
-            FeedId: "internal"
+            FeedId: "internal",
+            InstanceUniqueId: "a1b2c3d4"
         );
 }

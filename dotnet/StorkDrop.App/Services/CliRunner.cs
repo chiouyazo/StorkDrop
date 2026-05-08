@@ -258,20 +258,41 @@ internal sealed class CliRunner
     {
         IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync();
         bool hasNonDefault = installed.Any(p => p.InstanceId != InstanceIdHelper.DefaultInstanceId);
+        bool hasUniqueId = installed.Any(p => !string.IsNullOrEmpty(p.InstanceUniqueId));
 
         if (hasNonDefault)
         {
-            Console.WriteLine(
-                $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Instance", -16} {"Feed", -20} {"Type"}"
-            );
-            Console.WriteLine(new string('-', 135));
+            if (hasUniqueId)
+            {
+                Console.WriteLine(
+                    $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Instance", -16} {"UniqueId", -12} {"Feed", -20} {"Type"}"
+                );
+                Console.WriteLine(new string('-', 147));
+            }
+            else
+            {
+                Console.WriteLine(
+                    $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Instance", -16} {"Feed", -20} {"Type"}"
+                );
+                Console.WriteLine(new string('-', 135));
+            }
         }
         else
         {
-            Console.WriteLine(
-                $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Feed", -20} {"Type"}"
-            );
-            Console.WriteLine(new string('-', 115));
+            if (hasUniqueId)
+            {
+                Console.WriteLine(
+                    $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"UniqueId", -12} {"Feed", -20} {"Type"}"
+                );
+                Console.WriteLine(new string('-', 127));
+            }
+            else
+            {
+                Console.WriteLine(
+                    $"{"Product ID", -40} {"Title", -30} {"Version", -12} {"Feed", -20} {"Type"}"
+                );
+                Console.WriteLine(new string('-', 115));
+            }
         }
 
         foreach (FeedInfo feed in _feedRegistry.GetFeeds())
@@ -291,23 +312,53 @@ internal sealed class CliRunner
                         {
                             foreach (InstalledProduct inst in instances)
                             {
-                                Console.WriteLine(
-                                    $"{p.ProductId, -40} {p.Title, -30} {inst.Version, -12} {inst.InstanceId, -16} {feed.Name, -20} {p.InstallType}"
-                                );
+                                if (hasUniqueId)
+                                {
+                                    Console.WriteLine(
+                                        $"{p.ProductId, -40} {p.Title, -30} {inst.Version, -12} {inst.InstanceId, -16} {inst.InstanceUniqueId ?? "", -12} {feed.Name, -20} {p.InstallType}"
+                                    );
+                                }
+                                else
+                                {
+                                    Console.WriteLine(
+                                        $"{p.ProductId, -40} {p.Title, -30} {inst.Version, -12} {inst.InstanceId, -16} {feed.Name, -20} {p.InstallType}"
+                                    );
+                                }
                             }
                         }
                         else
                         {
-                            Console.WriteLine(
-                                $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {"", -16} {feed.Name, -20} {p.InstallType}"
-                            );
+                            if (hasUniqueId)
+                            {
+                                Console.WriteLine(
+                                    $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {"", -16} {"", -12} {feed.Name, -20} {p.InstallType}"
+                                );
+                            }
+                            else
+                            {
+                                Console.WriteLine(
+                                    $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {"", -16} {feed.Name, -20} {p.InstallType}"
+                                );
+                            }
                         }
                     }
                     else
                     {
-                        Console.WriteLine(
-                            $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {feed.Name, -20} {p.InstallType}"
-                        );
+                        if (hasUniqueId)
+                        {
+                            InstalledProduct? inst = installed.FirstOrDefault(i =>
+                                i.ProductId == p.ProductId
+                            );
+                            Console.WriteLine(
+                                $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {inst?.InstanceUniqueId ?? "", -12} {feed.Name, -20} {p.InstallType}"
+                            );
+                        }
+                        else
+                        {
+                            Console.WriteLine(
+                                $"{p.ProductId, -40} {p.Title, -30} {p.Version, -12} {feed.Name, -20} {p.InstallType}"
+                            );
+                        }
                     }
                 }
             }

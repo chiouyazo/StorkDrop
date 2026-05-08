@@ -15,5 +15,6 @@ public sealed record InstalledProduct(
     string? BackupPath = null,
     InstallType? InstallType = null,
     string? BadgeText = null,
-    string? BadgeColor = null
+    string? BadgeColor = null,
+    string? InstanceUniqueId = null
 );

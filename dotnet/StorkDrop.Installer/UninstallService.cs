@@ -261,14 +261,41 @@ public sealed class UninstallService
                 return;
 
             string storkPluginsDir = Path.Combine(product.InstalledPath, ".stork");
+
+            Dictionary<string, string> savedConfigValues = new Dictionary<string, string>();
+            try
+            {
+                string configPath = StorkPaths.InstancePluginConfigPath(
+                    product.ProductId,
+                    product.InstanceId
+                );
+                if (!File.Exists(configPath))
+                    configPath = StorkPaths.LegacyPluginConfigPath(product.ProductId);
+
+                if (File.Exists(configPath))
+                {
+                    string configJson = await File.ReadAllTextAsync(configPath, cancellationToken);
+                    savedConfigValues =
+                        System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(
+                            configJson
+                        )
+                        ?? new Dictionary<string, string>();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not load saved plugin config for uninstall");
+            }
+
             PluginContext context = new()
             {
                 ProductId = product.ProductId,
                 InstanceId = product.InstanceId,
+                InstanceUniqueId = product.InstanceUniqueId ?? string.Empty,
                 Version = product.Version,
                 InstallPath = product.InstalledPath,
                 StorkConfigDirectory = StorkPaths.ConfigDir,
-                ConfigValues = new Dictionary<string, string>(),
+                ConfigValues = savedConfigValues,
                 Log = message => _logger.LogInformation("[Plugin] {Message}", message),
             };
 
@@ -574,7 +601,28 @@ public sealed class UninstallService
                     continue;
                 }
 
-                // All retries exhausted -> defer deletion to reboot
+                if (OnLockedFilesDetected is not null)
+                {
+                    IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
+                        Path.GetDirectoryName(filePath)!
+                    );
+                    if (lockedFiles.Count > 0)
+                    {
+                        OnLockedFilesDetected(
+                            lockedFiles,
+                            _fileLockDetector,
+                            Path.GetDirectoryName(filePath)!
+                        );
+
+                        try
+                        {
+                            File.Delete(filePath);
+                            return;
+                        }
+                        catch { }
+                    }
+                }
+
                 _logger.LogWarning(
                     "Cannot delete {File}, scheduling for removal on reboot",
                     Path.GetFileName(filePath)

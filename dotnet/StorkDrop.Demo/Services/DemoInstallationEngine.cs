@@ -356,7 +356,8 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
                 BackupPath: null,
                 InstallType: manifest.InstallType,
                 BadgeText: manifest.BadgeText,
-                BadgeColor: manifest.BadgeColor
+                BadgeColor: manifest.BadgeColor,
+                InstanceUniqueId: InstanceIdHelper.GenerateUniqueId()
             ),
             cancellationToken
         );

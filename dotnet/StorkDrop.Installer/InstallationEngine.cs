@@ -510,10 +510,27 @@ public sealed class InstallationEngine : IInstallationEngine
             options.TargetPath
         );
 
+        InstalledProduct? existingProduct = await _productRepository.GetByIdAsync(
+            manifest.ProductId,
+            options.InstanceId,
+            cancellationToken
+        );
+        string instanceUniqueId = existingProduct?.InstanceUniqueId is { Length: > 0 } uid
+            ? uid
+            : InstanceIdHelper.GenerateUniqueId();
+        _logger.LogInformation(
+            "InstanceUniqueId for {ProductId}/{InstanceId}: {UniqueId} ({Source})",
+            manifest.ProductId,
+            options.InstanceId,
+            instanceUniqueId,
+            existingProduct?.InstanceUniqueId is { Length: > 0 } ? "reused" : "generated"
+        );
+
         InstallResult? elevationResult = await TryElevateInstallAsync(
             manifest,
             options,
             options.TargetPath,
+            instanceUniqueId,
             progress,
             cancellationToken
         );
@@ -553,6 +570,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 manifest,
                 options,
                 extractPath,
+                instanceUniqueId,
                 progress,
                 cancellationToken
             );
@@ -664,6 +682,7 @@ public sealed class InstallationEngine : IInstallationEngine
             PluginContext pluginContext = await BuildPluginContextAsync(
                 manifest,
                 options,
+                instanceUniqueId,
                 cancellationToken
             );
 
@@ -710,6 +729,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     manifest,
                     options,
                     fileHandlerContext,
+                    instanceUniqueId,
                     progress,
                     cancellationToken
                 );
@@ -869,6 +889,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 resolvedPath,
                 pluginContext,
                 extractPath,
+                instanceUniqueId,
                 progress,
                 cancellationToken,
                 skipPostInstall
@@ -938,6 +959,7 @@ public sealed class InstallationEngine : IInstallationEngine
         ProductManifest manifest,
         InstallOptions options,
         string targetPath,
+        string instanceUniqueId,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken
     )
@@ -1009,7 +1031,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 options.FeedId,
                 "(elevated)",
                 cancellationToken,
-                options.InstanceId
+                options.InstanceId,
+                instanceUniqueId
             );
             return new InstallResult { Success = true };
         }
@@ -1032,7 +1055,8 @@ public sealed class InstallationEngine : IInstallationEngine
         string? feedId,
         string suffix,
         CancellationToken cancellationToken,
-        string instanceId = InstanceIdHelper.DefaultInstanceId
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
+        string? instanceUniqueId = null
     )
     {
         InstalledProduct product = new InstalledProduct(
@@ -1046,7 +1070,8 @@ public sealed class InstallationEngine : IInstallationEngine
             BackupPath: null,
             InstallType: manifest.InstallType,
             BadgeText: manifest.BadgeText,
-            BadgeColor: manifest.BadgeColor
+            BadgeColor: manifest.BadgeColor,
+            InstanceUniqueId: instanceUniqueId
         );
         await _productRepository.AddAsync(product, cancellationToken);
 
@@ -1169,6 +1194,7 @@ public sealed class InstallationEngine : IInstallationEngine
         ProductManifest manifest,
         InstallOptions options,
         string extractPath,
+        string instanceUniqueId,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken,
         HashSet<string>? disabledGroups = null
@@ -1196,7 +1222,12 @@ public sealed class InstallationEngine : IInstallationEngine
         if (_fileTypeHandlers.Count == 0 || options.SkipFileHandlers)
             return (handledFiles, null, null);
 
-        fileHandlerContext = await BuildPluginContextAsync(manifest, options, cancellationToken);
+        fileHandlerContext = await BuildPluginContextAsync(
+            manifest,
+            options,
+            instanceUniqueId,
+            cancellationToken
+        );
 
         foreach (IFileTypeHandler handler in _fileTypeHandlers)
         {
@@ -1348,11 +1379,11 @@ public sealed class InstallationEngine : IInstallationEngine
         ProductManifest manifest,
         InstallOptions options,
         PluginContext? fileHandlerContext,
+        string instanceUniqueId,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken
     )
     {
-        // Resolve built-in {StorkPath} template (points to StorkDrop's own install directory)
         string resolvedTargetPath = options.TargetPath.Replace(
             "{StorkPath}",
             AppContext.BaseDirectory.TrimEnd(
@@ -1364,6 +1395,15 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             _logger.LogInformation(
                 "Resolved {{StorkPath}} in install path: {Resolved}",
+                resolvedTargetPath
+            );
+        }
+
+        if (resolvedTargetPath.Contains("{InstanceId}"))
+        {
+            resolvedTargetPath = resolvedTargetPath.Replace("{InstanceId}", options.InstanceId);
+            _logger.LogInformation(
+                "Resolved {{InstanceId}} in install path: {Resolved}",
                 resolvedTargetPath
             );
         }
@@ -1459,7 +1499,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 options.FeedId,
                 "(elevated, resolved path)",
                 cancellationToken,
-                options.InstanceId
+                options.InstanceId,
+                instanceUniqueId
             );
             progress.Report(
                 new InstallProgress(
@@ -1485,6 +1526,35 @@ public sealed class InstallationEngine : IInstallationEngine
                     Success = false,
                     ErrorMessage = msg,
                     FailedStep = "PathResolution",
+                }
+            );
+        }
+
+        string normalizedPath = Path.GetFullPath(resolvedTargetPath);
+        IReadOnlyList<InstalledProduct> allProducts = await _productRepository.GetAllAsync(
+            cancellationToken
+        );
+        InstalledProduct? conflict = allProducts.FirstOrDefault(p =>
+            string.Equals(
+                Path.GetFullPath(p.InstalledPath),
+                normalizedPath,
+                StringComparison.OrdinalIgnoreCase
+            ) && !(p.ProductId == manifest.ProductId && p.InstanceId == options.InstanceId)
+        );
+        if (conflict is not null)
+        {
+            string conflictMsg =
+                $"Install path '{resolvedTargetPath}' is already used by {conflict.ProductId}/{conflict.InstanceId}. "
+                + "Choose a different path or instance identifier.";
+            _logger.LogError(conflictMsg);
+            progress.Report(new InstallProgress(InstallStage.Installing, 0, conflictMsg));
+            return (
+                resolvedTargetPath,
+                new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = conflictMsg,
+                    FailedStep = "PathConflict",
                 }
             );
         }
@@ -1686,6 +1756,7 @@ public sealed class InstallationEngine : IInstallationEngine
         string resolvedPath,
         PluginContext pluginContext,
         string extractPath,
+        string instanceUniqueId,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken,
         bool skipPostInstall = false
@@ -1761,7 +1832,8 @@ public sealed class InstallationEngine : IInstallationEngine
             options.FeedId,
             "",
             cancellationToken,
-            options.InstanceId
+            options.InstanceId,
+            instanceUniqueId
         );
     }
 
@@ -2239,6 +2311,8 @@ public sealed class InstallationEngine : IInstallationEngine
                         PluginContext fileContext = new PluginContext
                         {
                             ProductId = product.ProductId,
+                            InstanceId = product.InstanceId,
+                            InstanceUniqueId = product.InstanceUniqueId ?? string.Empty,
                             Version = product.Version,
                             InstallPath = product.InstalledPath,
                             StorkConfigDirectory = GetStorkConfigDir(),
@@ -2368,6 +2442,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 PluginContext context = new PluginContext
                 {
                     ProductId = product.ProductId,
+                    InstanceId = product.InstanceId,
+                    InstanceUniqueId = product.InstanceUniqueId ?? string.Empty,
                     Version = product.Version,
                     InstallPath = product.InstalledPath,
                     StorkConfigDirectory = GetStorkConfigDir(),
@@ -2992,6 +3068,7 @@ public sealed class InstallationEngine : IInstallationEngine
     private async Task<PluginContext> BuildPluginContextAsync(
         ProductManifest manifest,
         InstallOptions options,
+        string instanceUniqueId,
         CancellationToken cancellationToken
     )
     {
@@ -2999,6 +3076,7 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             ProductId = manifest.ProductId,
             InstanceId = options.InstanceId,
+            InstanceUniqueId = instanceUniqueId,
             Version = manifest.Version,
             InstallPath = options.TargetPath,
             StorkConfigDirectory = GetStorkConfigDir(),

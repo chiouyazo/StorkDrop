@@ -365,3 +365,7 @@ public async Task PostInstallAsync(PluginContext context, CancellationToken ct)
 ```
 
 The default `InstanceId` is `"default"` for single-instance products.
+
+## Instance unique ID
+
+Each installed instance gets a machine-generated 8-char identifier (`InstanceUniqueId`), available via `context.InstanceUniqueId`. Use this for custom operations that need instance-unique identifiers.

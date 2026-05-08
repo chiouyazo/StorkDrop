@@ -40,6 +40,9 @@ public partial class InstalledProductViewModel : ObservableObject
     private string _instanceId = string.Empty;
 
     [ObservableProperty]
+    private string _instanceUniqueId = string.Empty;
+
+    [ObservableProperty]
     private string? _badgeText;
 
     [ObservableProperty]
@@ -50,7 +53,10 @@ public partial class InstalledProductViewModel : ObservableObject
     public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
     public bool HasFeed => !string.IsNullOrEmpty(FeedId);
     public bool IsDefaultInstance => InstanceId == InstanceIdHelper.DefaultInstanceId;
-    public string DisplayName => IsDefaultInstance ? Title : $"{Title} ({InstanceId})";
+    public string DisplayName =>
+        string.IsNullOrEmpty(InstanceUniqueId) ? Title
+        : IsDefaultInstance ? $"{Title} ({InstanceUniqueId})"
+        : $"{Title} - {InstanceId} ({InstanceUniqueId})";
 
     partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
 
@@ -66,5 +72,10 @@ public partial class InstalledProductViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(DisplayName));
         OnPropertyChanged(nameof(IsDefaultInstance));
+    }
+
+    partial void OnInstanceUniqueIdChanged(string value)
+    {
+        OnPropertyChanged(nameof(DisplayName));
     }
 }

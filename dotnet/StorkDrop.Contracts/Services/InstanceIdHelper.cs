@@ -35,6 +35,26 @@ public static class InstanceIdHelper
     /// </summary>
     /// <param name="input">The raw input string to sanitize.</param>
     /// <returns>A sanitized instance identifier.</returns>
+    /// <summary>
+    /// Generates an 8-character lowercase alphanumeric unique identifier
+    /// for internal use in database keys and file paths.
+    /// </summary>
+    public static string GenerateUniqueId()
+    {
+        byte[] bytes = Guid.NewGuid().ToByteArray();
+        long value = BitConverter.ToInt64(bytes, 0) & 0x7FFFFFFFFFFFFFFFL;
+
+        char[] chars = new char[8];
+        for (int i = 0; i < 8; i++)
+        {
+            int remainder = (int)(value % 36);
+            chars[i] = remainder < 10 ? (char)('0' + remainder) : (char)('a' + remainder - 10);
+            value /= 36;
+        }
+
+        return new string(chars);
+    }
+
     public static string Sanitize(string input)
     {
         string sanitized = input.Trim().ToLowerInvariant().Replace(' ', '-');
