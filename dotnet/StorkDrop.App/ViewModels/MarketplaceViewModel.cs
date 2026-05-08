@@ -273,11 +273,13 @@ public partial class MarketplaceViewModel : ObservableObject
                     tracked.AddLog(p.Message);
             });
 
-            InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
-                manifest,
-                options,
-                progress,
-                tracked.Cts.Token
+            InstallResult installResult = await Task.Run(() =>
+                _coordinator.InstallWithIsolationAsync(
+                    manifest,
+                    options,
+                    progress,
+                    tracked.Cts.Token
+                )
             );
 
             if (!installResult.Success)
@@ -490,11 +492,8 @@ public partial class MarketplaceViewModel : ObservableObject
                 tracked.AddLog(p.Message);
         });
 
-        InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
-            manifest,
-            options,
-            progress,
-            tracked.Cts.Token
+        InstallResult installResult = await Task.Run(() =>
+            _coordinator.InstallWithIsolationAsync(manifest, options, progress, tracked.Cts.Token)
         );
 
         if (!installResult.Success)

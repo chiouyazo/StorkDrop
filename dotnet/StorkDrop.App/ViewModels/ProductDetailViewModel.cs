@@ -426,11 +426,13 @@ public partial class ProductDetailViewModel : ObservableObject
                     tracked.AddLog(p.Message);
             });
 
-            InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
-                manifest,
-                options,
-                progress,
-                tracked.Cts.Token
+            InstallResult installResult = await Task.Run(() =>
+                _coordinator.InstallWithIsolationAsync(
+                    manifest,
+                    options,
+                    progress,
+                    tracked.Cts.Token
+                )
             );
 
             if (!installResult.Success)
@@ -616,11 +618,8 @@ public partial class ProductDetailViewModel : ObservableObject
                 tracked.AddLog(p.Message);
         });
 
-        InstallResult installResult = await _coordinator.InstallWithIsolationAsync(
-            manifest,
-            options,
-            progress,
-            tracked.Cts.Token
+        InstallResult installResult = await Task.Run(() =>
+            _coordinator.InstallWithIsolationAsync(manifest, options, progress, tracked.Cts.Token)
         );
 
         if (!installResult.Success)
@@ -683,11 +682,13 @@ public partial class ProductDetailViewModel : ObservableObject
 
             IsInstalling = true;
 
-            InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
-                installed,
-                new ReExecuteOptions { RunFileHandlers = true },
-                progress,
-                tracked.Cts.Token
+            InstallResult result = await Task.Run(() =>
+                _coordinator.ReExecutePluginsWithIsolationAsync(
+                    installed,
+                    new ReExecuteOptions { RunFileHandlers = true },
+                    progress,
+                    tracked.Cts.Token
+                )
             );
 
             if (result.Success)

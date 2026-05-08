@@ -281,10 +281,12 @@ public partial class InstalledViewModel : ObservableObject
 
                 try
                 {
-                    await _coordinator.UninstallWithIsolationAsync(
-                        installed,
-                        progress,
-                        cancellationToken
+                    await Task.Run(() =>
+                        _coordinator.UninstallWithIsolationAsync(
+                            installed,
+                            progress,
+                            cancellationToken
+                        )
                     );
                 }
                 catch (UnauthorizedAccessException)
@@ -380,11 +382,13 @@ public partial class InstalledViewModel : ObservableObject
                     tracked.AddLog(p.Message);
             });
 
-            InstallResult result = await _coordinator.ReExecutePluginsWithIsolationAsync(
-                installed,
-                new ReExecuteOptions { RunFileHandlers = product.HasFileHandlerData },
-                progress,
-                tracked.Cts.Token
+            InstallResult result = await Task.Run(() =>
+                _coordinator.ReExecutePluginsWithIsolationAsync(
+                    installed,
+                    new ReExecuteOptions { RunFileHandlers = product.HasFileHandlerData },
+                    progress,
+                    tracked.Cts.Token
+                )
             );
 
             if (result.Success)

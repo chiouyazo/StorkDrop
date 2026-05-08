@@ -242,12 +242,14 @@ public partial class UpdatesViewModel : ObservableObject
                     tracked.AddLog(p.Message);
             });
 
-            InstallResult updateResult = await _coordinator.UpdateWithIsolationAsync(
-                installed,
-                manifest,
-                options,
-                progress,
-                cancellationToken
+            InstallResult updateResult = await Task.Run(() =>
+                _coordinator.UpdateWithIsolationAsync(
+                    installed,
+                    manifest,
+                    options,
+                    progress,
+                    cancellationToken
+                )
             );
 
             update.IsUpdating = false;

@@ -1401,9 +1401,9 @@ public sealed class InstallationEngine : IInstallationEngine
 
         if (resolvedTargetPath.Contains("{InstanceId}"))
         {
-            resolvedTargetPath = resolvedTargetPath.Replace("{InstanceId}", options.InstanceId);
+            resolvedTargetPath = resolvedTargetPath.Replace("{InstanceId}", instanceUniqueId);
             _logger.LogInformation(
-                "Resolved {{InstanceId}} in install path: {Resolved}",
+                "Resolved {{InstanceId}} in install path to UniqueId: {Resolved}",
                 resolvedTargetPath
             );
         }
