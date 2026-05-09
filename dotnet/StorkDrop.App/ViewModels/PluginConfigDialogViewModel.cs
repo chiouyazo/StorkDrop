@@ -65,14 +65,16 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         }
     }
 
-    public void HandleButtonClick(PluginConfigFieldViewModel field)
+    public async void HandleButtonClick(PluginConfigFieldViewModel field)
     {
         if (InteractivePlugin is null)
             return;
 
         try
         {
-            PluginButtonResult result = InteractivePlugin.OnButtonClicked(field.Key, GetValues());
+            PluginButtonResult result = await Task.Run(() =>
+                InteractivePlugin.OnButtonClicked(field.Key, GetValues())
+            );
 
             if (result.StatusText is not null)
             {

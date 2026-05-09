@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -282,6 +283,37 @@ public partial class UpdatesViewModel : ObservableObject
             tracked.Complete(true);
             _tracker.NotifyChanged();
             Updates.Remove(update);
+
+            string pluginsDir = Path.GetFullPath(StorkPaths.PluginsDirectory);
+            string resolvedTarget = Path.GetFullPath(installed.InstalledPath);
+            if (resolvedTarget.StartsWith(pluginsDir, StringComparison.OrdinalIgnoreCase))
+            {
+                System.Windows.MessageBoxResult restartResult = System.Windows.MessageBox.Show(
+                    LocalizationManager
+                        .GetString("Restart_PluginInstalled")
+                        .Replace("{0}", update.Title),
+                    "StorkDrop",
+                    System.Windows.MessageBoxButton.YesNo,
+                    System.Windows.MessageBoxImage.Question
+                );
+                if (restartResult == System.Windows.MessageBoxResult.Yes)
+                {
+                    string? exePath = Environment.ProcessPath;
+                    if (!string.IsNullOrEmpty(exePath))
+                    {
+                        System.Diagnostics.Process.Start(
+                            new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = "cmd.exe",
+                                Arguments = $"/c timeout /t 2 /nobreak >nul & \"{exePath}\"",
+                                UseShellExecute = false,
+                                CreateNoWindow = true,
+                            }
+                        );
+                    }
+                    System.Windows.Application.Current.Shutdown();
+                }
+            }
         }
         catch (Exception ex)
         {

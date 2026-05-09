@@ -336,8 +336,9 @@ public partial class MarketplaceViewModel : ObservableObject
             // Offer optional post-products
             await HandleOptionalPostProductsAsync(manifest);
 
-            // If installed to StorkDrop's own directory, prompt for restart
-            if (manifest.RecommendedInstallPath?.Contains("{StorkPath}") == true)
+            string pluginsDir = Path.GetFullPath(StorkPaths.PluginsDirectory);
+            string resolvedTarget = Path.GetFullPath(targetPath);
+            if (resolvedTarget.StartsWith(pluginsDir, StringComparison.OrdinalIgnoreCase))
             {
                 System.Windows.MessageBoxResult restartResult = System.Windows.MessageBox.Show(
                     Localization
