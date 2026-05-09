@@ -503,6 +503,11 @@ public sealed class InstallationEngine : IInstallationEngine
     )
     {
         _currentProgress = progress;
+        string? resolvedPath = null;
+        InstalledProduct? existingProduct = null;
+        string instanceUniqueId = string.Empty;
+        string? extractPath = null;
+
         _logger.LogInformation(
             "Starting installation of {ProductId} v{Version} to {TargetPath}",
             manifest.ProductId,
@@ -510,12 +515,12 @@ public sealed class InstallationEngine : IInstallationEngine
             options.TargetPath
         );
 
-        InstalledProduct? existingProduct = await _productRepository.GetByIdAsync(
+        existingProduct = await _productRepository.GetByIdAsync(
             manifest.ProductId,
             options.InstanceId,
             cancellationToken
         );
-        string instanceUniqueId = existingProduct?.InstanceUniqueId is { Length: > 0 } uid
+        instanceUniqueId = existingProduct?.InstanceUniqueId is { Length: > 0 } uid
             ? uid
             : InstanceIdHelper.GenerateUniqueId();
         _logger.LogInformation(
@@ -544,7 +549,8 @@ public sealed class InstallationEngine : IInstallationEngine
             Directory.CreateDirectory(tempDir);
 
             cancellationToken.ThrowIfCancellationRequested();
-            (string? extractPath, string? productContentPath) = await DownloadAndExtractAsync(
+            string? productContentPath;
+            (extractPath, productContentPath) = await DownloadAndExtractAsync(
                 manifest,
                 options,
                 tempDir,
@@ -724,17 +730,19 @@ public sealed class InstallationEngine : IInstallationEngine
                 };
             }
 
-            (string resolvedPath, InstallResult? pathError) =
-                await ResolveAndValidateTargetPathAsync(
-                    manifest,
-                    options,
-                    fileHandlerContext,
-                    instanceUniqueId,
-                    progress,
-                    cancellationToken
-                );
+            InstallResult? pathError;
+            (resolvedPath, pathError) = await ResolveAndValidateTargetPathAsync(
+                manifest,
+                options,
+                fileHandlerContext,
+                instanceUniqueId,
+                progress,
+                cancellationToken
+            );
             if (pathError is not null)
                 return pathError;
+
+            pluginContext.InstallPath = resolvedPath;
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -941,6 +949,38 @@ public sealed class InstallationEngine : IInstallationEngine
                 manifest.ProductId,
                 ex.Message
             );
+
+            if (existingProduct is null && manifest.Plugins is { Length: > 0 })
+            {
+                try
+                {
+                    ReportProgress(
+                        InstallStage.Installing,
+                        0,
+                        "Cleaning up database entries after failed install..."
+                    );
+                    PluginContext cleanupContext = await BuildPluginContextAsync(
+                        manifest,
+                        options,
+                        instanceUniqueId,
+                        cancellationToken
+                    );
+                    cleanupContext.InstallPath = resolvedPath ?? options.TargetPath;
+                    await RunPluginPhaseAsync(
+                        manifest,
+                        options,
+                        cleanupContext,
+                        PluginPhase.PostUninstall,
+                        cancellationToken,
+                        extractPath
+                    );
+                }
+                catch (Exception cleanupEx)
+                {
+                    _logger.LogWarning(cleanupEx, "PostUninstall cleanup failed");
+                }
+            }
+
             return new InstallResult
             {
                 Success = false,
@@ -1810,6 +1850,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     0,
                     $"PostInstall failed: {postInstallResult.ErrorMessage}"
                 );
+
                 throw new InvalidOperationException(
                     $"PostInstall failed: {postInstallResult.ErrorMessage}"
                 );
