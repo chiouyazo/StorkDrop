@@ -131,7 +131,8 @@ public static class AppHostBuilder
             try
             {
                 PluginLoadContext loadContext = new PluginLoadContext(dllPath);
-                Assembly assembly = loadContext.LoadFromAssemblyPath(dllPath);
+                byte[] assemblyBytes = File.ReadAllBytes(dllPath);
+                Assembly assembly = loadContext.LoadFromStream(new MemoryStream(assemblyBytes));
 
                 Type[] allTypes;
                 try
@@ -223,7 +224,7 @@ public static class AppHostBuilder
             // Try to resolve from the plugin's own directory
             string? resolvedPath = _resolver.ResolveAssemblyToPath(assemblyName);
             if (resolvedPath is not null)
-                return LoadFromAssemblyPath(resolvedPath);
+                return LoadFromStream(new MemoryStream(File.ReadAllBytes(resolvedPath)));
 
             return null;
         }

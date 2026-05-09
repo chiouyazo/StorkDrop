@@ -217,7 +217,7 @@ public sealed class EnvironmentVariableService
 
     public async Task SaveAppliedAsync(
         string productId,
-        string instanceId,
+        string uniqueId,
         List<AppliedEnvironmentVariable> applied,
         CancellationToken cancellationToken
     )
@@ -229,7 +229,7 @@ public sealed class EnvironmentVariableService
         {
             string configDir = GetStorkConfigDir();
             Directory.CreateDirectory(configDir);
-            string path = StorkPaths.EnvVarsPath(productId, instanceId);
+            string path = StorkPaths.EnvVarsPath(productId, uniqueId);
             string json = JsonSerializer.Serialize(applied, JsonOptions);
             await File.WriteAllTextAsync(path, json, cancellationToken);
         }
@@ -241,11 +241,11 @@ public sealed class EnvironmentVariableService
 
     public async Task<List<AppliedEnvironmentVariable>> LoadAppliedAsync(
         string productId,
-        string instanceId,
+        string uniqueId,
         CancellationToken cancellationToken
     )
     {
-        string path = StorkPaths.EnvVarsPath(productId, instanceId);
+        string path = StorkPaths.EnvVarsPath(productId, uniqueId);
         if (!File.Exists(path))
         {
             string legacyPath = StorkPaths.LegacyEnvVarsPath(productId);
@@ -266,11 +266,11 @@ public sealed class EnvironmentVariableService
         }
     }
 
-    public void DeleteTracking(string productId, string instanceId)
+    public void DeleteTracking(string productId, string uniqueId)
     {
         try
         {
-            string path = StorkPaths.EnvVarsPath(productId, instanceId);
+            string path = StorkPaths.EnvVarsPath(productId, uniqueId);
             if (File.Exists(path))
                 File.Delete(path);
 

@@ -590,7 +590,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 {
                     Dictionary<string, string> previousValues = await LoadPluginConfigValues(
                         manifest.ProductId,
-                        options.InstanceId,
+                        instanceUniqueId,
                         cancellationToken
                     );
                     Dictionary<string, string>? userValues = OnActionGroupConfigNeeded(
@@ -1034,6 +1034,17 @@ public sealed class InstallationEngine : IInstallationEngine
                 options.InstanceId,
                 instanceUniqueId
             );
+
+            if (options.PluginConfigValues is { Count: > 0 })
+            {
+                await SavePluginConfigValues(
+                    manifest.ProductId,
+                    instanceUniqueId,
+                    options.PluginConfigValues,
+                    cancellationToken
+                );
+            }
+
             return new InstallResult { Success = true };
         }
         finally
@@ -1480,6 +1491,16 @@ public sealed class InstallationEngine : IInstallationEngine
                             FailedStep = "Elevation",
                         }
                     );
+
+                if (options.PluginConfigValues is { Count: > 0 })
+                {
+                    await SavePluginConfigValues(
+                        manifest.ProductId,
+                        instanceUniqueId,
+                        options.PluginConfigValues,
+                        cancellationToken
+                    );
+                }
             }
             finally
             {
@@ -1803,14 +1824,14 @@ public sealed class InstallationEngine : IInstallationEngine
         );
         await ApplyEnvironmentVariablesAsync(
             manifest,
-            options.InstanceId,
+            instanceUniqueId,
             resolvedPath,
             cancellationToken
         );
 
         await SavePluginConfigValues(
             manifest.ProductId,
-            options.InstanceId,
+            instanceUniqueId,
             options.PluginConfigValues,
             cancellationToken
         );
@@ -1820,7 +1841,7 @@ public sealed class InstallationEngine : IInstallationEngine
         );
         await SaveFileManifestAsync(
             manifest.ProductId,
-            options.InstanceId,
+            instanceUniqueId,
             resolvedPath,
             cancellationToken
         );
@@ -1978,12 +1999,15 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 List<AppliedEnvironmentVariable> oldEnvVars = await _envVarService.LoadAppliedAsync(
                     installed.ProductId,
-                    installed.InstanceId,
+                    installed.InstanceUniqueId ?? string.Empty,
                     cancellationToken
                 );
                 if (oldEnvVars.Count > 0)
                     await _envVarService.RemoveAsync(oldEnvVars);
-                _envVarService.DeleteTracking(installed.ProductId, installed.InstanceId);
+                _envVarService.DeleteTracking(
+                    installed.ProductId,
+                    installed.InstanceUniqueId ?? string.Empty
+                );
             }
             catch
             {
@@ -1999,7 +2023,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
                 List<string>? trackedFiles = await LoadFileManifest(
                     installed.ProductId,
-                    installed.InstanceId,
+                    installed.InstanceUniqueId ?? string.Empty,
                     cancellationToken
                 );
 
@@ -2382,7 +2406,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
             Dictionary<string, string> previousValues = await LoadPluginConfigValues(
                 product.ProductId,
-                product.InstanceId,
+                product.InstanceUniqueId ?? string.Empty,
                 cancellationToken
             );
             Dictionary<string, string>? configValues = options.PluginConfigValues;
@@ -2501,7 +2525,7 @@ public sealed class InstallationEngine : IInstallationEngine
             ReportProgress(InstallStage.RunningPlugins, 90, "Saving configuration...");
             await SavePluginConfigValues(
                 product.ProductId,
-                product.InstanceId,
+                product.InstanceUniqueId ?? string.Empty,
                 configValues,
                 cancellationToken
             );
@@ -2825,7 +2849,31 @@ public sealed class InstallationEngine : IInstallationEngine
                     }
                     else
                     {
-                        await fileOps.CopyFileAsync(file.FullName, targetPath, cancellationToken);
+                        try
+                        {
+                            await fileOps.CopyFileAsync(
+                                file.FullName,
+                                targetPath,
+                                cancellationToken
+                            );
+                        }
+                        catch (Exception retryEx)
+                            when (retryEx is IOException or UnauthorizedAccessException)
+                        {
+                            ReportProgress(
+                                InstallStage.Installing,
+                                0,
+                                $"Warning: {Path.GetFileName(targetPath)} is in use, will be replaced on restart"
+                            );
+                            DeferLockedFile(
+                                fileOps,
+                                deferredOps,
+                                deferredRenames,
+                                file.FullName,
+                                targetPath,
+                                cancellationToken
+                            );
+                        }
                     }
                 }
             }
@@ -2867,33 +2915,45 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
-        string pendingFileName = $"NEW_{Guid.NewGuid():N}_{Path.GetFileName(targetPath)}";
-        string pendingPath = Path.Combine(Path.GetDirectoryName(targetPath)!, pendingFileName);
+        string delFileName = $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(targetPath)}";
+        string delPath = Path.Combine(Path.GetDirectoryName(targetPath)!, delFileName);
 
-        File.Copy(sourceFile, pendingPath, true);
-        deferredRenames.Add(pendingPath);
-        deferredOps.ScheduleMoveOnReboot(pendingPath, targetPath);
+        File.Move(targetPath, delPath);
+        deferredRenames.Add(delPath);
+        deferredOps.ScheduleDeleteOnReboot(delPath);
+        File.Copy(sourceFile, targetPath, true);
     }
 
     private static void RevertDeferredRenames(List<string> deferredRenames, string targetDir)
     {
-        foreach (string pendingPath in deferredRenames)
+        foreach (string delPath in deferredRenames)
         {
             try
             {
-                if (File.Exists(pendingPath))
-                    File.Delete(pendingPath);
+                string fileName = Path.GetFileName(delPath);
+                int secondUnderscore = fileName.IndexOf('_', 4);
+                if (secondUnderscore >= 0 && secondUnderscore + 1 < fileName.Length)
+                {
+                    string originalName = fileName.Substring(secondUnderscore + 1);
+                    string originalPath = Path.Combine(
+                        Path.GetDirectoryName(delPath)!,
+                        originalName
+                    );
+
+                    if (File.Exists(originalPath))
+                        File.Delete(originalPath);
+
+                    if (File.Exists(delPath))
+                        File.Move(delPath, originalPath);
+                }
             }
-            catch
-            {
-                // Best-effort revert
-            }
+            catch { }
         }
     }
 
     private async Task SaveFileManifestAsync(
         string productId,
-        string instanceId,
+        string uniqueId,
         string installPath,
         CancellationToken cancellationToken
     )
@@ -2902,7 +2962,7 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             string configDir = GetStorkConfigDir();
             Directory.CreateDirectory(configDir);
-            string manifestPath = StorkPaths.FileManifestPath(productId, instanceId);
+            string manifestPath = StorkPaths.FileManifestPath(productId, uniqueId);
 
             string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
             List<string> relativePaths = new List<string>();
@@ -3007,7 +3067,9 @@ public sealed class InstallationEngine : IInstallationEngine
         string pluginDir = Path.GetDirectoryName(assemblyPath)!;
         ProductPluginLoadContext loadContext = new(pluginDir);
         trackContexts?.Add(loadContext);
-        System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(assemblyPath);
+        System.Reflection.Assembly assembly = loadContext.LoadFromStream(
+            new System.IO.MemoryStream(File.ReadAllBytes(assemblyPath))
+        );
 
         // Use throwOnError: true to surface the actual dependency issue rather than getting null
         Type? pluginType;
@@ -3046,15 +3108,16 @@ public sealed class InstallationEngine : IInstallationEngine
         string instanceId = InstanceIdHelper.DefaultInstanceId
     )
     {
-        Dictionary<string, string> previousValues = await LoadPluginConfigValues(
-            manifest.ProductId,
-            instanceId,
-            cancellationToken
-        );
         InstalledProduct? previousInstall = await _productRepository.GetByIdAsync(
             manifest.ProductId,
             instanceId,
             cancellationToken: cancellationToken
+        );
+        string uniqueId = previousInstall?.InstanceUniqueId ?? string.Empty;
+        Dictionary<string, string> previousValues = await LoadPluginConfigValues(
+            manifest.ProductId,
+            uniqueId,
+            cancellationToken
         );
 
         return new PluginEnvironment
@@ -3095,7 +3158,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task SavePluginConfigValues(
         string productId,
-        string instanceId,
+        string uniqueId,
         Dictionary<string, string>? values,
         CancellationToken cancellationToken
     )
@@ -3105,7 +3168,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
         string configDir = GetStorkConfigDir();
         Directory.CreateDirectory(configDir);
-        string filePath = StorkPaths.InstancePluginConfigPath(productId, instanceId);
+        string filePath = StorkPaths.InstancePluginConfigPath(productId, uniqueId);
         string json = System.Text.Json.JsonSerializer.Serialize(
             values,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
@@ -3115,11 +3178,11 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private static async Task<List<string>?> LoadFileManifest(
         string productId,
-        string instanceId,
+        string uniqueId,
         CancellationToken cancellationToken
     )
     {
-        string path = StorkPaths.FileManifestPath(productId, instanceId);
+        string path = StorkPaths.FileManifestPath(productId, uniqueId);
         if (!File.Exists(path))
         {
             string legacyPath = StorkPaths.LegacyFileManifestPath(productId);
@@ -3140,11 +3203,11 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task<Dictionary<string, string>> LoadPluginConfigValues(
         string productId,
-        string instanceId,
+        string uniqueId,
         CancellationToken cancellationToken
     )
     {
-        string filePath = StorkPaths.InstancePluginConfigPath(productId, instanceId);
+        string filePath = StorkPaths.InstancePluginConfigPath(productId, uniqueId);
         if (!File.Exists(filePath))
         {
             string legacyPath = StorkPaths.LegacyPluginConfigPath(productId);
@@ -3188,7 +3251,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private async Task ApplyEnvironmentVariablesAsync(
         ProductManifest manifest,
-        string instanceId,
+        string uniqueId,
         string installPath,
         CancellationToken cancellationToken
     )
@@ -3204,7 +3267,7 @@ public sealed class InstallationEngine : IInstallationEngine
             );
             await _envVarService.SaveAppliedAsync(
                 manifest.ProductId,
-                instanceId,
+                uniqueId,
                 applied,
                 cancellationToken
             );

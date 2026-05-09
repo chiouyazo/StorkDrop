@@ -127,12 +127,13 @@ internal sealed class CliRunner
             );
 
         string productId = args[3];
-        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId, instanceId);
+        InstalledProduct? installed = await FindInstalledProduct(productId, args);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
-        Console.WriteLine($"Uninstalling {installed.Title} v{installed.Version}");
+        Console.WriteLine(
+            $"Uninstalling {installed.Title} v{installed.Version} ({installed.InstanceUniqueId})"
+        );
         await _engine.UninstallAsync(installed);
         Console.WriteLine($"Successfully uninstalled {installed.Title}");
         return 0;
@@ -147,10 +148,9 @@ internal sealed class CliRunner
 
         string productId = args[3];
         string? version = GetFlag(args, "--version");
-        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
         Dictionary<string, string> configValues = ParseConfigValues(args);
 
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId, instanceId);
+        InstalledProduct? installed = await FindInstalledProduct(productId, args);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
@@ -209,13 +209,12 @@ internal sealed class CliRunner
             );
 
         string productId = args[3];
-        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
         Dictionary<string, string> configValues = ParseConfigValues(args);
         bool skipPre = args.Any(a => a == "--skip-pre");
         bool skipPost = args.Any(a => a == "--skip-post");
         bool runFiles = args.Any(a => a == "--run-files");
 
-        InstalledProduct? installed = await _productRepository.GetByIdAsync(productId, instanceId);
+        InstalledProduct? installed = await FindInstalledProduct(productId, args);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
@@ -511,6 +510,21 @@ internal sealed class CliRunner
         }
 
         return values;
+    }
+
+    private async Task<InstalledProduct?> FindInstalledProduct(string productId, string[] args)
+    {
+        string? uniqueId = GetFlag(args, "--id");
+        if (uniqueId is not null)
+        {
+            IReadOnlyList<InstalledProduct> instances = await _productRepository.GetInstancesAsync(
+                productId
+            );
+            return instances.FirstOrDefault(p => p.InstanceUniqueId == uniqueId);
+        }
+
+        string instanceId = GetFlag(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
+        return await _productRepository.GetByIdAsync(productId, instanceId);
     }
 
     private static string? GetFlag(string[] args, string flag)

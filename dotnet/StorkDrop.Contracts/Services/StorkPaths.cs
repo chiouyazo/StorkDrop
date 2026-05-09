@@ -49,21 +49,24 @@ public static class StorkPaths
 
     /// <summary>
     /// Gets the file manifest path for a specific product instance.
+    /// Uses the 8-char InstanceUniqueId, not the user-facing InstanceId.
     /// </summary>
-    public static string FileManifestPath(string productId, string instanceId) =>
-        Path.Combine(StorkConfigDir, $"{productId}_{instanceId}.files.json");
+    public static string FileManifestPath(string productId, string uniqueId) =>
+        Path.Combine(StorkConfigDir, $"{productId}_{uniqueId}.files.json");
 
     /// <summary>
     /// Gets the plugin configuration values path for a specific product instance.
+    /// Uses the 8-char InstanceUniqueId, not the user-facing InstanceId.
     /// </summary>
-    public static string InstancePluginConfigPath(string productId, string instanceId) =>
-        Path.Combine(StorkConfigDir, $"plugin-config-{productId}_{instanceId}.json");
+    public static string InstancePluginConfigPath(string productId, string uniqueId) =>
+        Path.Combine(StorkConfigDir, $"plugin-config-{productId}_{uniqueId}.json");
 
     /// <summary>
     /// Gets the environment variable tracking path for a specific product instance.
+    /// Uses the 8-char InstanceUniqueId, not the user-facing InstanceId.
     /// </summary>
-    public static string EnvVarsPath(string productId, string instanceId) =>
-        Path.Combine(StorkConfigDir, $"{productId}_{instanceId}.envvars.json");
+    public static string EnvVarsPath(string productId, string uniqueId) =>
+        Path.Combine(StorkConfigDir, $"{productId}_{uniqueId}.envvars.json");
 
     /// <summary>
     /// Gets the legacy file manifest path (pre-instance-aware).

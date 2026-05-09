@@ -76,7 +76,12 @@ public sealed class UninstallService
         );
         await RunUninstallPluginPhaseAsync(product, "PreUninstall", cancellationToken);
 
-        // Force GC to release plugin assembly file locks after PreUninstall
+        progress?.Report(
+            new InstallProgress(InstallStage.Uninstalling, 8, "Running post-uninstall hooks...")
+        );
+        await RunUninstallPluginPhaseAsync(product, "PostUninstall", cancellationToken);
+
+        // Force GC to release plugin assembly file locks
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
@@ -118,7 +123,7 @@ public sealed class UninstallService
         );
         await RemoveEnvironmentVariablesAsync(
             product.ProductId,
-            product.InstanceId,
+            product.InstanceUniqueId ?? string.Empty,
             cancellationToken
         );
 
@@ -126,7 +131,7 @@ public sealed class UninstallService
         {
             List<string>? trackedFiles = await LoadFileManifestAsync(
                 product.ProductId,
-                product.InstanceId,
+                product.InstanceUniqueId ?? string.Empty,
                 cancellationToken
             );
 
@@ -181,7 +186,7 @@ public sealed class UninstallService
                 await DeleteDirectoryWithRetryAsync(product.InstalledPath, cancellationToken);
             }
 
-            DeleteFileManifest(product.ProductId, product.InstanceId);
+            DeleteFileManifest(product.ProductId, product.InstanceUniqueId ?? string.Empty);
         }
 
         progress?.Report(
@@ -207,11 +212,6 @@ public sealed class UninstallService
             Success: true
         );
         await _activityLog.LogAsync(entry, cancellationToken);
-
-        progress?.Report(
-            new InstallProgress(InstallStage.Uninstalling, 90, "Running post-uninstall hooks...")
-        );
-        await RunUninstallPluginPhaseAsync(product, "PostUninstall", cancellationToken);
 
         progress?.Report(new InstallProgress(InstallStage.Uninstalling, 95, "Cleaning up..."));
         string storkDir = Path.Combine(product.InstalledPath, ".stork");
@@ -267,7 +267,7 @@ public sealed class UninstallService
             {
                 string configPath = StorkPaths.InstancePluginConfigPath(
                     product.ProductId,
-                    product.InstanceId
+                    product.InstanceUniqueId ?? string.Empty
                 );
                 if (!File.Exists(configPath))
                     configPath = StorkPaths.LegacyPluginConfigPath(product.ProductId);
@@ -331,16 +331,26 @@ public sealed class UninstallService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(
+                    _logger.LogError(
                         ex,
-                        "{Phase} failed for {TypeName}",
+                        "{Phase} failed for {TypeName}: {Message}",
                         phase,
-                        pluginInfo.TypeName
+                        pluginInfo.TypeName,
+                        ex.Message
                     );
+
+                    if (phase == "PostUninstall")
+                    {
+                        throw new InvalidOperationException(
+                            $"PostUninstall failed for {pluginInfo.TypeName}: {ex.Message}. "
+                                + "Database entries may not have been cleaned up.",
+                            ex
+                        );
+                    }
                 }
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (phase == "PreUninstall")
         {
             _logger.LogWarning(ex, "Could not run {Phase} plugins", phase);
         }
@@ -370,8 +380,8 @@ public sealed class UninstallService
             ProductPluginLoadContext loadContext = new(tempDir);
             try
             {
-                System.Reflection.Assembly assembly = loadContext.LoadFromAssemblyPath(
-                    tempAssemblyPath
+                System.Reflection.Assembly assembly = loadContext.LoadFromStream(
+                    new System.IO.MemoryStream(File.ReadAllBytes(tempAssemblyPath))
                 );
                 Type? pluginType = assembly.GetType(typeName, throwOnError: true);
 
@@ -443,11 +453,11 @@ public sealed class UninstallService
 
     private static async Task<List<string>?> LoadFileManifestAsync(
         string productId,
-        string instanceId,
+        string uniqueId,
         CancellationToken cancellationToken
     )
     {
-        string manifestPath = StorkPaths.FileManifestPath(productId, instanceId);
+        string manifestPath = StorkPaths.FileManifestPath(productId, uniqueId);
 
         if (!File.Exists(manifestPath))
         {
@@ -469,11 +479,11 @@ public sealed class UninstallService
         }
     }
 
-    private static void DeleteFileManifest(string productId, string instanceId)
+    private static void DeleteFileManifest(string productId, string uniqueId)
     {
         try
         {
-            string manifestPath = StorkPaths.FileManifestPath(productId, instanceId);
+            string manifestPath = StorkPaths.FileManifestPath(productId, uniqueId);
             if (File.Exists(manifestPath))
                 File.Delete(manifestPath);
 
@@ -649,7 +659,7 @@ public sealed class UninstallService
 
     private async Task RemoveEnvironmentVariablesAsync(
         string productId,
-        string instanceId,
+        string uniqueId,
         CancellationToken cancellationToken
     )
     {
@@ -657,14 +667,14 @@ public sealed class UninstallService
         {
             List<AppliedEnvironmentVariable> applied = await _envVarService.LoadAppliedAsync(
                 productId,
-                instanceId,
+                uniqueId,
                 cancellationToken
             );
 
             if (applied.Count > 0)
                 await _envVarService.RemoveAsync(applied);
 
-            _envVarService.DeleteTracking(productId, instanceId);
+            _envVarService.DeleteTracking(productId, uniqueId);
         }
         catch
         {

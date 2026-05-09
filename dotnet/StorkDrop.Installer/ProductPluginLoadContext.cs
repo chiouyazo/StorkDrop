@@ -27,7 +27,7 @@ internal sealed class ProductPluginLoadContext(string pluginDirectory)
         // Plugin's own dependencies from its root directory
         string path = Path.Combine(pluginDirectory, $"{name}.dll");
         if (File.Exists(path))
-            return LoadFromAssemblyPath(path);
+            return LoadFromStream(new MemoryStream(File.ReadAllBytes(path)));
 
         // Fall back to host
         try
@@ -85,7 +85,7 @@ internal sealed class ProductPluginLoadContext(string pluginDirectory)
             {
                 string dllPath = Path.Combine(tfmDir, $"{assemblyName}.dll");
                 if (File.Exists(dllPath))
-                    return LoadFromAssemblyPath(dllPath);
+                    return LoadFromStream(new MemoryStream(File.ReadAllBytes(dllPath)));
             }
         }
 
