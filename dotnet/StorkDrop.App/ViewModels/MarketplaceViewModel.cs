@@ -118,7 +118,7 @@ public partial class MarketplaceViewModel : ObservableObject
                 _ =>
                 {
                     if (!token.IsCancellationRequested)
-                        System.Windows.Application.Current?.Dispatcher.Invoke(ApplyFilters);
+                        System.Windows.Application.Current?.Dispatcher.BeginInvoke(ApplyFilters);
                 },
                 TaskScheduler.Default
             );

@@ -15,8 +15,15 @@ public partial class PluginConfigDialog : Window
 
     private async void OnDialogLoaded(object sender, RoutedEventArgs e)
     {
-        if (DataContext is PluginConfigDialogViewModel viewModel)
-            await viewModel.HandleConfigurationLoadedAsync();
+        try
+        {
+            if (DataContext is PluginConfigDialogViewModel viewModel)
+                await viewModel.HandleConfigurationLoadedAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Config dialog load failed: {ex}");
+        }
     }
 
     public Dictionary<string, string>? ResultValues { get; private set; }
@@ -95,7 +102,7 @@ public partial class PluginConfigDialog : Window
         }
     }
 
-    private void PluginButton_Click(object sender, RoutedEventArgs e)
+    private async void PluginButton_Click(object sender, RoutedEventArgs e)
     {
         if (
             sender is System.Windows.Controls.Button button
@@ -103,7 +110,7 @@ public partial class PluginConfigDialog : Window
             && DataContext is PluginConfigDialogViewModel viewModel
         )
         {
-            viewModel.HandleButtonClick(field);
+            await viewModel.HandleButtonClickAsync(field);
         }
     }
 

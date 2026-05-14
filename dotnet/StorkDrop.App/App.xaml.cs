@@ -175,55 +175,82 @@ public partial class App : Application
             engine.OnPluginConfigNeeded = (fields, currentValues) =>
             {
                 Dictionary<string, string>? result = null;
-                Dispatcher.Invoke(() =>
+                try
                 {
-                    ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
-                        fields,
-                        currentValues
-                    );
-                    vm.InteractivePlugin = engine.CurrentInteractivePlugin;
-                    Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
-                    dialog.Owner = MainWindow;
-                    if (dialog.ShowDialog() == true)
-                        result = vm.GetValues();
-                });
+                    Dispatcher.Invoke(() =>
+                    {
+                        ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                            fields,
+                            currentValues
+                        );
+                        vm.InteractivePlugin = engine.CurrentInteractivePlugin;
+                        Views.PluginConfigDialog dialog = new PluginConfigDialog
+                        {
+                            DataContext = vm,
+                        };
+                        dialog.Owner = MainWindow;
+                        if (dialog.ShowDialog() == true)
+                            result = vm.GetValues();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Plugin config dialog failed");
+                }
                 return result;
             };
 
             engine.OnActionGroupConfigNeeded = (groups, currentValues) =>
             {
                 Dictionary<string, string>? result = null;
-                Dispatcher.Invoke(() =>
+                try
                 {
-                    ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
-                        groups,
-                        currentValues
-                    );
-                    vm.InteractivePlugin = engine.CurrentInteractivePlugin;
-                    Views.PluginConfigDialog dialog = new PluginConfigDialog { DataContext = vm };
-                    dialog.Owner = MainWindow;
-                    if (dialog.ShowDialog() == true)
-                        result = vm.GetValues();
-                });
+                    Dispatcher.Invoke(() =>
+                    {
+                        ViewModels.PluginConfigDialogViewModel vm = new PluginConfigDialogViewModel(
+                            groups,
+                            currentValues
+                        );
+                        vm.InteractivePlugin = engine.CurrentInteractivePlugin;
+                        Views.PluginConfigDialog dialog = new PluginConfigDialog
+                        {
+                            DataContext = vm,
+                        };
+                        dialog.Owner = MainWindow;
+                        if (dialog.ShowDialog() == true)
+                            result = vm.GetValues();
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Action group config dialog failed");
+                }
                 return result;
             };
 
             LockedFilesCallback lockedFilesHandler = (lockedFiles, detector, directory) =>
             {
                 LockedFilesAction result = LockedFilesAction.Skip;
-                Dispatcher.Invoke(() =>
+                try
                 {
-                    Views.LockedFilesDialog dialog = new Views.LockedFilesDialog(
-                        lockedFiles,
-                        detector,
-                        directory
-                    )
+                    Dispatcher.Invoke(() =>
                     {
-                        Owner = MainWindow,
-                    };
-                    if (dialog.ShowDialog() == true)
-                        result = LockedFilesAction.Retry;
-                });
+                        Views.LockedFilesDialog dialog = new Views.LockedFilesDialog(
+                            lockedFiles,
+                            detector,
+                            directory
+                        )
+                        {
+                            Owner = MainWindow,
+                        };
+                        if (dialog.ShowDialog() == true)
+                            result = LockedFilesAction.Retry;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Locked files dialog failed");
+                }
                 return result;
             };
 
@@ -344,17 +371,26 @@ public partial class App : Application
             if (update is null)
                 return;
 
-            bool shouldUpdate = Dispatcher.Invoke(() =>
+            bool shouldUpdate = false;
+            try
             {
-                Views.UpdateNotificationDialog dialog = new(
-                    update.Version,
-                    update.ReleaseNotes ?? ""
-                )
+                shouldUpdate = Dispatcher.Invoke(() =>
                 {
-                    Owner = owner,
-                };
-                return dialog.ShowDialog() == true;
-            });
+                    Views.UpdateNotificationDialog dialog = new(
+                        update.Version,
+                        update.ReleaseNotes ?? ""
+                    )
+                    {
+                        Owner = owner,
+                    };
+                    return dialog.ShowDialog() == true;
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Self-update dialog failed");
+                return;
+            }
 
             if (shouldUpdate)
             {

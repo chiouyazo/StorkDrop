@@ -51,21 +51,28 @@ public partial class PluginConfigDialogViewModel : ObservableObject
         if (InteractivePlugin is null)
             return;
 
-        PluginButtonResult? result = await Task.Run(() =>
-            InteractivePlugin.OnConfigurationLoaded(GetValues())
-        );
-
-        if (result?.UpdatedSchema is not null)
+        try
         {
-            Dictionary<string, string> currentValues = GetValues();
-            if (HasActionGroups)
-                RebuildGroupFields(result.UpdatedSchema, currentValues);
-            else
-                MergeFields(result.UpdatedSchema, currentValues);
+            PluginButtonResult? result = await Task.Run(() =>
+                InteractivePlugin.OnConfigurationLoaded(GetValues())
+            );
+
+            if (result?.UpdatedSchema is not null)
+            {
+                Dictionary<string, string> currentValues = GetValues();
+                if (HasActionGroups)
+                    RebuildGroupFields(result.UpdatedSchema, currentValues);
+                else
+                    MergeFields(result.UpdatedSchema, currentValues);
+            }
+        }
+        catch (Exception ex)
+        {
+            GlobalErrorMessage = $"Configuration loading failed: {ex.Message}";
         }
     }
 
-    public async void HandleButtonClick(PluginConfigFieldViewModel field)
+    public async Task HandleButtonClickAsync(PluginConfigFieldViewModel field)
     {
         if (InteractivePlugin is null)
             return;

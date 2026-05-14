@@ -414,17 +414,24 @@ public partial class SettingsViewModel : ObservableObject
             if (update is not null)
             {
                 bool shouldUpdate = false;
-                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                try
                 {
-                    Views.UpdateNotificationDialog dialog = new(
-                        update.Version,
-                        update.ReleaseNotes ?? ""
-                    )
+                    System.Windows.Application.Current.Dispatcher.Invoke(() =>
                     {
-                        Owner = System.Windows.Application.Current.MainWindow,
-                    };
-                    shouldUpdate = dialog.ShowDialog() == true;
-                });
+                        Views.UpdateNotificationDialog dialog = new(
+                            update.Version,
+                            update.ReleaseNotes ?? ""
+                        )
+                        {
+                            Owner = System.Windows.Application.Current.MainWindow,
+                        };
+                        shouldUpdate = dialog.ShowDialog() == true;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Serilog.Log.Error(ex, "Update notification dialog failed");
+                }
 
                 if (shouldUpdate)
                 {
