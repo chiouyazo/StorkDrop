@@ -23,6 +23,7 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
     public FileHandlerConfigCallback? OnPluginConfigNeeded { get; set; }
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public LockedFilesCallback? OnLockedFilesDetected { get; set; }
+    public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin => _interactivePlugin;
 
     public Task<IReadOnlyList<PluginActionGroup>> GetActionGroupsAsync(

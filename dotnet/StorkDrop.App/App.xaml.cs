@@ -256,6 +256,28 @@ public partial class App : Application
 
             engine.OnLockedFilesDetected = lockedFilesHandler;
 
+            engine.OnPrompt = prompt =>
+            {
+                PluginPromptResult result = new PluginPromptResult();
+                try
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        Views.PluginPromptDialog dialog = new Views.PluginPromptDialog(prompt)
+                        {
+                            Owner = MainWindow,
+                        };
+                        if (dialog.ShowDialog() == true)
+                            result.ChosenIndex = dialog.ChosenIndex;
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Log.Error(ex, "Plugin prompt dialog failed");
+                }
+                return result;
+            };
+
             UninstallService uninstallService = Services.GetRequiredService<UninstallService>();
             uninstallService.OnLockedFilesDetected = lockedFilesHandler;
 

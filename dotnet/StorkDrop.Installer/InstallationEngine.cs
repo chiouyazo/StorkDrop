@@ -39,6 +39,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public LockedFilesCallback? OnLockedFilesDetected { get; set; }
+    public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
 
     private static readonly JsonSerializerOptions FileManifestJsonOptions =
@@ -3192,6 +3193,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     new InstallProgress(InstallStage.RunningPlugins, 0, message)
                 );
             },
+            Prompt = OnPrompt,
         };
     }
 

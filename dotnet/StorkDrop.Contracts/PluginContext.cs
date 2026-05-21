@@ -56,4 +56,10 @@ public sealed class PluginContext
     /// Messages are forwarded to the installation tracker's log entries.
     /// </summary>
     public Action<string>? Log { get; set; }
+
+    /// <summary>
+    /// Optional callback that plugins can invoke to show a prompt dialog during execution.
+    /// Returns the user's choice. Returns a cancelled result if the callback is null.
+    /// </summary>
+    public Func<Models.PluginPrompt, Models.PluginPromptResult>? Prompt { get; set; }
 }

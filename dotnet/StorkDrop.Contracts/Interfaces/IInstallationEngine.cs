@@ -77,6 +77,12 @@ public interface IInstallationEngine
 
     LockedFilesCallback? OnLockedFilesDetected { get; set; }
 
+    /// <summary>
+    /// Set by the UI layer to handle plugin prompt dialogs.
+    /// Plugins call context.Prompt() which routes through this callback.
+    /// </summary>
+    Func<Models.PluginPrompt, Models.PluginPromptResult>? OnPrompt { get; set; }
+
     IInteractiveStorkPlugin? CurrentInteractivePlugin { get; }
 
     /// <summary>
