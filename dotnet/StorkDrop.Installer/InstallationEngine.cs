@@ -532,17 +532,6 @@ public sealed class InstallationEngine : IInstallationEngine
             existingProduct?.InstanceUniqueId is { Length: > 0 } ? "reused" : "generated"
         );
 
-        InstallResult? elevationResult = await TryElevateInstallAsync(
-            manifest,
-            options,
-            options.TargetPath,
-            instanceUniqueId,
-            progress,
-            cancellationToken
-        );
-        if (elevationResult is not null)
-            return elevationResult;
-
         string tempDir = Path.Combine(StorkPaths.TempDir, Guid.NewGuid().ToString());
 
         try
@@ -684,6 +673,17 @@ public sealed class InstallationEngine : IInstallationEngine
                     options = options with { PluginConfigValues = userValues };
                 }
             }
+
+            InstallResult? elevationResult = await TryElevateInstallAsync(
+                manifest,
+                options,
+                options.TargetPath,
+                instanceUniqueId,
+                progress,
+                cancellationToken
+            );
+            if (elevationResult is not null)
+                return elevationResult;
 
             cancellationToken.ThrowIfCancellationRequested();
             PluginContext pluginContext = await BuildPluginContextAsync(
