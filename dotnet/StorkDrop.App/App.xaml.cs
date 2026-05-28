@@ -519,6 +519,8 @@ public partial class App : Application
         string instanceId
     )
     {
+        Dictionary<string, string>? configValues = LoadElevationConfigFile();
+
         return RunElevatedAsync(
             "update",
             async services =>
@@ -540,7 +542,8 @@ public partial class App : Application
                     InstallOptions options = new InstallOptions(
                         TargetPath: targetPath,
                         InstanceId: instanceId,
-                        FeedId: feedId
+                        FeedId: feedId,
+                        PluginConfigValues: configValues
                     );
                     Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
                     await engine.UpdateAsync(installed, manifest, options, progress);

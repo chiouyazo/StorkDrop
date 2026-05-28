@@ -3244,6 +3244,12 @@ public sealed class InstallationEngine : IInstallationEngine
         _currentProgress?.Report(new InstallProgress(stage, percentage, message));
     }
 
+    public Task<Dictionary<string, string>> LoadSavedPluginConfigAsync(
+        string productId,
+        string instanceUniqueId,
+        CancellationToken cancellationToken = default
+    ) => LoadPluginConfigValues(productId, instanceUniqueId, cancellationToken);
+
     private async Task<Dictionary<string, string>> LoadPluginConfigValues(
         string productId,
         string uniqueId,

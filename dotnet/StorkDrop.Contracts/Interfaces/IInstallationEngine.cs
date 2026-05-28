@@ -108,6 +108,15 @@ public interface IInstallationEngine
     );
 
     /// <summary>
+    /// Loads previously saved plugin config values for a product instance.
+    /// </summary>
+    Task<Dictionary<string, string>> LoadSavedPluginConfigAsync(
+        string productId,
+        string instanceUniqueId,
+        CancellationToken cancellationToken = default
+    );
+
+    /// <summary>
     /// Installs a product using the specified manifest and options.
     /// </summary>
     /// <param name="manifest">The product manifest describing what to install.</param>

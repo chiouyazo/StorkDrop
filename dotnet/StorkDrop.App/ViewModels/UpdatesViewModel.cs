@@ -184,6 +184,38 @@ public partial class UpdatesViewModel : ObservableObject
                 ElevationHelper.PathRequiresAdmin(installed.InstalledPath)
                 && !ElevationHelper.IsRunningAsAdmin();
 
+            Dictionary<string, string>? pluginConfigValues = null;
+            if (manifest.Plugins is { Length: > 0 })
+            {
+                IReadOnlyList<PluginActionGroup> groups = await Task.Run(() =>
+                    _coordinator.Engine.GetActionGroupsAsync(
+                        manifest,
+                        update.FeedId,
+                        cancellationToken
+                    )
+                );
+                if (groups.Count > 0)
+                {
+                    IInstallationEngine engine = _coordinator.Engine;
+                    if (engine.OnActionGroupConfigNeeded is not null)
+                    {
+                        Dictionary<string, string> previousValues = await Task.Run(() =>
+                            _coordinator.Engine.LoadSavedPluginConfigAsync(
+                                manifest.ProductId,
+                                installed.InstanceUniqueId ?? string.Empty,
+                                cancellationToken
+                            )
+                        );
+                        pluginConfigValues = engine.OnActionGroupConfigNeeded(
+                            groups,
+                            previousValues
+                        );
+                        if (pluginConfigValues is null)
+                            return; // User cancelled
+                    }
+                }
+            }
+
             if (needsAdmin)
             {
                 update.IsUpdating = true;
@@ -197,16 +229,37 @@ public partial class UpdatesViewModel : ObservableObject
                     $"Updating {update.Title} v{update.CurrentVersion} -> v{update.AvailableVersion} (elevated)"
                 );
 
+                string? configFilePath = null;
+                if (pluginConfigValues is not null)
+                {
+                    configFilePath = Path.Combine(
+                        Path.GetTempPath(),
+                        $"storkdrop-update-config-{Guid.NewGuid()}.json"
+                    );
+                    string json = System.Text.Json.JsonSerializer.Serialize(pluginConfigValues);
+                    await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
+                }
+
                 bool success = await Task.Run(
                     () =>
                         ElevationHelper.RunElevatedUpdate(
                             update.ProductId,
                             installed.InstalledPath,
                             update.FeedId,
-                            installed.InstanceId
+                            installed.InstanceId,
+                            configFilePath
                         ),
                     cancellationToken
                 );
+
+                if (configFilePath is not null)
+                {
+                    try
+                    {
+                        File.Delete(configFilePath);
+                    }
+                    catch { }
+                }
 
                 await Task.Run(() => _productRepository.ReloadAsync(cancellationToken));
 
@@ -228,7 +281,7 @@ public partial class UpdatesViewModel : ObservableObject
                 return;
             }
 
-            // Non-elevated path: use UpdateAsync with progress
+            // Non-elevated path
             update.IsUpdating = true;
             update.UpdatePercentage = 0;
 
@@ -243,7 +296,8 @@ public partial class UpdatesViewModel : ObservableObject
             InstallOptions options = new InstallOptions(
                 TargetPath: installed.InstalledPath,
                 InstanceId: installed.InstanceId,
-                FeedId: update.FeedId
+                FeedId: update.FeedId,
+                PluginConfigValues: pluginConfigValues
             );
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {

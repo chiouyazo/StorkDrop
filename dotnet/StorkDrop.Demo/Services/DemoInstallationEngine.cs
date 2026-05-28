@@ -24,6 +24,13 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public LockedFilesCallback? OnLockedFilesDetected { get; set; }
     public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
+
+    public Task<Dictionary<string, string>> LoadSavedPluginConfigAsync(
+        string productId,
+        string instanceUniqueId,
+        CancellationToken cancellationToken = default
+    ) => Task.FromResult(new Dictionary<string, string>());
+
     public IInteractiveStorkPlugin? CurrentInteractivePlugin => _interactivePlugin;
 
     public Task<IReadOnlyList<PluginActionGroup>> GetActionGroupsAsync(
