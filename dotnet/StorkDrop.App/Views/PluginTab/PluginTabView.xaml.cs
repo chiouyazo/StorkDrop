@@ -17,6 +17,12 @@ public partial class PluginTabView : UserControl
             field.Value = pb.Password;
     }
 
+    private void OnPasswordLoaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox pb && pb.Tag is PluginConfigFieldViewModel field)
+            pb.Password = field.Value ?? string.Empty;
+    }
+
     private void OnCheckBoxChanged(object sender, RoutedEventArgs e)
     {
         if (sender is CheckBox cb && cb.Tag is PluginConfigFieldViewModel field)

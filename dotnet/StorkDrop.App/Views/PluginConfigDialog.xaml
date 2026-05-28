@@ -118,6 +118,7 @@
             BorderThickness="0"
             Background="Transparent"
             Tag="{Binding}"
+            Loaded="PasswordBox_Loaded"
             PasswordChanged="PasswordBox_PasswordChanged"
           />
         </Border>

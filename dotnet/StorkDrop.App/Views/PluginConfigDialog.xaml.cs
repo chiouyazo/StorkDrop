@@ -47,6 +47,17 @@ public partial class PluginConfigDialog : Window
         Close();
     }
 
+    private void PasswordBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (
+            sender is PasswordBox passwordBox
+            && passwordBox.Tag is PluginConfigFieldViewModel field
+        )
+        {
+            passwordBox.Password = field.Value ?? string.Empty;
+        }
+    }
+
     private void PasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
     {
         if (
