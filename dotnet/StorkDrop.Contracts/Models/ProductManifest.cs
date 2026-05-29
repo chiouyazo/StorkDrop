@@ -27,5 +27,6 @@ public sealed record ProductManifest(
     string? BadgeText = null,
     string? BadgeColor = null,
     string[]? PreserveOnSwitch = null,
-    bool AllowMultipleInstances = false
+    bool AllowMultipleInstances = false,
+    string[]? ExcludeFiles = null
 );

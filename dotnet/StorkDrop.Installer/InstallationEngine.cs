@@ -761,6 +761,34 @@ public sealed class InstallationEngine : IInstallationEngine
                     handledFiles.Add(pf);
             }
 
+            List<string> excludedFiles = [];
+            if (manifest.ExcludeFiles is { Length: > 0 })
+            {
+                foreach (string pattern in manifest.ExcludeFiles)
+                {
+                    foreach (
+                        string file in Directory.GetFiles(
+                            copySourcePath,
+                            pattern,
+                            SearchOption.AllDirectories
+                        )
+                    )
+                    {
+                        if (handledFiles.Add(file))
+                            excludedFiles.Add(Path.GetFileName(file));
+                    }
+                }
+
+                if (excludedFiles.Count > 0)
+                {
+                    _logger.LogInformation(
+                        "Excluded {Count} file(s) from copy: {Files}",
+                        excludedFiles.Count,
+                        string.Join("; ", excludedFiles)
+                    );
+                }
+            }
+
             InstallResult? copyError = await CopyFilesToTargetAsync(
                 copySourcePath,
                 resolvedPath,
