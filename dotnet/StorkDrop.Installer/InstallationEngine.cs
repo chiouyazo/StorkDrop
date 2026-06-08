@@ -521,15 +521,35 @@ public sealed class InstallationEngine : IInstallationEngine
             options.InstanceId,
             cancellationToken
         );
-        instanceUniqueId = existingProduct?.InstanceUniqueId is { Length: > 0 } uid
-            ? uid
-            : InstanceIdHelper.GenerateUniqueId();
+
+        // Priority: existing product record > config file (from elevation) > generate new
+        string uniqueIdSource;
+        if (existingProduct?.InstanceUniqueId is { Length: > 0 } uid)
+        {
+            instanceUniqueId = uid;
+            uniqueIdSource = "reused";
+        }
+        else if (
+            options.PluginConfigValues is not null
+            && options.PluginConfigValues.TryGetValue("__instanceUniqueId", out string? passedId)
+            && !string.IsNullOrEmpty(passedId)
+        )
+        {
+            instanceUniqueId = passedId;
+            uniqueIdSource = "from elevation config";
+        }
+        else
+        {
+            instanceUniqueId = InstanceIdHelper.GenerateUniqueId();
+            uniqueIdSource = "generated";
+        }
+
         _logger.LogInformation(
             "InstanceUniqueId for {ProductId}/{InstanceId}: {UniqueId} ({Source})",
             manifest.ProductId,
             options.InstanceId,
             instanceUniqueId,
-            existingProduct?.InstanceUniqueId is { Length: > 0 } ? "reused" : "generated"
+            uniqueIdSource
         );
 
         string tempDir = Path.Combine(StorkPaths.TempDir, Guid.NewGuid().ToString());
@@ -1052,20 +1072,25 @@ public sealed class InstallationEngine : IInstallationEngine
         string? configFilePath = null;
         try
         {
-            if (options.PluginConfigValues is { Count: > 0 })
-            {
-                configFilePath = Path.Combine(
-                    StorkPaths.TempDir,
-                    $"elevation-config-{Guid.NewGuid()}.json"
-                );
-                Directory.CreateDirectory(StorkPaths.TempDir);
-                string json = System.Text.Json.JsonSerializer.Serialize(options.PluginConfigValues);
-                await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
-                _logger.LogDebug(
-                    "Saved plugin config to {Path} for elevated process",
-                    configFilePath
-                );
-            }
+            // Always write config file when elevating - at minimum we need to pass the UniqueId
+            Dictionary<string, string> elevationConfig = options.PluginConfigValues
+                is { Count: > 0 }
+                ? new Dictionary<string, string>(options.PluginConfigValues)
+                : new Dictionary<string, string>();
+            elevationConfig["__instanceUniqueId"] = instanceUniqueId;
+
+            configFilePath = Path.Combine(
+                StorkPaths.TempDir,
+                $"elevation-config-{Guid.NewGuid()}.json"
+            );
+            Directory.CreateDirectory(StorkPaths.TempDir);
+            string json = System.Text.Json.JsonSerializer.Serialize(elevationConfig);
+            await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
+            _logger.LogDebug(
+                "Saved elevation config to {Path} (uniqueId={UniqueId})",
+                configFilePath,
+                instanceUniqueId
+            );
 
             bool elevated = ElevationHelper.RunElevatedInstall(
                 manifest.ProductId,
@@ -1528,18 +1553,19 @@ public sealed class InstallationEngine : IInstallationEngine
             string? configFilePath = null;
             try
             {
-                if (options.PluginConfigValues is { Count: > 0 })
-                {
-                    configFilePath = Path.Combine(
-                        StorkPaths.TempDir,
-                        $"elevation-config-{Guid.NewGuid()}.json"
-                    );
-                    Directory.CreateDirectory(StorkPaths.TempDir);
-                    string configJson = System.Text.Json.JsonSerializer.Serialize(
-                        options.PluginConfigValues
-                    );
-                    await File.WriteAllTextAsync(configFilePath, configJson, cancellationToken);
-                }
+                Dictionary<string, string> elevationConfig = options.PluginConfigValues
+                    is { Count: > 0 }
+                    ? new Dictionary<string, string>(options.PluginConfigValues)
+                    : new Dictionary<string, string>();
+                elevationConfig["__instanceUniqueId"] = instanceUniqueId;
+
+                configFilePath = Path.Combine(
+                    StorkPaths.TempDir,
+                    $"elevation-config-{Guid.NewGuid()}.json"
+                );
+                Directory.CreateDirectory(StorkPaths.TempDir);
+                string configJson = System.Text.Json.JsonSerializer.Serialize(elevationConfig);
+                await File.WriteAllTextAsync(configFilePath, configJson, cancellationToken);
 
                 bool elevated = ElevationHelper.RunElevatedInstall(
                     manifest.ProductId,
