@@ -15,6 +15,8 @@ internal sealed class CliRunner
     private readonly IInstallationEngine _engine;
     private readonly InstallationCoordinator _coordinator;
     private readonly IProductRepository _productRepository;
+    private readonly IConfigurationService _configurationService;
+    private readonly IEncryptionService _encryptionService;
 
     public CliRunner(IServiceProvider services)
     {
@@ -22,6 +24,8 @@ internal sealed class CliRunner
         _engine = services.GetRequiredService<IInstallationEngine>();
         _coordinator = services.GetRequiredService<InstallationCoordinator>();
         _productRepository = services.GetRequiredService<IProductRepository>();
+        _configurationService = services.GetRequiredService<IConfigurationService>();
+        _encryptionService = services.GetRequiredService<IEncryptionService>();
     }
 
     public async Task<int> RunAsync(string[] args)
@@ -42,6 +46,9 @@ internal sealed class CliRunner
                 "uninstall" => await UninstallAsync(args),
                 "update" => await UpdateAsync(args),
                 "re-execute" => await ReExecuteAsync(args),
+                "apply" => await ApplyAsync(args),
+                "add-feed" => await AddFeedAsync(args),
+                "remove-feed" => await RemoveFeedAsync(args),
                 "list" => await ListAsync(),
                 "versions" => await VersionsAsync(args),
                 "help" => PrintCommandHelp(args.Length > 3 ? args[3] : null),
@@ -251,6 +258,312 @@ internal sealed class CliRunner
 
         Console.WriteLine($"Successfully re-executed plugin actions for {installed.Title}");
         return 0;
+    }
+
+    private async Task<int> AddFeedAsync(string[] args)
+    {
+        string? url = GetFlag(args, "--url");
+        if (string.IsNullOrWhiteSpace(url))
+            return Error(
+                "Missing --url. Usage: storkdrop --cli add-feed --url <url> [--id <id>] [--name <name>] [--repo <repo>] [--user <u>] [--password <p>]"
+            );
+
+        string? id = GetFlag(args, "--id");
+        string? name = GetFlag(args, "--name");
+        string? repo = GetFlag(args, "--repo");
+        string? user = GetFlag(args, "--user");
+        string? password = GetFlag(args, "--password");
+
+        AppConfiguration config = await _configurationService.LoadAsync() ?? DefaultConfiguration();
+
+        List<FeedConfiguration> feeds = config.Feeds.ToList();
+        feeds.RemoveAll(f =>
+            (id is not null && string.Equals(f.Id, id, StringComparison.OrdinalIgnoreCase))
+            || (
+                string.Equals(f.Url, url, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(f.Repository ?? "", repo ?? "", StringComparison.OrdinalIgnoreCase)
+            )
+        );
+
+        FeedConfiguration feed = new(
+            Id: id ?? Guid.NewGuid().ToString(),
+            Name: name ?? new Uri(url).Host,
+            Url: url,
+            Repository: string.IsNullOrWhiteSpace(repo) ? null : repo,
+            Username: string.IsNullOrWhiteSpace(user) ? null : user,
+            EncryptedPassword: string.IsNullOrEmpty(password)
+                ? null
+                : _encryptionService.Encrypt(password),
+            PluginId: null
+        );
+        feeds.Add(feed);
+
+        await _configurationService.SaveAsync(config with { Feeds = feeds.ToArray() });
+        await _feedRegistry.ReloadAsync();
+
+        Console.WriteLine($"Added feed '{feed.Name}' ({feed.Id}) -> {feed.Url}");
+
+        bool ok = await _feedRegistry.TestConnectionAsync(feed.Id);
+        Console.WriteLine(ok ? "Connection OK." : "Warning: connection test failed.");
+        return 0;
+    }
+
+    private async Task<int> RemoveFeedAsync(string[] args)
+    {
+        if (args.Length < 4)
+            return Error(
+                "Missing feed identifier. Usage: storkdrop --cli remove-feed <id|name|url>"
+            );
+
+        string token = args[3];
+        AppConfiguration? config = await _configurationService.LoadAsync();
+        if (config is null)
+            return Error("No configuration found.");
+
+        List<FeedConfiguration> feeds = config.Feeds.ToList();
+        int removed = feeds.RemoveAll(f =>
+            string.Equals(f.Id, token, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(f.Name, token, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(f.Url, token, StringComparison.OrdinalIgnoreCase)
+        );
+
+        if (removed == 0)
+            return Error($"No feed matched '{token}'.");
+
+        await _configurationService.SaveAsync(config with { Feeds = feeds.ToArray() });
+        await _feedRegistry.ReloadAsync();
+        Console.WriteLine($"Removed {removed} feed(s) matching '{token}'.");
+        return 0;
+    }
+
+    private async Task<int> ApplyAsync(string[] args)
+    {
+        if (args.Length < 4)
+            return Error(
+                "Missing manifest path. Usage: storkdrop --cli apply <manifest.json> [--report <path>] [--continue-on-error]"
+            );
+
+        string manifestPath = args[3];
+        if (!File.Exists(manifestPath))
+            return Error($"Manifest file not found: {manifestPath}");
+
+        bool continueOnError = args.Any(a => a == "--continue-on-error");
+        string reportPath =
+            GetFlag(args, "--report")
+            ?? Path.Combine(Path.GetTempPath(), "storkdrop-apply-result.json");
+
+        EnvironmentManifest? manifest;
+        try
+        {
+            manifest = JsonSerializer.Deserialize<EnvironmentManifest>(
+                File.ReadAllText(manifestPath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            );
+        }
+        catch (JsonException ex)
+        {
+            return Error($"Failed to parse manifest: {ex.Message}");
+        }
+
+        if (manifest is null || manifest.Products.Count == 0)
+            return Error("Manifest contains no products.");
+
+        List<PlanNode> plan = await BuildInstallPlanAsync(manifest);
+
+        EnvironmentApplyReport report = new EnvironmentApplyReport();
+        bool allOk = true;
+
+        foreach (PlanNode node in plan)
+        {
+            System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+            EnvironmentApplyStep step = new EnvironmentApplyStep
+            {
+                Id = node.Id,
+                Version = node.Manifest?.Version,
+            };
+
+            if (node.Manifest is null || node.FeedId is null)
+            {
+                step.Ok = false;
+                step.Error = node.ResolveError ?? "Product not found in any configured feed.";
+            }
+            else
+            {
+                (bool ok, string? err) = await InstallPlanNodeAsync(node);
+                step.Ok = ok;
+                step.Error = err;
+            }
+
+            sw.Stop();
+            step.DurationMs = sw.ElapsedMilliseconds;
+            report.Steps.Add(step);
+
+            Console.WriteLine(
+                step.Ok ? $"[OK]   {step.Id} {step.Version}" : $"[FAIL] {step.Id}: {step.Error}"
+            );
+
+            if (!step.Ok)
+            {
+                allOk = false;
+                if (!continueOnError)
+                    break;
+            }
+        }
+
+        report.Success = allOk;
+        WriteReport(reportPath, report);
+        Console.WriteLine($"Apply report written to {reportPath}");
+        return allOk ? 0 : 1;
+    }
+
+    private async Task<(bool Ok, string? Error)> InstallPlanNodeAsync(PlanNode node)
+    {
+        try
+        {
+            ProductManifest manifest = node.Manifest!;
+            string targetPath = node.Path ?? manifest.RecommendedInstallPath ?? string.Empty;
+            if (string.IsNullOrEmpty(targetPath))
+                return (false, "No install path and manifest has no recommended path.");
+
+            SetupPluginConfigCallbacks(node.Config);
+
+            InstallOptions options = new InstallOptions(
+                TargetPath: targetPath,
+                InstanceId: InstanceIdHelper.DefaultInstanceId,
+                FeedId: node.FeedId!,
+                PluginConfigValues: node.Config.Count > 0 ? node.Config : null
+            );
+
+            InstallResult result = await _coordinator.InstallWithIsolationAsync(
+                manifest,
+                options,
+                new Progress<InstallProgress>(p =>
+                {
+                    if (!string.IsNullOrEmpty(p.Message))
+                        Console.WriteLine($"  [{p.Percentage}%] {p.Message}");
+                }),
+                CancellationToken.None
+            );
+
+            return result.Success ? (true, null) : (false, result.ErrorMessage);
+        }
+        catch (Exception ex)
+        {
+            return (false, ex.Message);
+        }
+    }
+
+    private async Task<List<PlanNode>> BuildInstallPlanAsync(EnvironmentManifest manifest)
+    {
+        Dictionary<string, PlanNode> nodes = new Dictionary<string, PlanNode>(
+            StringComparer.OrdinalIgnoreCase
+        );
+        Queue<string> toResolve = new Queue<string>();
+
+        foreach (EnvironmentManifestProduct p in manifest.Products)
+        {
+            if (nodes.ContainsKey(p.Id))
+                continue;
+            nodes[p.Id] = new PlanNode
+            {
+                Id = p.Id,
+                Version = p.Version,
+                Path = p.Path,
+                Config = p.Config ?? new Dictionary<string, string>(),
+            };
+            toResolve.Enqueue(p.Id);
+        }
+
+        while (toResolve.Count > 0)
+        {
+            string id = toResolve.Dequeue();
+            PlanNode node = nodes[id];
+            (ProductManifest? m, string? feedId) = await FindManifestInFeedsAsync(id, node.Version);
+            node.Manifest = m;
+            node.FeedId = feedId;
+            if (m is null)
+            {
+                node.ResolveError = $"Product '{id}' not found in any configured feed.";
+                continue;
+            }
+
+            foreach (string required in m.RequiredProductIds ?? [])
+            {
+                if (nodes.ContainsKey(required))
+                    continue;
+                nodes[required] = new PlanNode { Id = required };
+                toResolve.Enqueue(required);
+            }
+        }
+
+        return TopologicalSort(nodes);
+    }
+
+    private static List<PlanNode> TopologicalSort(Dictionary<string, PlanNode> nodes)
+    {
+        List<PlanNode> ordered = new List<PlanNode>();
+        HashSet<string> visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        HashSet<string> inProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Visit(PlanNode node)
+        {
+            if (visited.Contains(node.Id))
+                return;
+            if (!inProgress.Add(node.Id))
+                return;
+            foreach (string req in node.Manifest?.RequiredProductIds ?? [])
+            {
+                if (nodes.TryGetValue(req, out PlanNode? dep))
+                    Visit(dep);
+            }
+            inProgress.Remove(node.Id);
+            visited.Add(node.Id);
+            ordered.Add(node);
+        }
+
+        foreach (PlanNode node in nodes.Values)
+            Visit(node);
+
+        return ordered;
+    }
+
+    private static void WriteReport(string path, EnvironmentApplyReport report)
+    {
+        try
+        {
+            string json = JsonSerializer.Serialize(
+                report,
+                new JsonSerializerOptions
+                {
+                    WriteIndented = true,
+                    PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                }
+            );
+            File.WriteAllText(path, json);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Failed to write apply report: {ex.Message}");
+        }
+    }
+
+    private static AppConfiguration DefaultConfiguration() =>
+        new AppConfiguration(
+            Feeds: [],
+            AutoStart: false,
+            AutoCheckForUpdates: true,
+            CheckInterval: TimeSpan.FromHours(6)
+        );
+
+    private sealed class PlanNode
+    {
+        public string Id { get; set; } = "";
+        public string? Version { get; set; }
+        public string? Path { get; set; }
+        public Dictionary<string, string> Config { get; set; } = new Dictionary<string, string>();
+        public ProductManifest? Manifest { get; set; }
+        public string? FeedId { get; set; }
+        public string? ResolveError { get; set; }
     }
 
     private async Task<int> ListAsync()
@@ -556,6 +869,11 @@ internal sealed class CliRunner
         Console.WriteLine(
             "  re-execute <productId>   Re-run plugin actions on an installed product"
         );
+        Console.WriteLine(
+            "  apply <manifest.json>    Install an ordered set of products (env manifest)"
+        );
+        Console.WriteLine("  add-feed --url <url>     Register a feed (encrypts password locally)");
+        Console.WriteLine("  remove-feed <id|name|url> Remove a registered feed");
         Console.WriteLine("  list                     List all available products");
         Console.WriteLine("  versions <productId>     List available versions for a product");
         Console.WriteLine("  help [command]           Show help for a command");
@@ -636,6 +954,55 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --run-files             Also run file handlers (requires .stork/files/)"
                 );
+                break;
+
+            case "apply":
+                Console.WriteLine("Usage: storkdrop --cli apply <manifest.json> [options]");
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Installs an ordered set of products described by an environment manifest."
+                );
+                Console.WriteLine(
+                    "Required products (RequiredProductIds) are resolved and installed first."
+                );
+                Console.WriteLine();
+                Console.WriteLine("Options:");
+                Console.WriteLine(
+                    "  --report <path>         Where to write the JSON result report"
+                );
+                Console.WriteLine(
+                    "                          (default: %TEMP%/storkdrop-apply-result.json)"
+                );
+                Console.WriteLine("  --continue-on-error     Keep going after a failed product");
+                Console.WriteLine();
+                Console.WriteLine("Manifest format:");
+                Console.WriteLine(
+                    "  { \"products\": [ { \"id\": \"my-product\", \"version\": \"1.0.0\","
+                );
+                Console.WriteLine(
+                    "                    \"config\": { \"target-database\": \"Test\" } } ] }"
+                );
+                break;
+
+            case "add-feed":
+                Console.WriteLine("Usage: storkdrop --cli add-feed --url <url> [options]");
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Registers a Nexus feed and encrypts the password locally (DPAPI on Windows)."
+                );
+                Console.WriteLine();
+                Console.WriteLine("Options:");
+                Console.WriteLine(
+                    "  --id <id>               Feed id (default: generated); replaces an existing feed with the same id"
+                );
+                Console.WriteLine("  --name <name>           Display name (default: url host)");
+                Console.WriteLine("  --repo <repository>     Nexus repository");
+                Console.WriteLine("  --user <username>       Feed username");
+                Console.WriteLine("  --password <password>   Feed password (stored encrypted)");
+                break;
+
+            case "remove-feed":
+                Console.WriteLine("Usage: storkdrop --cli remove-feed <id|name|url>");
                 break;
 
             case "list":

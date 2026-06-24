@@ -132,6 +132,51 @@ Missing required plugin configuration:
   --config smtp-server=<value>  (SMTP Server)
 ```
 
+## Unattended provisioning commands
+
+These exist for automated/headless setup (e.g. provisioning a fresh test VM).
+
+### add-feed / remove-feed
+
+Register a feed without the desktop UI. The password is encrypted locally (DPAPI on
+Windows), so it works correctly under the account that runs the install.
+
+```
+storkdrop --cli add-feed --url https://feed.example.com --repo Dev_Ephemeral \
+  --user ci --password secret --id dev --name "Dev Ephemeral"
+storkdrop --cli remove-feed dev
+```
+
+`add-feed` replaces an existing feed with the same `--id` (or same url+repo) instead of
+duplicating, then reloads the feed registry and runs a connection test.
+
+### apply
+
+Install an ordered set of products described by an **environment manifest**. Products
+listed in each manifest's `requiredProductIds` are resolved and installed first.
+
+```
+storkdrop --cli apply env-manifest.json
+storkdrop --cli apply env-manifest.json --report C:\temp\result.json --continue-on-error
+```
+
+Manifest format:
+
+```json
+{
+  "products": [
+    { "id": "my-stork-plugin" },
+    { "id": "my-product", "version": "1.0.6-pr123.5",
+      "config": { "target-database": "Test" } },
+    { "id": "my-product-test-scenarios", "config": { "scenario": "order-pos" } }
+  ]
+}
+```
+
+`apply` writes a machine-readable JSON report (default
+`%TEMP%/storkdrop-apply-result.json`) with a per-step `{ id, version, ok, error, durationMs }`,
+and exits non-zero if any product failed (unless `--continue-on-error`).
+
 ## Exit codes
 
 | Code | Meaning |
