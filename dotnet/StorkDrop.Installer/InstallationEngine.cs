@@ -2126,9 +2126,19 @@ public sealed class InstallationEngine : IInstallationEngine
 
                 if (trackedFiles is not null)
                 {
+                    HashSet<string> excluded = ResolveExcludedFiles(
+                        installed.InstalledPath,
+                        newManifest.ExcludeFiles
+                    );
+
                     foreach (string relativePath in trackedFiles)
                     {
                         string fullPath = Path.Combine(installed.InstalledPath, relativePath);
+                        if (excluded.Contains(fullPath))
+                        {
+                            continue;
+                        }
+
                         try
                         {
                             if (File.Exists(fullPath))
@@ -3048,6 +3058,29 @@ public sealed class InstallationEngine : IInstallationEngine
         }
     }
 
+    private static HashSet<string> ResolveExcludedFiles(string installPath, string[]? excludeFiles)
+    {
+        HashSet<string> excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (excludeFiles is { Length: > 0 } && Directory.Exists(installPath))
+        {
+            foreach (string pattern in excludeFiles)
+            {
+                foreach (
+                    string file in Directory.GetFiles(
+                        installPath,
+                        pattern,
+                        SearchOption.AllDirectories
+                    )
+                )
+                {
+                    excluded.Add(file);
+                }
+            }
+        }
+
+        return excluded;
+    }
+
     private async Task SaveFileManifestAsync(
         string productId,
         string uniqueId,
@@ -3062,23 +3095,7 @@ public sealed class InstallationEngine : IInstallationEngine
             Directory.CreateDirectory(configDir);
             string manifestPath = StorkPaths.FileManifestPath(productId, uniqueId);
 
-            HashSet<string> excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            if (excludeFiles is { Length: > 0 })
-            {
-                foreach (string pattern in excludeFiles)
-                {
-                    foreach (
-                        string file in Directory.GetFiles(
-                            installPath,
-                            pattern,
-                            SearchOption.AllDirectories
-                        )
-                    )
-                    {
-                        excluded.Add(file);
-                    }
-                }
-            }
+            HashSet<string> excluded = ResolveExcludedFiles(installPath, excludeFiles);
 
             string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
             List<string> relativePaths = new List<string>();
