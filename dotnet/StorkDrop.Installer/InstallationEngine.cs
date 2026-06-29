@@ -1939,6 +1939,7 @@ public sealed class InstallationEngine : IInstallationEngine
             manifest.ProductId,
             instanceUniqueId,
             resolvedPath,
+            manifest.ExcludeFiles,
             cancellationToken
         );
 
@@ -3051,6 +3052,7 @@ public sealed class InstallationEngine : IInstallationEngine
         string productId,
         string uniqueId,
         string installPath,
+        string[]? excludeFiles,
         CancellationToken cancellationToken
     )
     {
@@ -3060,10 +3062,33 @@ public sealed class InstallationEngine : IInstallationEngine
             Directory.CreateDirectory(configDir);
             string manifestPath = StorkPaths.FileManifestPath(productId, uniqueId);
 
+            HashSet<string> excluded = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (excludeFiles is { Length: > 0 })
+            {
+                foreach (string pattern in excludeFiles)
+                {
+                    foreach (
+                        string file in Directory.GetFiles(
+                            installPath,
+                            pattern,
+                            SearchOption.AllDirectories
+                        )
+                    )
+                    {
+                        excluded.Add(file);
+                    }
+                }
+            }
+
             string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
             List<string> relativePaths = new List<string>();
             foreach (string file in allFiles)
             {
+                if (excluded.Contains(file))
+                {
+                    continue;
+                }
+
                 relativePaths.Add(Path.GetRelativePath(installPath, file));
             }
 
