@@ -33,4 +33,23 @@ public partial class FeedViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isConnectionValid;
+
+    /// <summary>
+    /// Whether this feed requires a soft-lock password before install/update/uninstall/action.
+    /// </summary>
+    [ObservableProperty]
+    private bool _requireLockPassword;
+
+    /// <summary>
+    /// A newly entered lock password (transient). When empty while <see cref="RequireLockPassword"/>
+    /// is set, the existing password (<see cref="ExistingLockHash"/>) is kept unchanged.
+    /// </summary>
+    [ObservableProperty]
+    private string _lockPassword = string.Empty;
+
+    /// <summary>
+    /// The lock password hash loaded from configuration. Never shown; preserved on save unless
+    /// the user disables the lock or types a new password.
+    /// </summary>
+    public string? ExistingLockHash { get; set; }
 }

@@ -67,6 +67,7 @@ public static class AppHostBuilder
 
                 services.AddSingleton<NavigationService>();
                 services.AddSingleton<DialogService>();
+                services.AddSingleton<IFeedLockService, FeedLockService>();
                 services.AddSingleton<TrayIconService>();
                 services.AddSingleton<INotificationService, ToastNotificationService>();
                 services.AddHostedService<UpdateBackgroundService>();

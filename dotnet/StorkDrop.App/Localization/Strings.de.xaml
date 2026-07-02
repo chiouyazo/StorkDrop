@@ -445,4 +445,25 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
   <system:String x:Key="Update_Now">Jetzt aktualisieren</system:String>
   <system:String x:Key="Update_Later">Sp&#228;ter</system:String>
   <system:String x:Key="Update_ReleaseNotes">&#196;nderungen</system:String>
+
+  <!-- Feed soft lock -->
+  <system:String x:Key="FeedLock_Title">Feed gesperrt</system:String>
+  <system:String x:Key="FeedLock_Message"
+    >F&#252;r den Vorgang &#8222;{0}&#8220; am gesperrten Feed &#8222;{1}&#8220; ist das Feed-Passwort erforderlich. Bitte eingeben, um fortzufahren.</system:String
+  >
+  <system:String x:Key="FeedLock_Unlock">Entsperren</system:String>
+  <system:String x:Key="FeedLock_Cancel">Abbrechen</system:String>
+  <system:String x:Key="FeedLock_WrongPassword"
+    >Falsches Passwort. Bitte erneut versuchen.</system:String
+  >
+  <system:String x:Key="FeedLock_Op_Install">Installieren</system:String>
+  <system:String x:Key="FeedLock_Op_Update">Aktualisieren</system:String>
+  <system:String x:Key="FeedLock_Op_Uninstall">Deinstallieren</system:String>
+  <system:String x:Key="FeedLock_Op_Action">Aktionen ausf&#252;hren</system:String>
+  <system:String x:Key="Settings_FeedLock"
+    >Passwort f&#252;r Installation/Update/Deinstallation/Aktionen verlangen</system:String
+  >
+  <system:String x:Key="Settings_FeedLock_Hint"
+    >Soft-Lock: Vor jeder Aktion an Produkten aus diesem Feed erscheint eine lokale Passwortabfrage. Feld leer lassen, um das aktuelle Passwort beizubehalten.</system:String
+  >
 </ResourceDictionary>

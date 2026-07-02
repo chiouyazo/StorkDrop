@@ -22,6 +22,7 @@ public partial class ProductDetailViewModel : ObservableObject
     private readonly InstallationTracker _tracker;
     private readonly INotificationService _notificationService;
     private readonly PostProductResolver _postProductResolver;
+    private readonly IFeedLockService _feedLock;
     private readonly ILogger<ProductDetailViewModel> _logger;
 
     public ProductDetailViewModel(
@@ -31,6 +32,7 @@ public partial class ProductDetailViewModel : ObservableObject
         InstallationTracker tracker,
         INotificationService notificationService,
         PostProductResolver postProductResolver,
+        IFeedLockService feedLock,
         ILogger<ProductDetailViewModel> logger
     )
     {
@@ -40,6 +42,7 @@ public partial class ProductDetailViewModel : ObservableObject
         _tracker = tracker;
         _notificationService = notificationService;
         _postProductResolver = postProductResolver;
+        _feedLock = feedLock;
         _logger = logger;
     }
 
@@ -347,6 +350,14 @@ public partial class ProductDetailViewModel : ObservableObject
     private async Task InstallAsync()
     {
         if (Manifest is null)
+            return;
+
+        if (
+            !await _feedLock.EnsureAuthorizedAsync(
+                FeedId,
+                LocalizationManager.GetString("FeedLock_Op_Install")
+            )
+        )
             return;
 
         try
@@ -686,6 +697,14 @@ public partial class ProductDetailViewModel : ObservableObject
             );
             InstalledProduct? installed = instances.FirstOrDefault();
             if (installed is null)
+                return;
+
+            if (
+                !await _feedLock.EnsureAuthorizedAsync(
+                    installed.FeedId,
+                    LocalizationManager.GetString("FeedLock_Op_Action")
+                )
+            )
                 return;
 
             TrackedInstallation tracked = _tracker.StartInstallation(

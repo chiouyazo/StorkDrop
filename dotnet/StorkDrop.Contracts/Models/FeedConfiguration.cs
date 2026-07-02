@@ -7,5 +7,6 @@ public sealed record FeedConfiguration(
     string? Repository,
     string? Username,
     string? EncryptedPassword,
-    string? PluginId
+    string? PluginId,
+    string? LockPasswordHash = null
 );

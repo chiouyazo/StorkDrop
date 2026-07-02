@@ -18,4 +18,16 @@ public partial class SettingsView : UserControl
             await viewModel.LoadAsync();
         }
     }
+
+    private void LockPasswordBox_Loaded(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox)
+            passwordBox.Password = string.Empty;
+    }
+
+    private void LockPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+    {
+        if (sender is PasswordBox passwordBox && passwordBox.Tag is FeedViewModel feed)
+            feed.LockPassword = passwordBox.Password;
+    }
 }

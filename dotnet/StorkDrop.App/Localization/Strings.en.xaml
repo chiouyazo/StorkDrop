@@ -411,4 +411,25 @@ Are you sure you want to close?</system:String
   <system:String x:Key="Update_Now">Update Now</system:String>
   <system:String x:Key="Update_Later">Later</system:String>
   <system:String x:Key="Update_ReleaseNotes">Release Notes</system:String>
+
+  <!-- Feed soft lock -->
+  <system:String x:Key="FeedLock_Title">Feed locked</system:String>
+  <system:String x:Key="FeedLock_Message"
+    >The operation &#8220;{0}&#8221; on the locked feed &#8220;{1}&#8221; requires the feed password. Enter it to continue.</system:String
+  >
+  <system:String x:Key="FeedLock_Unlock">Unlock</system:String>
+  <system:String x:Key="FeedLock_Cancel">Cancel</system:String>
+  <system:String x:Key="FeedLock_WrongPassword"
+    >Incorrect password. Please try again.</system:String
+  >
+  <system:String x:Key="FeedLock_Op_Install">Install</system:String>
+  <system:String x:Key="FeedLock_Op_Update">Update</system:String>
+  <system:String x:Key="FeedLock_Op_Uninstall">Uninstall</system:String>
+  <system:String x:Key="FeedLock_Op_Action">Run actions</system:String>
+  <system:String x:Key="Settings_FeedLock"
+    >Require a password for install/update/uninstall/actions</system:String
+  >
+  <system:String x:Key="Settings_FeedLock_Hint"
+    >Soft lock: a local password prompt appears before any operation on products from this feed. Leave the field empty to keep the current password.</system:String
+  >
 </ResourceDictionary>

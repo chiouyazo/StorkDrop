@@ -7,6 +7,7 @@ using StorkDrop.App.Services;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Registry;
 
 namespace StorkDrop.App.ViewModels;
@@ -210,6 +211,8 @@ public partial class SettingsViewModel : ObservableObject
                         Username = f.Username ?? string.Empty,
                         Password = decryptedPassword,
                         PluginId = f.PluginId ?? string.Empty,
+                        RequireLockPassword = !string.IsNullOrEmpty(f.LockPasswordHash),
+                        ExistingLockHash = f.LockPasswordHash,
                     };
                 })
             );
@@ -283,7 +286,8 @@ public partial class SettingsViewModel : ObservableObject
                     !string.IsNullOrEmpty(f.Password)
                         ? _encryptionService.Encrypt(f.Password)
                         : null,
-                    !string.IsNullOrEmpty(f.PluginId) ? f.PluginId : null
+                    !string.IsNullOrEmpty(f.PluginId) ? f.PluginId : null,
+                    ResolveLockHash(f)
                 ))
                 .ToArray();
 
@@ -315,6 +319,21 @@ public partial class SettingsViewModel : ObservableObject
         {
             ErrorMessage = LocalizationManager.GetString("Error_SaveFailed") + ": " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Determines the lock password hash to persist for a feed: cleared when the lock is
+    /// disabled, freshly hashed when a new password is entered, otherwise left unchanged.
+    /// </summary>
+    private static string? ResolveLockHash(FeedViewModel feed)
+    {
+        if (!feed.RequireLockPassword)
+            return null;
+
+        if (!string.IsNullOrEmpty(feed.LockPassword))
+            return PasswordHasher.Hash(feed.LockPassword);
+
+        return string.IsNullOrEmpty(feed.ExistingLockHash) ? null : feed.ExistingLockHash;
     }
 
     /// <summary>

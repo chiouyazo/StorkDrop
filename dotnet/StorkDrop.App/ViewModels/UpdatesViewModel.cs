@@ -18,6 +18,7 @@ public partial class UpdatesViewModel : ObservableObject
     private readonly IProductRepository _productRepository;
     private readonly InstallationCoordinator _coordinator;
     private readonly InstallationTracker _tracker;
+    private readonly IFeedLockService _feedLock;
     private readonly ILogger<UpdatesViewModel> _logger;
 
     public UpdatesViewModel(
@@ -25,6 +26,7 @@ public partial class UpdatesViewModel : ObservableObject
         IProductRepository productRepository,
         InstallationCoordinator coordinator,
         InstallationTracker tracker,
+        IFeedLockService feedLock,
         ILogger<UpdatesViewModel> logger
     )
     {
@@ -32,6 +34,7 @@ public partial class UpdatesViewModel : ObservableObject
         _productRepository = productRepository;
         _coordinator = coordinator;
         _tracker = tracker;
+        _feedLock = feedLock;
         _logger = logger;
     }
 
@@ -135,10 +138,21 @@ public partial class UpdatesViewModel : ObservableObject
         try
         {
             IsUpdatingAll = true;
+            // Prompt at most once per locked feed for the whole batch.
+            FeedUnlockScope scope = _feedLock.CreateScope();
             List<UpdateItemViewModel> snapshot = [.. Updates];
             foreach (UpdateItemViewModel update in snapshot)
             {
-                await UpdateSingleAsync(update);
+                if (
+                    !await _feedLock.EnsureAuthorizedAsync(
+                        update.FeedId,
+                        LocalizationManager.GetString("FeedLock_Op_Update"),
+                        scope
+                    )
+                )
+                    break; // user cancelled the unlock -> stop the batch
+
+                await UpdateOneAsync(update);
             }
         }
         catch (Exception ex)
@@ -153,6 +167,19 @@ public partial class UpdatesViewModel : ObservableObject
 
     [RelayCommand]
     private async Task UpdateSingleAsync(UpdateItemViewModel update)
+    {
+        if (
+            !await _feedLock.EnsureAuthorizedAsync(
+                update.FeedId,
+                LocalizationManager.GetString("FeedLock_Op_Update")
+            )
+        )
+            return;
+
+        await UpdateOneAsync(update);
+    }
+
+    private async Task UpdateOneAsync(UpdateItemViewModel update)
     {
         try
         {

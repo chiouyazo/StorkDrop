@@ -24,6 +24,7 @@ public partial class InstalledViewModel : ObservableObject
     private readonly InstallationTracker _tracker;
     private readonly INotificationService _notificationService;
     private readonly DialogService _dialogService;
+    private readonly IFeedLockService _feedLock;
     private readonly ILogger<InstalledViewModel> _logger;
 
     public InstalledViewModel(
@@ -34,6 +35,7 @@ public partial class InstalledViewModel : ObservableObject
         InstallationTracker tracker,
         INotificationService notificationService,
         DialogService dialogService,
+        IFeedLockService feedLock,
         ILogger<InstalledViewModel> logger
     )
     {
@@ -44,6 +46,7 @@ public partial class InstalledViewModel : ObservableObject
         _tracker = tracker;
         _notificationService = notificationService;
         _dialogService = dialogService;
+        _feedLock = feedLock;
         _logger = logger;
     }
 
@@ -237,6 +240,14 @@ public partial class InstalledViewModel : ObservableObject
         if (!_dialogService.ShowConfirmation(confirmMessage))
             return;
 
+        if (
+            !await _feedLock.EnsureAuthorizedAsync(
+                product.FeedId,
+                LocalizationManager.GetString("FeedLock_Op_Uninstall")
+            )
+        )
+            return;
+
         TrackedInstallation? tracked = null;
         try
         {
@@ -378,6 +389,14 @@ public partial class InstalledViewModel : ObservableObject
                 _productRepository.GetByIdAsync(product.ProductId, product.InstanceId)
             );
             if (installed is null)
+                return;
+
+            if (
+                !await _feedLock.EnsureAuthorizedAsync(
+                    product.FeedId,
+                    LocalizationManager.GetString("FeedLock_Op_Action")
+                )
+            )
                 return;
 
             TrackedInstallation tracked = _tracker.StartInstallation(

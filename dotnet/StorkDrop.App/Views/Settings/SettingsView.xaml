@@ -215,6 +215,29 @@
                       Margin="0,0,0,8"
                     />
 
+                    <CheckBox
+                      Content="{DynamicResource Settings_FeedLock}"
+                      IsChecked="{Binding RequireLockPassword}"
+                      Margin="0,0,0,6"
+                    />
+                    <PasswordBox
+                      Tag="{Binding}"
+                      IsEnabled="{Binding RequireLockPassword}"
+                      Loaded="LockPasswordBox_Loaded"
+                      PasswordChanged="LockPasswordBox_PasswordChanged"
+                      MinHeight="32"
+                      Padding="8,6"
+                      VerticalContentAlignment="Center"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedLock_Hint}"
+                      Foreground="#888"
+                      FontSize="11"
+                      TextWrapping="Wrap"
+                      Margin="0,0,0,8"
+                    />
+
                     <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
                       <Button
                         Content="{DynamicResource Button_TestConnection}"

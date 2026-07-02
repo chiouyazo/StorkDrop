@@ -92,6 +92,9 @@ internal sealed class CliRunner
                 "No install path specified and product has no recommended path. Use --path."
             );
 
+        if (!await CheckFeedLockAsync(feedId, args))
+            return 1;
+
         int configError = await ValidatePluginConfigAsync(manifest, feedId, configValues);
         if (configError != 0)
             return configError;
@@ -138,6 +141,9 @@ internal sealed class CliRunner
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
+        if (!await CheckFeedLockAsync(installed.FeedId, args))
+            return 1;
+
         Console.WriteLine(
             $"Uninstalling {installed.Title} v{installed.Version} ({installed.InstanceUniqueId})"
         );
@@ -171,6 +177,9 @@ internal sealed class CliRunner
                 ? Error($"Version '{version}' not found for product '{productId}'.")
                 : Error($"No update found for product '{productId}' in any configured feed.");
         }
+
+        if (!await CheckFeedLockAsync(feedId, args))
+            return 1;
 
         int configError = await ValidatePluginConfigAsync(manifest, feedId, configValues);
         if (configError != 0)
@@ -224,6 +233,9 @@ internal sealed class CliRunner
         InstalledProduct? installed = await FindInstalledProduct(productId, args);
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
+
+        if (!await CheckFeedLockAsync(installed.FeedId, args))
+            return 1;
 
         if (configValues.Count > 0)
             SetupPluginConfigCallbacks(configValues);
@@ -716,6 +728,29 @@ internal sealed class CliRunner
         return 0;
     }
 
+    /// <summary>
+    /// Enforces the optional per-feed soft lock for headless (CLI) operations. Locked feeds
+    /// require a correct <c>--unlock &lt;password&gt;</c> argument; unlocked feeds pass through.
+    /// </summary>
+    private async Task<bool> CheckFeedLockAsync(string? feedId, string[] args)
+    {
+        AppConfiguration? config = await _configurationService.LoadAsync();
+        FeedConfiguration? feed = FeedLock.ResolveFeed(config?.Feeds ?? [], feedId);
+        if (!FeedLock.IsLocked(feed))
+            return true;
+
+        string? unlock = GetFlag(args, "--unlock");
+        if (unlock is not null && FeedLock.Verify(feed!, unlock))
+            return true;
+
+        Error(
+            unlock is null
+                ? $"Feed '{feed!.Name}' is locked. Provide the feed password with --unlock <password>."
+                : $"Feed '{feed!.Name}' is locked. The --unlock password is incorrect."
+        );
+        return false;
+    }
+
     private async Task<(ProductManifest? Manifest, string? FeedId)> FindManifestInFeedsAsync(
         string productId,
         string? version
@@ -907,6 +942,9 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"
                 );
+                Console.WriteLine(
+                    "  --unlock <password>     Feed lock password (required if the feed is locked)"
+                );
                 Console.WriteLine();
                 Console.WriteLine("Config file format:");
                 Console.WriteLine("  {");
@@ -920,6 +958,9 @@ internal sealed class CliRunner
                 Console.WriteLine();
                 Console.WriteLine("Options:");
                 Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
+                Console.WriteLine(
+                    "  --unlock <password>     Feed lock password (required if the feed is locked)"
+                );
                 break;
 
             case "update":
@@ -933,6 +974,9 @@ internal sealed class CliRunner
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
                     "  --config key=value      Set a plugin config value (repeatable)"
+                );
+                Console.WriteLine(
+                    "  --unlock <password>     Feed lock password (required if the feed is locked)"
                 );
                 break;
 
@@ -953,6 +997,9 @@ internal sealed class CliRunner
                 Console.WriteLine("  --skip-post             Skip the PostInstall phase");
                 Console.WriteLine(
                     "  --run-files             Also run file handlers (requires .stork/files/)"
+                );
+                Console.WriteLine(
+                    "  --unlock <password>     Feed lock password (required if the feed is locked)"
                 );
                 break;
 

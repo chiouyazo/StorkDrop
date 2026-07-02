@@ -30,6 +30,7 @@ public partial class MarketplaceViewModel : ObservableObject
     private readonly InstallationTracker _tracker;
     private readonly INotificationService _notificationService;
     private readonly PostProductResolver _postProductResolver;
+    private readonly IFeedLockService _feedLock;
     private readonly ILogger<MarketplaceViewModel> _logger;
 
     public MarketplaceViewModel(
@@ -39,6 +40,7 @@ public partial class MarketplaceViewModel : ObservableObject
         InstallationTracker tracker,
         INotificationService notificationService,
         PostProductResolver postProductResolver,
+        IFeedLockService feedLock,
         ILogger<MarketplaceViewModel> logger
     )
     {
@@ -48,6 +50,7 @@ public partial class MarketplaceViewModel : ObservableObject
         _coordinator = coordinator;
         _notificationService = notificationService;
         _postProductResolver = postProductResolver;
+        _feedLock = feedLock;
         _logger = logger;
     }
 
@@ -167,6 +170,14 @@ public partial class MarketplaceViewModel : ObservableObject
     {
         try
         {
+            if (
+                !await _feedLock.EnsureAuthorizedAsync(
+                    product.FeedId,
+                    LocalizationManager.GetString("FeedLock_Op_Install")
+                )
+            )
+                return;
+
             IRegistryClient feedClient = _feedRegistry.GetClient(product.FeedId);
             ProductManifest? manifest = await Task.Run(() =>
                 feedClient.GetProductManifestAsync(product.ProductId)
