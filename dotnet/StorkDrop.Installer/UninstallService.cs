@@ -21,6 +21,7 @@ public sealed class UninstallService
     private readonly IFileLockDetector _fileLockDetector;
     private readonly EnvironmentVariableService _envVarService;
     private readonly DeferredFileOps _deferredFileOps;
+    private readonly IFeedReportService _feedReportService;
     private readonly ILogger<UninstallService> _logger;
 
     /// <summary>
@@ -40,6 +41,7 @@ public sealed class UninstallService
         IFileLockDetector fileLockDetector,
         EnvironmentVariableService envVarService,
         DeferredFileOps deferredFileOps,
+        IFeedReportService feedReportService,
         ILogger<UninstallService> logger
     )
     {
@@ -48,6 +50,7 @@ public sealed class UninstallService
         _fileLockDetector = fileLockDetector;
         _envVarService = envVarService;
         _deferredFileOps = deferredFileOps;
+        _feedReportService = feedReportService;
         _logger = logger;
     }
 
@@ -233,6 +236,8 @@ public sealed class UninstallService
             product.ProductId,
             product.Version
         );
+
+        await _feedReportService.NotifyFeedChangedAsync(product.FeedId, cancellationToken);
     }
 
     private async Task RunUninstallPluginPhaseAsync(

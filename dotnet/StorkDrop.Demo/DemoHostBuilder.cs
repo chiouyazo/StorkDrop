@@ -24,6 +24,11 @@ internal static class DemoHostBuilder
 
         IHostBuilder builder = Host.CreateDefaultBuilder();
         builder.UseSerilog();
+        builder.UseDefaultServiceProvider(options =>
+        {
+            options.ValidateOnBuild = true;
+            options.ValidateScopes = true;
+        });
 
         builder.ConfigureServices(
             (context, services) =>
@@ -46,6 +51,8 @@ internal static class DemoHostBuilder
                 services.AddSingleton<EnvironmentVariableService>();
                 services.AddSingleton<DeferredFileOps>();
                 services.AddSingleton<FileOperations>();
+                services.AddSingleton<IFeedReportService, FeedReportService>();
+                services.AddSingleton<IFeedLockService, FeedLockService>();
 
                 services.AddSingleton<IStorkDropPlugin, DemoStorkDropPlugin>();
 
@@ -58,6 +65,7 @@ internal static class DemoHostBuilder
                 services.AddSingleton<TrayIconService>();
                 services.AddSingleton<InstallationTracker>();
                 services.AddSingleton<PostProductResolver>();
+                services.AddSingleton<SelfUpdateService>();
 
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MarketplaceViewModel>();

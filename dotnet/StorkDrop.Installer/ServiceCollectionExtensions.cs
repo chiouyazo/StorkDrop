@@ -21,6 +21,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<InstallationCoordinator>();
         services.AddSingleton<IPluginSettingsStore, PluginSettingsStore>();
         services.AddSingleton<ISelfUpdateChecker, GitHubUpdateChecker>();
+        services.AddSingleton<IFeedReportService, FeedReportService>();
 
         return services;
     }

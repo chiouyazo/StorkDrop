@@ -426,10 +426,19 @@ Are you sure you want to close?</system:String
   <system:String x:Key="FeedLock_Op_Update">Update</system:String>
   <system:String x:Key="FeedLock_Op_Uninstall">Uninstall</system:String>
   <system:String x:Key="FeedLock_Op_Action">Run actions</system:String>
+  <system:String x:Key="FeedLock_Op_RemoveLock">Remove the lock</system:String>
   <system:String x:Key="Settings_FeedLock"
     >Require a password for install/update/uninstall/actions</system:String
   >
   <system:String x:Key="Settings_FeedLock_Hint"
     >Soft lock: a local password prompt appears before any operation on products from this feed. Leave the field empty to keep the current password.</system:String
+  >
+  <system:String x:Key="Settings_FeedReportUrl">Report URL (optional)</system:String>
+  <system:String x:Key="Settings_FeedReport_Hint"
+    >When set, a full inventory of this feed's installed products is sent here whenever a product is installed, updated, or removed.</system:String
+  >
+  <system:String x:Key="Settings_FeedReportSecret">Report secret</system:String>
+  <system:String x:Key="Settings_FeedReportCustomer"
+    >Customer/Deployment ID (optional)</system:String
   >
 </ResourceDictionary>

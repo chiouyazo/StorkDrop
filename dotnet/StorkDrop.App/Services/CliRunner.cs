@@ -17,6 +17,7 @@ internal sealed class CliRunner
     private readonly IProductRepository _productRepository;
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
+    private readonly IFeedReportService _feedReportService;
 
     public CliRunner(IServiceProvider services)
     {
@@ -26,6 +27,7 @@ internal sealed class CliRunner
         _productRepository = services.GetRequiredService<IProductRepository>();
         _configurationService = services.GetRequiredService<IConfigurationService>();
         _encryptionService = services.GetRequiredService<IEncryptionService>();
+        _feedReportService = services.GetRequiredService<IFeedReportService>();
     }
 
     public async Task<int> RunAsync(string[] args)
@@ -40,7 +42,7 @@ internal sealed class CliRunner
 
         try
         {
-            return command switch
+            int exitCode = command switch
             {
                 "install" => await InstallAsync(args),
                 "uninstall" => await UninstallAsync(args),
@@ -54,11 +56,29 @@ internal sealed class CliRunner
                 "help" => PrintCommandHelp(args.Length > 3 ? args[3] : null),
                 _ => Error($"Unknown command '{command}'. Run --cli help for usage."),
             };
+
+            await FlushReportsBestEffortAsync();
+            return exitCode;
         }
         catch (Exception ex)
         {
             Console.Error.WriteLine($"Error: {ex.Message}");
             return 1;
+        }
+    }
+
+    private async Task FlushReportsBestEffortAsync()
+    {
+        try
+        {
+            using CancellationTokenSource cts = new CancellationTokenSource(
+                TimeSpan.FromSeconds(20)
+            );
+            await _feedReportService.FlushAsync(cts.Token);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Warning: could not flush status reports: {ex.Message}");
         }
     }
 

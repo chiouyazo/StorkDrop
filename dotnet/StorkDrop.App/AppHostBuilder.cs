@@ -71,6 +71,7 @@ public static class AppHostBuilder
                 services.AddSingleton<TrayIconService>();
                 services.AddSingleton<INotificationService, ToastNotificationService>();
                 services.AddHostedService<UpdateBackgroundService>();
+                services.AddHostedService<FeedReportFlushBackgroundService>();
                 services.AddSingleton<InstallationTracker>();
                 services.AddSingleton<SelfUpdateService>();
 

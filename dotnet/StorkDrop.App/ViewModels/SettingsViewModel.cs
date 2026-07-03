@@ -202,6 +202,26 @@ public partial class SettingsViewModel : ObservableObject
                         }
                     }
 
+                    string decryptedReportSecret = string.Empty;
+                    if (!string.IsNullOrEmpty(f.EncryptedReportSecret))
+                    {
+                        try
+                        {
+                            decryptedReportSecret = _encryptionService.Decrypt(
+                                f.EncryptedReportSecret
+                            );
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to decrypt report secret for feed {FeedId}",
+                                f.Id
+                            );
+                            decryptedReportSecret = string.Empty;
+                        }
+                    }
+
                     return new FeedViewModel
                     {
                         Id = f.Id,
@@ -213,6 +233,9 @@ public partial class SettingsViewModel : ObservableObject
                         PluginId = f.PluginId ?? string.Empty,
                         RequireLockPassword = !string.IsNullOrEmpty(f.LockPasswordHash),
                         ExistingLockHash = f.LockPasswordHash,
+                        ReportUrl = f.ReportUrl ?? string.Empty,
+                        ReportSecret = decryptedReportSecret,
+                        ReportCustomerId = f.ReportCustomerId ?? string.Empty,
                     };
                 })
             );
@@ -287,7 +310,14 @@ public partial class SettingsViewModel : ObservableObject
                         ? _encryptionService.Encrypt(f.Password)
                         : null,
                     !string.IsNullOrEmpty(f.PluginId) ? f.PluginId : null,
-                    ResolveLockHash(f)
+                    ResolveLockHash(f),
+                    !string.IsNullOrWhiteSpace(f.ReportUrl) ? f.ReportUrl.Trim() : null,
+                    !string.IsNullOrEmpty(f.ReportSecret)
+                        ? _encryptionService.Encrypt(f.ReportSecret)
+                        : null,
+                    !string.IsNullOrWhiteSpace(f.ReportCustomerId)
+                        ? f.ReportCustomerId.Trim()
+                        : null
                 ))
                 .ToArray();
 

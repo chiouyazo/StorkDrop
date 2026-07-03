@@ -209,15 +209,20 @@
                       Style="{DynamicResource CaptionText}"
                       Margin="0,0,0,4"
                     />
-                    <TextBox
-                      Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}"
-                      Style="{DynamicResource StyledTextBox}"
+                    <PasswordBox
+                      Tag="{Binding}"
+                      Loaded="FeedPasswordBox_Loaded"
+                      PasswordChanged="FeedPasswordBox_PasswordChanged"
+                      MinHeight="32"
+                      Padding="8,6"
+                      VerticalContentAlignment="Center"
                       Margin="0,0,0,8"
                     />
 
                     <CheckBox
                       Content="{DynamicResource Settings_FeedLock}"
                       IsChecked="{Binding RequireLockPassword}"
+                      Unchecked="LockCheckBox_Unchecked"
                       Margin="0,0,0,6"
                     />
                     <PasswordBox
@@ -235,6 +240,50 @@
                       Foreground="#888"
                       FontSize="11"
                       TextWrapping="Wrap"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedReportUrl}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBox
+                      Text="{Binding ReportUrl, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedReport_Hint}"
+                      Foreground="#888"
+                      FontSize="11"
+                      TextWrapping="Wrap"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedReportSecret}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <PasswordBox
+                      Tag="{Binding}"
+                      Loaded="ReportSecretBox_Loaded"
+                      PasswordChanged="ReportSecretBox_PasswordChanged"
+                      MinHeight="32"
+                      Padding="8,6"
+                      VerticalContentAlignment="Center"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedReportCustomer}"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBox
+                      Text="{Binding ReportCustomerId, UpdateSourceTrigger=PropertyChanged}"
+                      Style="{DynamicResource StyledTextBox}"
                       Margin="0,0,0,8"
                     />
 

@@ -12,6 +12,7 @@
       Version="10.0.0-preview.2.25163.2"
     />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.4" />
+    <PackageReference Include="CloudNative.CloudEvents.SystemTextJson" Version="2.8.0" />
     <PackageReference
       Include="Microsoft.Extensions.DependencyInjection.Abstractions"
       Version="10.0.0-preview.2.25163.2"

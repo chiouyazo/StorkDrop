@@ -460,10 +460,19 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
   <system:String x:Key="FeedLock_Op_Update">Aktualisieren</system:String>
   <system:String x:Key="FeedLock_Op_Uninstall">Deinstallieren</system:String>
   <system:String x:Key="FeedLock_Op_Action">Aktionen ausf&#252;hren</system:String>
+  <system:String x:Key="FeedLock_Op_RemoveLock">Sperre entfernen</system:String>
   <system:String x:Key="Settings_FeedLock"
     >Passwort f&#252;r Installation/Update/Deinstallation/Aktionen verlangen</system:String
   >
   <system:String x:Key="Settings_FeedLock_Hint"
     >Soft-Lock: Vor jeder Aktion an Produkten aus diesem Feed erscheint eine lokale Passwortabfrage. Feld leer lassen, um das aktuelle Passwort beizubehalten.</system:String
+  >
+  <system:String x:Key="Settings_FeedReportUrl">Report-URL (optional)</system:String>
+  <system:String x:Key="Settings_FeedReport_Hint"
+    >Wenn gesetzt, wird bei jeder Installation/Aktualisierung/Entfernung eines Produkts aus diesem Feed der vollst&#228;ndige Bestand an diese Adresse gesendet.</system:String
+  >
+  <system:String x:Key="Settings_FeedReportSecret">Report-Secret</system:String>
+  <system:String x:Key="Settings_FeedReportCustomer"
+    >Kunden-/Deployment-ID (optional)</system:String
   >
 </ResourceDictionary>

@@ -27,6 +27,13 @@ public static class StorkPaths
 
     public static string BackupRoot { get; } = Path.Combine(LocalAppData, "StorkDrop", "Backups");
 
+    /// <summary>Stable, per-machine identifier used in outbound feed status reports.</summary>
+    public static string MachineIdFile { get; } = Path.Combine(StorkConfigDir, "machine-id");
+
+    /// <summary>On-disk queue of pending feed status reports awaiting delivery.</summary>
+    public static string FeedReportSpoolDir { get; } =
+        Path.Combine(LocalAppData, "StorkDrop", "ReportSpool");
+
     public static string TempDir { get; } = Path.Combine(Path.GetTempPath(), "StorkDrop");
 
     public static string PluginTempDir { get; } =

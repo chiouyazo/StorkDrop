@@ -24,6 +24,7 @@ public sealed class InstallationEngine : IInstallationEngine
     private readonly ILogger<InstallationEngine> _logger;
     private readonly EnvironmentVariableService _envVarService;
     private readonly UninstallService _uninstallService;
+    private readonly IFeedReportService _feedReportService;
     private readonly List<IFileTypeHandler> _fileTypeHandlers;
     private IProgress<InstallProgress>? _currentProgress;
 
@@ -59,6 +60,7 @@ public sealed class InstallationEngine : IInstallationEngine
         IEnumerable<IStorkDropPlugin> plugins,
         EnvironmentVariableService envVarService,
         UninstallService uninstallService,
+        IFeedReportService feedReportService,
         ILogger<InstallationEngine> logger
     )
     {
@@ -72,6 +74,7 @@ public sealed class InstallationEngine : IInstallationEngine
         _fileTypeHandlers = plugins.OfType<IFileTypeHandler>().ToList();
         _envVarService = envVarService;
         _uninstallService = uninstallService;
+        _feedReportService = feedReportService;
         _logger = logger;
 
         _logger.LogInformation(
@@ -497,6 +500,26 @@ public sealed class InstallationEngine : IInstallationEngine
 
     /// <inheritdoc />
     public async Task<InstallResult> InstallAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken = default
+    )
+    {
+        InstallResult result = await InstallInternalAsync(
+            manifest,
+            options,
+            progress,
+            cancellationToken
+        );
+
+        if (result.Success)
+            await _feedReportService.NotifyFeedChangedAsync(options.FeedId, cancellationToken);
+
+        return result;
+    }
+
+    private async Task<InstallResult> InstallInternalAsync(
         ProductManifest manifest,
         InstallOptions options,
         IProgress<InstallProgress> progress,
@@ -2174,7 +2197,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 "Running InstallAsync for new version {NewVersion}",
                 newManifest.Version
             );
-            InstallResult result = await InstallAsync(
+            InstallResult result = await InstallInternalAsync(
                 newManifest,
                 options,
                 progress,
@@ -2207,6 +2230,11 @@ public sealed class InstallationEngine : IInstallationEngine
                 installed.ProductId,
                 installed.Version,
                 newManifest.Version
+            );
+
+            await _feedReportService.NotifyFeedChangedAsync(
+                options.FeedId ?? installed.FeedId,
+                cancellationToken
             );
         }
         catch (Exception ex)
