@@ -461,6 +461,10 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
   <system:String x:Key="FeedLock_Op_Uninstall">Deinstallieren</system:String>
   <system:String x:Key="FeedLock_Op_Action">Aktionen ausf&#252;hren</system:String>
   <system:String x:Key="FeedLock_Op_RemoveLock">Sperre entfernen</system:String>
+  <system:String x:Key="FeedLock_Op_SaveChanges">&#196;nderungen speichern</system:String>
+  <system:String x:Key="FeedLock_SaveCancelled"
+    >Speichern abgebrochen &#8212; f&#252;r &#196;nderungen an einem gesperrten Feed ist das Feed-Passwort erforderlich.</system:String
+  >
   <system:String x:Key="Settings_FeedLock"
     >Passwort f&#252;r Installation/Update/Deinstallation/Aktionen verlangen</system:String
   >

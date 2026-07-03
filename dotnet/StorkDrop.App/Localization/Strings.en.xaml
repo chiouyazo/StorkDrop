@@ -427,6 +427,10 @@ Are you sure you want to close?</system:String
   <system:String x:Key="FeedLock_Op_Uninstall">Uninstall</system:String>
   <system:String x:Key="FeedLock_Op_Action">Run actions</system:String>
   <system:String x:Key="FeedLock_Op_RemoveLock">Remove the lock</system:String>
+  <system:String x:Key="FeedLock_Op_SaveChanges">Save changes</system:String>
+  <system:String x:Key="FeedLock_SaveCancelled"
+    >Save cancelled &#8212; the feed password is required to change a locked feed.</system:String
+  >
   <system:String x:Key="Settings_FeedLock"
     >Require a password for install/update/uninstall/actions</system:String
   >

@@ -25,7 +25,13 @@ public partial class SettingsViewModel : ObservableObject
     private readonly DialogService _dialogService;
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
     private readonly IFeedRegistry _feedRegistry;
+    private readonly IFeedLockService _feedLock;
     private readonly ILogger<SettingsViewModel> _logger;
+
+    private readonly Dictionary<string, FeedFields> _originalFeedFields = new Dictionary<
+        string,
+        FeedFields
+    >(StringComparer.Ordinal);
 
     public SettingsViewModel(
         IConfigurationService configurationService,
@@ -36,6 +42,7 @@ public partial class SettingsViewModel : ObservableObject
         DialogService dialogService,
         IEnumerable<IStorkDropPlugin> plugins,
         IFeedRegistry feedRegistry,
+        IFeedLockService feedLock,
         ILogger<SettingsViewModel> logger
     )
     {
@@ -47,6 +54,7 @@ public partial class SettingsViewModel : ObservableObject
         _dialogService = dialogService;
         _plugins = plugins;
         _feedRegistry = feedRegistry;
+        _feedLock = feedLock;
         _logger = logger;
 
         BuildRecommendedFeeds();
@@ -239,6 +247,10 @@ public partial class SettingsViewModel : ObservableObject
                     };
                 })
             );
+
+            _originalFeedFields.Clear();
+            foreach (FeedViewModel feed in Feeds)
+                _originalFeedFields[feed.Id] = Capture(feed);
         }
         catch (Exception ex)
         {
@@ -299,6 +311,12 @@ public partial class SettingsViewModel : ObservableObject
         {
             ErrorMessage = string.Empty;
 
+            if (!await AuthorizeLockedFeedChangesAsync())
+            {
+                ErrorMessage = LocalizationManager.GetString("FeedLock_SaveCancelled");
+                return;
+            }
+
             FeedConfiguration[] feeds = Feeds
                 .Select(f => new FeedConfiguration(
                     f.Id,
@@ -343,6 +361,8 @@ public partial class SettingsViewModel : ObservableObject
 
             await Task.Run(() => _feedRegistry.ReloadAsync());
 
+            SyncFeedStateAfterSave(feeds);
+
             ErrorMessage = string.Empty;
         }
         catch (Exception ex)
@@ -350,6 +370,83 @@ public partial class SettingsViewModel : ObservableObject
             ErrorMessage = LocalizationManager.GetString("Error_SaveFailed") + ": " + ex.Message;
         }
     }
+
+    /// <summary>
+    /// Prompts for the lock password of every locked feed whose editable fields changed since load.
+    /// Returns false if the user cancels or enters a wrong password for any of them.
+    /// </summary>
+    private async Task<bool> AuthorizeLockedFeedChangesAsync()
+    {
+        FeedUnlockScope scope = _feedLock.CreateScope();
+        foreach (FeedViewModel feed in Feeds)
+        {
+            if (string.IsNullOrEmpty(feed.ExistingLockHash))
+                continue;
+
+            bool unchanged =
+                _originalFeedFields.TryGetValue(feed.Id, out FeedFields original)
+                && original == Capture(feed);
+            if (unchanged)
+                continue;
+
+            if (
+                !await _feedLock.EnsureAuthorizedAsync(
+                    feed.Id,
+                    LocalizationManager.GetString("FeedLock_Op_SaveChanges"),
+                    scope
+                )
+            )
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Re-baselines the in-memory feed state after a successful save so an immediate re-save does
+    /// not prompt again: adopts the persisted lock hashes, clears entered lock passwords, and
+    /// refreshes the change-detection snapshots.
+    /// </summary>
+    private void SyncFeedStateAfterSave(FeedConfiguration[] savedFeeds)
+    {
+        foreach (FeedViewModel feed in Feeds)
+        {
+            FeedConfiguration? saved = savedFeeds.FirstOrDefault(c => c.Id == feed.Id);
+            feed.ExistingLockHash = saved?.LockPasswordHash;
+            feed.LockPassword = string.Empty;
+        }
+
+        _originalFeedFields.Clear();
+        foreach (FeedViewModel feed in Feeds)
+            _originalFeedFields[feed.Id] = Capture(feed);
+    }
+
+    private static FeedFields Capture(FeedViewModel feed) =>
+        new FeedFields(
+            feed.Name,
+            feed.Url,
+            feed.Repository,
+            feed.Username,
+            feed.Password,
+            feed.ReportUrl,
+            feed.ReportSecret,
+            feed.ReportCustomerId,
+            feed.RequireLockPassword,
+            feed.LockPassword
+        );
+
+    private readonly record struct FeedFields(
+        string Name,
+        string Url,
+        string Repository,
+        string Username,
+        string Password,
+        string ReportUrl,
+        string ReportSecret,
+        string ReportCustomerId,
+        bool RequireLockPassword,
+        string LockPassword
+    );
 
     /// <summary>
     /// Determines the lock password hash to persist for a feed: cleared when the lock is
