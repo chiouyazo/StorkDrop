@@ -15,15 +15,15 @@ namespace StorkDrop.Installer;
 /// Builds a per-feed inventory snapshot and delivers it to the feed's configured report endpoint.
 /// Wire format: a CloudEvents 1.0 structured-mode JSON event (type
 /// "com.storkdrop.inventory.report", with the <see cref="FeedReport"/> as its <c>data</c>),
-/// HTTP POSTed to <c>FeedConfiguration.ReportUrl</c> with content type
-/// <c>application/json</c> and signed with HMAC-SHA256 over the body in the
-/// <c>X-StorkDrop-Signature</c> header. Delivery uses a resilient on-disk spool with retry,
-/// so reports survive offline periods and restarts.
+/// HTTP POSTed to <c>FeedConfiguration.ReportUrl</c> with content type <c>application/json</c> and
+/// signed with HMAC-SHA256 over the body (keyed with the feed's report secret) in the
+/// <c>X-Signature</c> header (format <c>sha256=&lt;hex&gt;</c>). Delivery uses a resilient on-disk
+/// spool with retry, so reports survive offline periods and restarts.
 /// </summary>
 public sealed class FeedReportService : IFeedReportService
 {
     private const string EventType = "com.storkdrop.inventory.report";
-    private const string SignatureHeader = "X-StorkDrop-Signature";
+    private const string SignatureHeader = "X-Signature";
     private const string CloudEventContentType = "application/json";
 
     private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };

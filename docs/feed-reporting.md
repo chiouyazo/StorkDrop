@@ -15,8 +15,8 @@ Delivery uses an on-disk spool with retry, so reports survive offline periods an
 
 - **Method:** HTTP `POST`
 - **URL:** the feed's configured report endpoint (`FeedConfiguration.ReportUrl`)
-- **Content-Type:** `application/cloudevents+json`
-- **Signature header:** `X-StorkDrop-Signature: sha256=<hex>` (see [Authentication](#authentication))
+- **Content-Type:** `application/json`
+- **Signature header:** `X-Signature: sha256=<hex>` (see [Authentication](#authentication))
 
 ## Format — CloudEvents 1.0
 
@@ -101,13 +101,13 @@ Each request is signed with **HMAC-SHA256** over the exact raw request body, key
 report secret. The signature is sent as:
 
 ```
-X-StorkDrop-Signature: sha256=<lowercase-hex-digest>
+X-Signature: sha256=<lowercase-hex-digest>
 ```
 
 A receiver verifies by recomputing the HMAC with the shared secret and comparing (constant-time):
 
 ```
-expected = "sha256=" + hex(hmac_sha256(key = feedReportSecret, message = rawBody))
+expected = "sha256=" + hex(hmac_sha256(key = reportSecret, message = rawBody))
 valid    = constantTimeEquals(expected, headerValue)
 ```
 

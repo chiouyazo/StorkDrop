@@ -273,6 +273,12 @@
                       MinHeight="32"
                       Padding="8,6"
                       VerticalContentAlignment="Center"
+                      Margin="0,0,0,4"
+                    />
+                    <TextBlock
+                      Text="{DynamicResource Settings_FeedReportSecret_Hint}"
+                      Foreground="#888"
+                      FontSize="11"
                       Margin="0,0,0,8"
                     />
 

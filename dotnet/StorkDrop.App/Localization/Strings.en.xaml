@@ -442,6 +442,7 @@ Are you sure you want to close?</system:String
     >When set, a full inventory of this feed's installed products is sent here whenever a product is installed, updated, or removed.</system:String
   >
   <system:String x:Key="Settings_FeedReportSecret">Report secret</system:String>
+  <system:String x:Key="Settings_FeedReportSecret_Hint">HMAC-SHA256</system:String>
   <system:String x:Key="Settings_FeedReportCustomer"
     >Customer/Deployment ID (optional)</system:String
   >

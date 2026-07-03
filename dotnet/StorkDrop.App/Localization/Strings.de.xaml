@@ -476,6 +476,7 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
     >Wenn gesetzt, wird bei jeder Installation/Aktualisierung/Entfernung eines Produkts aus diesem Feed der vollst&#228;ndige Bestand an diese Adresse gesendet.</system:String
   >
   <system:String x:Key="Settings_FeedReportSecret">Report-Secret</system:String>
+  <system:String x:Key="Settings_FeedReportSecret_Hint">HMAC-SHA256</system:String>
   <system:String x:Key="Settings_FeedReportCustomer"
     >Kunden-/Deployment-ID (optional)</system:String
   >
