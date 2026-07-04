@@ -26,6 +26,7 @@ public partial class SettingsViewModel : ObservableObject
     private readonly IEnumerable<IStorkDropPlugin> _plugins;
     private readonly IFeedRegistry _feedRegistry;
     private readonly IFeedLockService _feedLock;
+    private readonly IFeedReportService _feedReport;
     private readonly ILogger<SettingsViewModel> _logger;
 
     private readonly Dictionary<string, FeedFields> _originalFeedFields = new Dictionary<
@@ -43,6 +44,7 @@ public partial class SettingsViewModel : ObservableObject
         IEnumerable<IStorkDropPlugin> plugins,
         IFeedRegistry feedRegistry,
         IFeedLockService feedLock,
+        IFeedReportService feedReport,
         ILogger<SettingsViewModel> logger
     )
     {
@@ -55,6 +57,7 @@ public partial class SettingsViewModel : ObservableObject
         _plugins = plugins;
         _feedRegistry = feedRegistry;
         _feedLock = feedLock;
+        _feedReport = feedReport;
         _logger = logger;
 
         BuildRecommendedFeeds();
@@ -317,6 +320,8 @@ public partial class SettingsViewModel : ObservableObject
                 return;
             }
 
+            List<string> feedsNeedingInitialReport = FeedsWithChangedReportConfig();
+
             FeedConfiguration[] feeds = Feeds
                 .Select(f => new FeedConfiguration(
                     f.Id,
@@ -364,11 +369,60 @@ public partial class SettingsViewModel : ObservableObject
             SyncFeedStateAfterSave(feeds);
 
             ErrorMessage = string.Empty;
+
+            foreach (string feedId in feedsNeedingInitialReport)
+            {
+                try
+                {
+                    await _feedReport.NotifyFeedChangedAsync(feedId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Initial feed report failed for {FeedId}", feedId);
+                }
+            }
         }
         catch (Exception ex)
         {
             ErrorMessage = LocalizationManager.GetString("Error_SaveFailed") + ": " + ex.Message;
         }
+    }
+
+    /// <summary>
+    /// Feed ids that have a report URL and whose report configuration (URL, secret, or customer id)
+    /// changed since load — these should receive an initial snapshot immediately after saving.
+    /// </summary>
+    private List<string> FeedsWithChangedReportConfig()
+    {
+        List<string> result = [];
+        foreach (FeedViewModel feed in Feeds)
+        {
+            if (string.IsNullOrWhiteSpace(feed.ReportUrl))
+                continue;
+
+            if (!_originalFeedFields.TryGetValue(feed.Id, out FeedFields original))
+            {
+                result.Add(feed.Id); // newly added feed that already has a report URL
+                continue;
+            }
+
+            bool reportChanged =
+                !string.Equals(original.ReportUrl, feed.ReportUrl, StringComparison.Ordinal)
+                || !string.Equals(
+                    original.ReportSecret,
+                    feed.ReportSecret,
+                    StringComparison.Ordinal
+                )
+                || !string.Equals(
+                    original.ReportCustomerId,
+                    feed.ReportCustomerId,
+                    StringComparison.Ordinal
+                );
+            if (reportChanged)
+                result.Add(feed.Id);
+        }
+
+        return result;
     }
 
     /// <summary>

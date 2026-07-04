@@ -92,10 +92,26 @@ public sealed class UninstallService
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 10, "Checking for locked files...")
         );
-        if (Directory.Exists(product.InstalledPath))
+        List<string>? lockCheckManifest = await LoadFileManifestAsync(
+            product.ProductId,
+            product.InstanceUniqueId ?? string.Empty,
+            cancellationToken
+        );
+        if (lockCheckManifest is { Count: > 0 } && Directory.Exists(product.InstalledPath))
         {
+            List<string> trackedPaths = lockCheckManifest
+                .Select(relativePath => Path.Combine(product.InstalledPath, relativePath))
+                .Where(File.Exists)
+                .ToList();
+
+            _logger.LogInformation(
+                "Checking {Count} tracked files for locks before uninstalling {ProductId}",
+                trackedPaths.Count,
+                product.ProductId
+            );
             IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
-                product.InstalledPath
+                trackedPaths,
+                cancellationToken
             );
             if (lockedFiles.Count > 0)
             {
@@ -619,7 +635,8 @@ public sealed class UninstallService
                 if (OnLockedFilesDetected is not null)
                 {
                     IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
-                        Path.GetDirectoryName(filePath)!
+                        [filePath],
+                        cancellationToken
                     );
                     if (lockedFiles.Count > 0)
                     {

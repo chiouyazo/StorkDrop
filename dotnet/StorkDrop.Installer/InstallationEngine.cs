@@ -2061,8 +2061,26 @@ public sealed class InstallationEngine : IInstallationEngine
             installed.Version,
             newManifest.Version
         );
+        List<string>? lockCheckManifest = await LoadFileManifest(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty,
+            cancellationToken
+        );
+        List<string> trackedPaths =
+            lockCheckManifest is { Count: > 0 } && Directory.Exists(installed.InstalledPath)
+                ? lockCheckManifest
+                    .Select(relativePath => Path.Combine(installed.InstalledPath, relativePath))
+                    .Where(File.Exists)
+                    .ToList()
+                : [];
+        _logger.LogInformation(
+            "Checking {Count} tracked files for locks before updating {ProductId}",
+            trackedPaths.Count,
+            installed.ProductId
+        );
         IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
-            installed.InstalledPath
+            trackedPaths,
+            cancellationToken
         );
         if (lockedFiles.Count > 0)
         {
@@ -2098,14 +2116,23 @@ public sealed class InstallationEngine : IInstallationEngine
         string? backupPath = null;
         if (options.CreateBackup && Directory.Exists(installed.InstalledPath))
         {
+            IReadOnlyList<string> backupFiles = lockCheckManifest ?? [];
             _logger.LogInformation(
-                "Creating backup of {ProductId} before update",
-                installed.ProductId
+                "Creating backup of {ProductId} ({Count} tracked files) before update",
+                installed.ProductId,
+                backupFiles.Count
             );
+            long backupStartTicks = Environment.TickCount64;
             backupPath = await _backupService.CreateBackupAsync(
                 installed.ProductId,
                 installed.InstalledPath,
+                backupFiles,
                 cancellationToken
+            );
+            _logger.LogInformation(
+                "Backup of {ProductId} complete in {ElapsedMs}ms",
+                installed.ProductId,
+                Environment.TickCount64 - backupStartTicks
             );
         }
 
@@ -3025,9 +3052,7 @@ public sealed class InstallationEngine : IInstallationEngine
         if (OnLockedFilesDetected is null)
             return false;
 
-        IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
-            Path.GetDirectoryName(filePath)!
-        );
+        IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles([filePath]);
 
         if (lockedFiles.Count == 0)
             return true;

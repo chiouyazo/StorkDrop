@@ -23,6 +23,7 @@ public sealed class BackupService : IBackupService
     public async Task<string> CreateBackupAsync(
         string productId,
         string sourcePath,
+        IReadOnlyList<string> relativeFiles,
         CancellationToken cancellationToken = default
     )
     {
@@ -38,12 +39,18 @@ public sealed class BackupService : IBackupService
             {
                 try
                 {
-                    ZipFile.CreateFromDirectory(
-                        sourcePath,
-                        backupPath,
-                        CompressionLevel.Optimal,
-                        includeBaseDirectory: false
-                    );
+                    using FileStream zipStream = new FileStream(backupPath, FileMode.Create);
+                    using ZipArchive archive = new ZipArchive(zipStream, ZipArchiveMode.Create);
+                    foreach (string relativePath in relativeFiles)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        string fullPath = Path.Combine(sourcePath, relativePath);
+                        if (!File.Exists(fullPath))
+                            continue;
+
+                        string entryName = relativePath.Replace('\\', '/');
+                        archive.CreateEntryFromFile(fullPath, entryName, CompressionLevel.Optimal);
+                    }
                 }
                 catch (Exception)
                 {
@@ -76,33 +83,41 @@ public sealed class BackupService : IBackupService
         if (!File.Exists(backupPath))
             throw new FileNotFoundException("Backup file not found.", backupPath);
 
-        if (Directory.Exists(targetPath))
-            Directory.Delete(targetPath, recursive: true);
-
         Directory.CreateDirectory(targetPath);
+        string targetRoot = Path.GetFullPath(targetPath);
 
         await Task.Run(
             () =>
             {
-                try
+                using FileStream zipStream = new FileStream(
+                    backupPath,
+                    FileMode.Open,
+                    FileAccess.Read
+                );
+                using ZipArchive archive = new ZipArchive(zipStream, ZipArchiveMode.Read);
+                foreach (ZipArchiveEntry entry in archive.Entries)
                 {
-                    ZipFile.ExtractToDirectory(backupPath, targetPath, overwriteFiles: true);
-                }
-                catch (Exception)
-                {
-                    // Clean up partially extracted directory on failure
-                    if (Directory.Exists(targetPath))
-                    {
-                        try
-                        {
-                            Directory.Delete(targetPath, recursive: true);
-                        }
-                        catch (Exception)
-                        {
-                            // Best effort cleanup
-                        }
-                    }
-                    throw;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (string.IsNullOrEmpty(entry.Name))
+                        continue; // directory marker
+
+                    string destination = Path.GetFullPath(Path.Combine(targetPath, entry.FullName));
+                    // Guard against zip-slip: never write outside the target folder.
+                    if (
+                        !destination.StartsWith(
+                            targetRoot + Path.DirectorySeparatorChar,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                        && !string.Equals(
+                            destination,
+                            targetRoot,
+                            StringComparison.OrdinalIgnoreCase
+                        )
+                    )
+                        continue;
+
+                    Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+                    entry.ExtractToFile(destination, overwrite: true);
                 }
             },
             cancellationToken

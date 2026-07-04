@@ -13,5 +13,10 @@ internal sealed class DemoFileLockDetector : IFileLockDetector
 
     public IReadOnlyList<LockedFileInfo> GetLockedFiles(string directory) => [];
 
+    public IReadOnlyList<LockedFileInfo> GetLockedFiles(
+        IReadOnlyList<string> filePaths,
+        CancellationToken cancellationToken = default
+    ) => [];
+
     public bool TryKillProcess(int processId) => true;
 }

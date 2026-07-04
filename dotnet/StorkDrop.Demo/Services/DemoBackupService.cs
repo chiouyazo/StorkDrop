@@ -7,6 +7,7 @@ internal sealed class DemoBackupService : IBackupService
     public Task<string> CreateBackupAsync(
         string productId,
         string sourcePath,
+        IReadOnlyList<string> relativeFiles,
         CancellationToken ct = default
     ) => Task.FromResult(string.Empty);
 

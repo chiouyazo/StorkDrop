@@ -8,5 +8,15 @@ public interface IFileLockDetector
     bool IsFileLocked(string filePath);
     void ThrowIfAnyLocked(string directory);
     IReadOnlyList<LockedFileInfo> GetLockedFiles(string directory);
+
+    /// <summary>
+    /// Checks only the given files for locks, using a single Restart Manager session. Cheap and
+    /// bounded even when many files are locked; honors <paramref name="cancellationToken"/>.
+    /// </summary>
+    IReadOnlyList<LockedFileInfo> GetLockedFiles(
+        IReadOnlyList<string> filePaths,
+        CancellationToken cancellationToken = default
+    );
+
     bool TryKillProcess(int processId);
 }

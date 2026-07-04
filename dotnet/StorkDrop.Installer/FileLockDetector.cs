@@ -116,10 +116,8 @@ public sealed class FileLockDetector : IFileLockDetector
 
     public IReadOnlyList<LockedFileInfo> GetLockedFiles(string directory)
     {
-        List<LockedFileInfo> lockedFiles = [];
-
         if (!OperatingSystem.IsWindows() || !Directory.Exists(directory))
-            return lockedFiles;
+            return [];
 
         string[] files;
         try
@@ -128,22 +126,48 @@ public sealed class FileLockDetector : IFileLockDetector
         }
         catch (DirectoryNotFoundException)
         {
-            return lockedFiles;
+            return [];
         }
 
+        List<string> candidates = [];
         foreach (string file in files)
         {
             string ext = Path.GetExtension(file);
             if (
-                !ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
-                && !ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
+                ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                || ext.Equals(".dll", StringComparison.OrdinalIgnoreCase)
             )
-                continue;
+                candidates.Add(file);
+        }
 
-            if (!IsFileLocked(file))
-                continue;
+        return GetLockedFiles(candidates, CancellationToken.None);
+    }
 
-            List<LockingProcessInfo> processes = GetDetailedLockingProcesses(file);
+    public IReadOnlyList<LockedFileInfo> GetLockedFiles(
+        IReadOnlyList<string> filePaths,
+        CancellationToken cancellationToken = default
+    )
+    {
+        List<LockedFileInfo> lockedFiles = [];
+        if (!OperatingSystem.IsWindows())
+            return lockedFiles;
+
+        List<string> locked = [];
+        foreach (string file in filePaths)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (IsFileLocked(file))
+                locked.Add(file);
+        }
+
+        if (locked.Count == 0)
+            return lockedFiles;
+
+        // One Restart Manager session for all locked files, not one per file.
+        List<LockingProcessInfo> processes = GetDetailedLockingProcesses(locked);
+
+        foreach (string file in locked)
+        {
             lockedFiles.Add(
                 new LockedFileInfo
                 {
@@ -202,9 +226,11 @@ public sealed class FileLockDetector : IFileLockDetector
         }
     }
 
-    private List<LockingProcessInfo> GetDetailedLockingProcesses(string filePath)
+    private List<LockingProcessInfo> GetDetailedLockingProcesses(IReadOnlyList<string> filePaths)
     {
         List<LockingProcessInfo> processes = [];
+        if (filePaths.Count == 0)
+            return processes;
 
         int result = NativeMethods.RmStartSession(
             out uint sessionHandle,
@@ -216,8 +242,16 @@ public sealed class FileLockDetector : IFileLockDetector
 
         try
         {
-            string[] resources = [filePath];
-            result = NativeMethods.RmRegisterResources(sessionHandle, 1, resources, 0, [], 0, []);
+            string[] resources = filePaths as string[] ?? filePaths.ToArray();
+            result = NativeMethods.RmRegisterResources(
+                sessionHandle,
+                (uint)resources.Length,
+                resources,
+                0,
+                [],
+                0,
+                []
+            );
             if (result != 0)
                 return processes;
 
