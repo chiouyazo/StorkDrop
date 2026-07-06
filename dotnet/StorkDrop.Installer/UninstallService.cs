@@ -317,6 +317,9 @@ public sealed class UninstallService
                 InstallPath = product.InstalledPath,
                 StorkConfigDirectory = StorkPaths.ConfigDir,
                 ConfigValues = savedConfigValues,
+                ProductMetadata = manifest.Metadata is not null
+                    ? new Dictionary<string, string>(manifest.Metadata)
+                    : new Dictionary<string, string>(),
                 Log = message => _logger.LogInformation("[Plugin] {Message}", message),
             };
 

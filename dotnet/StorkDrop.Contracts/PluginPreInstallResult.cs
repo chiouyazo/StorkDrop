@@ -20,6 +20,14 @@ public sealed class PluginPreInstallResult
     public string? Message { get; set; }
 
     /// <summary>
+    /// Gets or sets the severity of this result. When set to <see cref="PluginResultSeverity.Warning"/>,
+    /// the engine prompts the user to proceed or cancel instead of aborting outright. Left at the
+    /// default (<see cref="PluginResultSeverity.Ok"/>), a <see cref="Success"/> of <c>false</c> is
+    /// treated as a blocking failure — matching the original behaviour.
+    /// </summary>
+    public PluginResultSeverity Severity { get; set; } = PluginResultSeverity.Ok;
+
+    /// <summary>
     /// Gets or sets a list of validation errors that prevented the operation from proceeding.
     /// </summary>
     public IReadOnlyList<PluginValidationError> ValidationErrors { get; set; } =

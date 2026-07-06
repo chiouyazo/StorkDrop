@@ -28,5 +28,6 @@ public sealed record ProductManifest(
     string? BadgeColor = null,
     string[]? PreserveOnSwitch = null,
     bool AllowMultipleInstances = false,
-    string[]? ExcludeFiles = null
+    string[]? ExcludeFiles = null,
+    Dictionary<string, string>? Metadata = null
 );

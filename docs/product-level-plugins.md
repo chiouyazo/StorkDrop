@@ -154,6 +154,31 @@ PostUninstallAsync()         Remove database entries, clean up
 
 If `PreInstallAsync` or `PreUninstallAsync` returns `Success = false`, the operation is aborted. `PostInstallAsync` and `PostUninstallAsync` failures are logged but do not abort the operation.
 
+### Warnings the user can override
+
+A pre-install result can be a **warning** instead of a hard failure. Set
+`Severity = PluginResultSeverity.Warning` and provide a `Message`; StorkDrop then asks the user
+whether to install anyway (and, in headless/CLI runs where there is no prompt, logs the warning and
+continues). Left at the default (`PluginResultSeverity.Ok`), a `Success = false` result is a blocking
+failure, exactly as before.
+
+```csharp
+public Task<PluginPreInstallResult> PreInstallAsync(PluginContext context, CancellationToken ct)
+{
+    if (context.ProductMetadata.TryGetValue("minHostVersion", out string? min)
+        && SomeCheckFails(min))
+    {
+        return Task.FromResult(new PluginPreInstallResult
+        {
+            Success = false,
+            Severity = PluginResultSeverity.Warning,
+            Message = $"Requires at least version {min}. Install anyway?",
+        });
+    }
+    return Task.FromResult(new PluginPreInstallResult { Success = true });
+}
+```
+
 ## PluginContext
 
 The `PluginContext` passed to pre/post methods contains:
@@ -167,7 +192,9 @@ The `PluginContext` passed to pre/post methods contains:
 | `StorkConfigDirectory` | `string` | StorkDrop's config directory |
 | `ConfigValues` | `Dictionary<string, string>` | User's choices from the config form |
 | `PluginData` | `Dictionary<string, object>` | Extra data from app-level plugins |
+| `ProductMetadata` | `Dictionary<string, string>` | Free-form metadata the product declared in its manifest (`Metadata`). StorkDrop never interprets it — a plugin reads keys it defines, e.g. `minHostVersion`. |
 | `Log` | `Action<string>?` | Callback to write messages to the tracker panel |
+| `Prompt` | `Func<PluginPrompt, PluginPromptResult>?` | Ask the user a question mid-operation (null in headless runs) |
 
 ## PluginEnvironment
 
@@ -346,7 +373,7 @@ public void Cleanup()
 }
 ```
 
-If you use the `StorkDrop.Steps` SDK, this is handled automatically. Only implement `Cleanup()` if you manage native resources directly.
+If you use a plugin SDK base class that manages this for you, it is handled automatically. Only implement `Cleanup()` if you manage native resources directly.
 
 Failing to clean up can cause file locks on the install directory or native access violations during assembly unloading.
 

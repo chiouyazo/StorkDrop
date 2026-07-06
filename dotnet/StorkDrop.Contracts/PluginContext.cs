@@ -36,7 +36,7 @@ public sealed class PluginContext
 
     /// <summary>
     /// Gets or sets the machine-generated 8-char unique identifier for this instance.
-    /// Used by the Steps SDK to generate instance-unique database keys (e.g. SD_{uniqueId}_{tag}).
+    /// Used by SDKs to generate instance-unique keys (e.g. SD_{uniqueId}_{tag}).
     /// </summary>
     public string InstanceUniqueId { get; set; } = string.Empty;
 
@@ -50,6 +50,14 @@ public sealed class PluginContext
     /// Extra data provided by <see cref="IStorkDropPlugin"/> implementations.
     /// </summary>
     public Dictionary<string, object> PluginData { get; set; } = new Dictionary<string, object>();
+
+    /// <summary>
+    /// Free-form metadata declared by the product in its manifest (<c>ProductManifest.Metadata</c>).
+    /// StorkDrop never interprets these values; they are passed through verbatim so a plugin can act
+    /// on product-specific declarations such as a minimum required host version.
+    /// </summary>
+    public Dictionary<string, string> ProductMetadata { get; set; } =
+        new Dictionary<string, string>();
 
     /// <summary>
     /// Optional callback that plugins can invoke to log messages during execution.

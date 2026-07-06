@@ -2710,6 +2710,11 @@ public sealed class InstallationEngine : IInstallationEngine
                     InstallPath = product.InstalledPath,
                     StorkConfigDirectory = GetStorkConfigDir(),
                     ConfigValues = effectiveConfig,
+                    ProductMetadata = manifest.Metadata is not null
+                        ? new Dictionary<string, string>(manifest.Metadata)
+                        : new Dictionary<string, string>(),
+                    Log = message => _logger.LogInformation("[Plugin] {Message}", message),
+                    Prompt = OnPrompt,
                 };
 
                 bool preEnabled = manifest!.Plugins!.Any(p =>
@@ -2912,7 +2917,26 @@ public sealed class InstallationEngine : IInstallationEngine
                         context,
                         cancellationToken
                     );
-                    if (!preResult.Success)
+
+                    if (preResult.Severity == PluginResultSeverity.Warning)
+                    {
+                        bool proceed = await HandlePreInstallWarningAsync(
+                            manifest.ProductId,
+                            pluginInfo.TypeName,
+                            preResult,
+                            cancellationToken
+                        );
+                        if (!proceed)
+                        {
+                            return new PluginPhaseResult
+                            {
+                                Success = false,
+                                ErrorMessage =
+                                    preResult.Message ?? "Cancelled by user after warning.",
+                            };
+                        }
+                    }
+                    else if (!preResult.Success)
                     {
                         string errorMsg = preResult.Message ?? "Pre-install check failed.";
                         if (preResult.ValidationErrors.Count > 0)
@@ -3395,6 +3419,42 @@ public sealed class InstallationEngine : IInstallationEngine
         };
     }
 
+    private async Task<bool> HandlePreInstallWarningAsync(
+        string productId,
+        string typeName,
+        PluginPreInstallResult result,
+        CancellationToken cancellationToken
+    )
+    {
+        string message = result.Message ?? "A pre-install warning was raised.";
+        await LogPluginResult(
+            productId,
+            $"PreInstall warning ({typeName}): {message}",
+            true,
+            cancellationToken
+        );
+
+        if (OnPrompt is null)
+        {
+            _logger.LogWarning(
+                "PreInstall warning for {ProductId} accepted automatically (no prompt handler): {Message}",
+                productId,
+                message
+            );
+            return true;
+        }
+
+        PluginPrompt prompt = new PluginPrompt
+        {
+            Title = "Warning",
+            Message = message,
+            Options = { "Install anyway", "Cancel" },
+            DefaultOptionIndex = 1,
+        };
+        PluginPromptResult response = OnPrompt(prompt);
+        return response.ChosenIndex == 0;
+    }
+
     private async Task<PluginContext> BuildPluginContextAsync(
         ProductManifest manifest,
         InstallOptions options,
@@ -3411,6 +3471,9 @@ public sealed class InstallationEngine : IInstallationEngine
             InstallPath = options.TargetPath,
             StorkConfigDirectory = GetStorkConfigDir(),
             ConfigValues = options.PluginConfigValues ?? new Dictionary<string, string>(),
+            ProductMetadata = manifest.Metadata is not null
+                ? new Dictionary<string, string>(manifest.Metadata)
+                : new Dictionary<string, string>(),
             Log = message =>
             {
                 _logger.LogInformation("[Plugin] {Message}", message);

@@ -171,6 +171,25 @@ When switching between channels, files matching `preserveOnSwitch` patterns are 
 
 Without this field, all files are replaced during a channel switch.
 
+## Custom metadata
+
+Products can attach free-form key/value metadata that StorkDrop passes through to plugins verbatim
+(as `PluginContext.ProductMetadata`) and **never interprets itself**. Use it to declare product-specific
+requirements a plugin then acts on — e.g. a minimum host version that a plugin checks and warns
+about during install.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `metadata` | object (string→string) | Arbitrary product-declared key/value pairs surfaced to plugins |
+
+```json
+{
+  "metadata": {
+    "minWindowsVersion": "Win11"
+  }
+}
+```
+
 ## Environment variables
 
 Products declare environment variables in the manifest. Changes are tracked per-product and precisely reversed on uninstall.
