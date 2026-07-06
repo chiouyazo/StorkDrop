@@ -2136,6 +2136,30 @@ public sealed class InstallationEngine : IInstallationEngine
             );
         }
 
+        HashSet<string> preUpdateFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (Directory.Exists(installed.InstalledPath))
+        {
+            try
+            {
+                foreach (
+                    string existing in Directory.GetFiles(
+                        installed.InstalledPath,
+                        "*",
+                        SearchOption.AllDirectories
+                    )
+                )
+                    preUpdateFiles.Add(existing);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not snapshot {InstalledPath} before update",
+                    installed.InstalledPath
+                );
+            }
+        }
+
         try
         {
             _logger.LogDebug(
@@ -2278,12 +2302,64 @@ public sealed class InstallationEngine : IInstallationEngine
                     $"Update failed for {installed.ProductId}, restoring backup"
                 )
             );
+
+            if (backupPath is not null && Directory.Exists(installed.InstalledPath))
+            {
+                try
+                {
+                    string[] currentFiles = Directory.GetFiles(
+                        installed.InstalledPath,
+                        "*",
+                        SearchOption.AllDirectories
+                    );
+                    int removed = 0;
+                    foreach (string current in currentFiles)
+                    {
+                        if (preUpdateFiles.Contains(current))
+                            continue;
+                        try
+                        {
+                            File.Delete(current);
+                            removed++;
+                        }
+                        catch (Exception delEx)
+                        {
+                            _logger.LogWarning(
+                                delEx,
+                                "Could not remove newly-added file during rollback: {File}",
+                                current
+                            );
+                        }
+                    }
+                    _logger.LogInformation(
+                        "Rollback removed {Count} newly-added file(s) for {ProductId}",
+                        removed,
+                        installed.ProductId
+                    );
+                }
+                catch (Exception scanEx)
+                {
+                    _logger.LogWarning(
+                        scanEx,
+                        "Could not enumerate files during rollback for {ProductId}",
+                        installed.ProductId
+                    );
+                }
+            }
+
             if (backupPath is not null)
+            {
+                _logger.LogInformation(
+                    "Restoring backup for {ProductId} from {BackupPath}",
+                    installed.ProductId,
+                    backupPath
+                );
                 await _backupService.RestoreBackupAsync(
                     backupPath,
                     installed.InstalledPath,
                     cancellationToken
                 );
+            }
             throw;
         }
     }

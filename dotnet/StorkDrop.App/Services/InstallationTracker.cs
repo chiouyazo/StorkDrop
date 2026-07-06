@@ -75,6 +75,8 @@ public sealed partial class TrackedInstallation : ObservableObject
 
     public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
 
+    private string? _lastLogMessage;
+
     public void Cancel()
     {
         Cts.Cancel();
@@ -83,6 +85,10 @@ public sealed partial class TrackedInstallation : ObservableObject
 
     public void AddLog(string message)
     {
+        if (string.Equals(message, _lastLogMessage, StringComparison.Ordinal))
+            return;
+        _lastLogMessage = message;
+
         string entry = $"[{DateTime.Now:HH:mm:ss}] {message}";
         System.Windows.Application.Current.Dispatcher.BeginInvoke(() => LogEntries.Add(entry));
     }
