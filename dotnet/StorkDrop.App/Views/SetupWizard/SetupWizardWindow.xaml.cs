@@ -1,5 +1,6 @@
 using System.Windows;
 using StorkDrop.App.ViewModels;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.App.Views.SetupWizard;
 
@@ -13,7 +14,16 @@ public partial class SetupWizardWindow : Window
         _viewModel = viewModel;
         DataContext = _viewModel;
 
+        ApplyBranding();
+
         NextButton.Click += OnNextClick;
+    }
+
+    private void ApplyBranding()
+    {
+        BrandingInfo branding = Branding.Current;
+        if (!string.IsNullOrWhiteSpace(branding.DisplayName))
+            Title = $"{branding.WindowTitle} - Setup";
     }
 
     private async void OnNextClick(object sender, RoutedEventArgs e)

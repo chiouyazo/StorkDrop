@@ -66,19 +66,31 @@
     >
       <DockPanel>
         <!-- Logo -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="16,16,16,20">
-          <Image
-            Source="pack://application:,,,/StorkDrop.App;component/Assets/stork_icon_64.png"
-            Height="28"
-            VerticalAlignment="Center"
-          />
+        <StackPanel DockPanel.Dock="Top" Margin="16,16,16,20">
+          <StackPanel Orientation="Horizontal">
+            <Image
+              x:Name="HeaderLogo"
+              Source="pack://application:,,,/StorkDrop.App;component/Assets/stork_icon_64.png"
+              Height="28"
+              VerticalAlignment="Center"
+            />
+            <TextBlock
+              x:Name="HeaderTitle"
+              Text="StorkDrop"
+              FontSize="16"
+              FontWeight="SemiBold"
+              Foreground="#444444"
+              Margin="8,0,0,0"
+              VerticalAlignment="Center"
+            />
+          </StackPanel>
           <TextBlock
-            Text="StorkDrop"
-            FontSize="16"
-            FontWeight="SemiBold"
-            Foreground="#444444"
-            Margin="8,0,0,0"
-            VerticalAlignment="Center"
+            x:Name="PoweredBy"
+            Text="powered by StorkDrop"
+            FontSize="11"
+            Foreground="#999999"
+            Margin="0,6,0,0"
+            Visibility="Collapsed"
           />
         </StackPanel>
 

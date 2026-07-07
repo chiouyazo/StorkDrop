@@ -1,14 +1,17 @@
 using System.ComponentModel;
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Media.Imaging;
 using Microsoft.Extensions.DependencyInjection;
 using StorkDrop.App.Localization;
 using StorkDrop.App.Services;
 using StorkDrop.App.ViewModels;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.App.Views;
 
@@ -20,8 +23,46 @@ public partial class MainWindow : Window
         DataContext = viewModel;
         Loaded += (_, _) => viewModel.Initialize(ContentRegion);
 
+        ApplyBranding();
+
         string version = Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.0.0";
         VersionRun.Text = $"StorkDrop v{version}";
+    }
+
+    private void ApplyBranding()
+    {
+        BrandingInfo branding = Branding.Current;
+        Title = branding.WindowTitle;
+
+        if (!branding.IsBranded)
+            return;
+
+        PoweredBy.Visibility = Visibility.Visible;
+
+        BitmapImage? logo = LoadLogo(branding.LogoPath);
+        if (logo is not null)
+        {
+            HeaderLogo.Source = logo;
+            HeaderTitle.Visibility = Visibility.Collapsed;
+        }
+        else if (!string.IsNullOrWhiteSpace(branding.DisplayName))
+        {
+            HeaderTitle.Text = branding.DisplayName;
+        }
+    }
+
+    private static BitmapImage? LoadLogo(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            return null;
+
+        BitmapImage logo = new BitmapImage();
+        logo.BeginInit();
+        logo.CacheOption = BitmapCacheOption.OnLoad;
+        logo.UriSource = new Uri(path, UriKind.Absolute);
+        logo.EndInit();
+        logo.Freeze();
+        return logo;
     }
 
     protected override void OnClosing(CancelEventArgs e)

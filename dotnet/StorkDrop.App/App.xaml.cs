@@ -20,21 +20,16 @@ namespace StorkDrop.App;
 
 public partial class App : Application
 {
-    private static readonly Mutex SingleInstanceMutex = new Mutex(
-        true,
-        "StorkDrop-SingleInstance-Mutex"
-    );
-    private static readonly EventWaitHandle ShowWindowEvent = new EventWaitHandle(
-        false,
-        EventResetMode.AutoReset,
-        "StorkDrop-ShowWindow-Event"
-    );
+    private static Mutex? _singleInstanceMutex;
+    private static EventWaitHandle? _showWindowEvent;
     private IHost? _host;
 
     public static IServiceProvider Services { get; internal set; } = null!;
 
     protected override async void OnStartup(StartupEventArgs e)
     {
+        Branding.Initialize(WhitelabelConfig.Load(AppContext.BaseDirectory));
+
         string[] args = Environment.GetCommandLineArgs();
 
         if (args.Length >= 5 && args[1] == "--install")
@@ -71,10 +66,18 @@ public partial class App : Application
             return;
         }
 
-        if (!SingleInstanceMutex.WaitOne(TimeSpan.Zero, true))
+        string instanceScope = Branding.Current.AppFolderName;
+        _singleInstanceMutex = new Mutex(true, $"{instanceScope}-SingleInstance-Mutex");
+        _showWindowEvent = new EventWaitHandle(
+            false,
+            EventResetMode.AutoReset,
+            $"{instanceScope}-ShowWindow-Event"
+        );
+
+        if (!_singleInstanceMutex.WaitOne(TimeSpan.Zero, true))
         {
             // Signal the already-running instance to show its window
-            ShowWindowEvent.Set();
+            _showWindowEvent.Set();
             Shutdown();
             return;
         }
@@ -332,7 +335,7 @@ public partial class App : Application
             {
                 while (true)
                 {
-                    ShowWindowEvent.WaitOne();
+                    _showWindowEvent!.WaitOne();
                     Dispatcher.BeginInvoke(() =>
                     {
                         mainWindow.Show();
@@ -661,7 +664,7 @@ public partial class App : Application
                 stopTask.ContinueWith(_ => _host.Dispose(), TaskScheduler.Default);
             }
 
-            SingleInstanceMutex.ReleaseMutex();
+            _singleInstanceMutex?.ReleaseMutex();
         }
         catch
         {

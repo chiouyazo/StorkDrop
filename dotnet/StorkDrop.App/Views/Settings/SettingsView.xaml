@@ -64,6 +64,7 @@
               Content="{DynamicResource Button_AddFeed}"
               Style="{DynamicResource OutlinedButton}"
               Command="{Binding AddFeedCommand}"
+              IsEnabled="{Binding CanAddFeeds}"
               Margin="12,0,0,0"
               Padding="12,4"
             />
@@ -134,6 +135,7 @@
                         Style="{DynamicResource OutlinedButton}"
                         Command="{Binding DataContext.RemoveFeedCommand, RelativeSource={RelativeSource AncestorType=ItemsControl}}"
                         CommandParameter="{Binding}"
+                        IsEnabled="{Binding CanRemove}"
                         Padding="8,2"
                         Margin="8,0,0,0"
                         FontSize="11"
@@ -142,6 +144,7 @@
                     </Grid>
                     <TextBox
                       Text="{Binding Name, UpdateSourceTrigger=PropertyChanged}"
+                      IsReadOnly="{Binding IsIdentityLocked}"
                       Style="{DynamicResource StyledTextBox}"
                       Margin="0,0,0,8"
                     />
@@ -153,6 +156,7 @@
                     />
                     <TextBox
                       Text="{Binding Url, UpdateSourceTrigger=PropertyChanged}"
+                      IsReadOnly="{Binding IsIdentityLocked}"
                       Style="{DynamicResource StyledTextBox}"
                       Margin="0,0,0,8"
                     />
@@ -222,12 +226,13 @@
                     <CheckBox
                       Content="{DynamicResource Settings_FeedLock}"
                       IsChecked="{Binding RequireLockPassword}"
+                      IsEnabled="{Binding CanEditLock}"
                       Unchecked="LockCheckBox_Unchecked"
                       Margin="0,0,0,6"
                     />
                     <PasswordBox
                       Tag="{Binding}"
-                      IsEnabled="{Binding RequireLockPassword}"
+                      IsEnabled="{Binding CanEnterLockPassword}"
                       Loaded="LockPasswordBox_Loaded"
                       PasswordChanged="LockPasswordBox_PasswordChanged"
                       MinHeight="32"

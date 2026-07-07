@@ -60,6 +60,35 @@ public sealed class StorkPathsTests
     }
 
     [Fact]
+    public void Branding_Prefix_IsolatesAllIdentityPaths()
+    {
+        try
+        {
+            Branding.Initialize(new BrandingInfo(Prefix: "acme"));
+
+            StorkPaths.ConfigDir.Should().Contain("acme-StorkDrop");
+            StorkPaths.StorkConfigDir.Should().Contain("acme-StorkDrop");
+            StorkPaths.LogDir.Should().Contain("acme-StorkDrop");
+            StorkPaths.BackupRoot.Should().Contain("acme-StorkDrop");
+            StorkPaths.TempDir.Should().Contain("acme-StorkDrop");
+            StorkPaths.DefaultInstallRoot.Should().EndWith("acme-StorkDrop");
+        }
+        finally
+        {
+            Branding.Initialize(BrandingInfo.Default);
+        }
+    }
+
+    [Fact]
+    public void Branding_Default_UsesPlainStorkDropFolder()
+    {
+        Branding.Initialize(BrandingInfo.Default);
+
+        StorkPaths.ConfigDir.Should().Contain("StorkDrop");
+        StorkPaths.ConfigDir.Should().NotContain("-StorkDrop");
+    }
+
+    [Fact]
     public void PluginConfigFile_WithSpecialCharactersInId_ProducesValidPath()
     {
         string result = StorkPaths.PluginConfigFile("my plugin (v2)");

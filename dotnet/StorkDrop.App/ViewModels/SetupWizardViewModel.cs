@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging;
 using StorkDrop.App.Localization;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
 using StorkDrop.Registry;
 
 namespace StorkDrop.App.ViewModels;
@@ -29,7 +30,21 @@ public partial class SetupWizardViewModel : ObservableObject
         _encryptionService = encryptionService;
         _connectionService = connectionService;
         _logger = logger;
+
+        if (Branding.Current.HasFeed)
+        {
+            BrandingFeed brandFeed = Branding.Current.Feed!;
+            if (!string.IsNullOrWhiteSpace(brandFeed.Name))
+                FeedName = brandFeed.Name!;
+            if (!string.IsNullOrWhiteSpace(brandFeed.Url))
+                FeedUrl = brandFeed.Url!;
+        }
     }
+
+    /// <summary>
+    /// True when a white-label edition fixes the feed name and URL, so those fields are read-only.
+    /// </summary>
+    public bool IsFeedIdentityLocked => Branding.Current.HasFeed;
 
     [ObservableProperty]
     private int _currentStep;
@@ -166,16 +181,24 @@ public partial class SetupWizardViewModel : ObservableObject
     [RelayCommand]
     private async Task FinishAsync()
     {
+        BrandingInfo branding = Branding.Current;
+        bool locked = branding.HasFeed;
+
         FeedConfiguration feed = new FeedConfiguration(
-            Id: Guid.NewGuid().ToString(),
-            Name: FeedName,
-            Url: FeedUrl,
+            Id: locked ? Branding.WhitelabelFeedId : Guid.NewGuid().ToString(),
+            Name: locked && !string.IsNullOrWhiteSpace(branding.Feed!.Name)
+                ? branding.Feed.Name!
+                : FeedName,
+            Url: locked && !string.IsNullOrWhiteSpace(branding.Feed!.Url)
+                ? branding.Feed.Url!
+                : FeedUrl,
             Repository: !string.IsNullOrWhiteSpace(FeedRepository) ? FeedRepository : null,
             Username: Username,
             EncryptedPassword: !string.IsNullOrEmpty(Password)
                 ? _encryptionService.Encrypt(Password)
                 : null,
-            PluginId: null
+            PluginId: null,
+            LockPasswordHash: locked ? branding.Feed!.LockPasswordHash : null
         );
 
         ProxySettings? proxy = !string.IsNullOrEmpty(ProxyHost)

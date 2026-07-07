@@ -62,12 +62,14 @@ public sealed class SelfUpdateService
 
         _logger.LogInformation("Shutting down StorkDrop, then launching installer");
 
+        string brandingArgs = BuildBrandingArguments();
+
         // Launch installer after StorkDrop exits (installer needs the exe to not be in use)
         Process.Start(
             new ProcessStartInfo
             {
                 FileName = "cmd.exe",
-                Arguments = $"/c timeout /t 2 /nobreak >nul & \"{installerPath}\"",
+                Arguments = $"/c timeout /t 2 /nobreak >nul & \"{installerPath}\" {brandingArgs}",
                 UseShellExecute = false,
                 CreateNoWindow = true,
             }
@@ -77,5 +79,14 @@ public sealed class SelfUpdateService
         {
             System.Windows.Application.Current.Shutdown();
         });
+    }
+
+    private static string BuildBrandingArguments()
+    {
+        BrandingInfo branding = Branding.Current;
+        if (string.IsNullOrWhiteSpace(branding.Prefix))
+            return string.Empty;
+
+        return $"/PREFIX={branding.Prefix}";
     }
 }

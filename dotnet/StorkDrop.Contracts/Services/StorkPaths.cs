@@ -10,42 +10,44 @@ public static class StorkPaths
         Environment.SpecialFolder.LocalApplicationData
     );
 
-    public static string ConfigDir { get; } = Path.Combine(AppData, "StorkDrop", "Config");
+    /// <summary>
+    /// The installation's folder name, e.g. "StorkDrop" or a white-labelled "acme-StorkDrop". Read at
+    /// access time so it reflects the branding initialized during startup regardless of type-load order.
+    /// </summary>
+    private static string AppFolder => Branding.Current.AppFolderName;
 
-    public static string StorkConfigDir { get; } =
-        Path.Combine(AppData, "StorkDrop", "Stork", "Config");
+    public static string ConfigDir => Path.Combine(AppData, AppFolder, "Config");
 
-    public static string LogDir { get; } = Path.Combine(AppData, "StorkDrop", "Logs");
+    public static string StorkConfigDir => Path.Combine(AppData, AppFolder, "Stork", "Config");
 
-    public static string LogFile { get; } = Path.Combine(LogDir, "storkdrop-.log");
+    public static string LogDir => Path.Combine(AppData, AppFolder, "Logs");
 
-    public static string InstalledProductsFile { get; } =
+    public static string LogFile => Path.Combine(LogDir, "storkdrop-.log");
+
+    public static string InstalledProductsFile =>
         Path.Combine(StorkConfigDir, "installed-products.json");
 
-    public static string ActivityLogFile { get; } =
-        Path.Combine(StorkConfigDir, "activity-log.json");
+    public static string ActivityLogFile => Path.Combine(StorkConfigDir, "activity-log.json");
 
-    public static string BackupRoot { get; } = Path.Combine(LocalAppData, "StorkDrop", "Backups");
+    public static string BackupRoot => Path.Combine(LocalAppData, AppFolder, "Backups");
 
     /// <summary>Stable, per-machine identifier used in outbound feed status reports.</summary>
-    public static string MachineIdFile { get; } = Path.Combine(StorkConfigDir, "machine-id");
+    public static string MachineIdFile => Path.Combine(StorkConfigDir, "machine-id");
 
     /// <summary>On-disk queue of pending feed status reports awaiting delivery.</summary>
-    public static string FeedReportSpoolDir { get; } =
-        Path.Combine(LocalAppData, "StorkDrop", "ReportSpool");
+    public static string FeedReportSpoolDir => Path.Combine(LocalAppData, AppFolder, "ReportSpool");
 
-    public static string TempDir { get; } = Path.Combine(Path.GetTempPath(), "StorkDrop");
+    public static string TempDir => Path.Combine(Path.GetTempPath(), AppFolder);
 
-    public static string PluginTempDir { get; } =
-        Path.Combine(Path.GetTempPath(), "StorkDrop", "plugin-temp");
+    public static string PluginTempDir =>
+        Path.Combine(Path.GetTempPath(), AppFolder, "plugin-temp");
 
-    public static string PluginsDirectory { get; } =
-        Path.Combine(AppContext.BaseDirectory, "plugins");
+    public static string PluginsDirectory => Path.Combine(AppContext.BaseDirectory, "plugins");
 
-    public static string DefaultInstallRoot { get; } =
+    public static string DefaultInstallRoot =>
         Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),
-            "StorkDrop"
+            AppFolder
         );
 
     /// <summary>

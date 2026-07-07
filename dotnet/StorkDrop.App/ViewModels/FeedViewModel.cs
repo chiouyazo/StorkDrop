@@ -41,6 +41,37 @@ public partial class FeedViewModel : ObservableObject
     private bool _requireLockPassword;
 
     /// <summary>
+    /// True for a white-label edition's pre-configured feed: name and URL are vendor-fixed and the
+    /// feed cannot be removed.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isIdentityLocked;
+
+    /// <summary>
+    /// True when the lock password is imposed by the white-label config, so the user cannot toggle
+    /// or change it.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLockManaged;
+
+    public bool CanRemove => !IsIdentityLocked;
+
+    public bool CanEditLock => !IsLockManaged;
+
+    public bool CanEnterLockPassword => RequireLockPassword && !IsLockManaged;
+
+    partial void OnIsIdentityLockedChanged(bool value) => OnPropertyChanged(nameof(CanRemove));
+
+    partial void OnIsLockManagedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(CanEditLock));
+        OnPropertyChanged(nameof(CanEnterLockPassword));
+    }
+
+    partial void OnRequireLockPasswordChanged(bool value) =>
+        OnPropertyChanged(nameof(CanEnterLockPassword));
+
+    /// <summary>
     /// A newly entered lock password (transient). When empty while <see cref="RequireLockPassword"/>
     /// is set, the existing password (<see cref="ExistingLockHash"/>) is kept unchanged.
     /// </summary>

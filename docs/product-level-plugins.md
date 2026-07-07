@@ -263,7 +263,7 @@ StorkDrop loads the plugin in an isolated `AssemblyLoadContext` that resolves de
 - step: &build
     name: Build & Pack
     script:
-      - cry-version
+      - get-version # writes version.txt
       - VERSION=$(cat version.txt)
       - dotnet build --configuration Release -p:Version=$VERSION
       - dotnet publish MyProduct/ --configuration Release --no-build --output artifacts/product/

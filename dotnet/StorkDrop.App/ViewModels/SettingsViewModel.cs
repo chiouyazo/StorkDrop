@@ -66,6 +66,9 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<FeedViewModel> _feeds = new ObservableCollection<FeedViewModel>();
 
+    /// <summary>False when a white-label edition forbids adding feeds through the UI.</summary>
+    public bool CanAddFeeds => !Branding.Current.ForbidNewFeeds;
+
     [ObservableProperty]
     private bool _autoStart;
 
@@ -233,17 +236,34 @@ public partial class SettingsViewModel : ObservableObject
                         }
                     }
 
+                    bool isWhitelabel =
+                        Branding.Current.HasFeed && f.Id == Branding.WhitelabelFeedId;
+                    BrandingFeed? brandFeed = Branding.Current.Feed;
+                    bool hasManagedLock =
+                        isWhitelabel && !string.IsNullOrEmpty(brandFeed?.LockPasswordHash);
+
                     return new FeedViewModel
                     {
                         Id = f.Id,
-                        Name = f.Name,
-                        Url = f.Url,
+                        Name =
+                            isWhitelabel && !string.IsNullOrWhiteSpace(brandFeed?.Name)
+                                ? brandFeed!.Name!
+                                : f.Name,
+                        Url =
+                            isWhitelabel && !string.IsNullOrWhiteSpace(brandFeed?.Url)
+                                ? brandFeed!.Url!
+                                : f.Url,
                         Repository = f.Repository ?? string.Empty,
                         Username = f.Username ?? string.Empty,
                         Password = decryptedPassword,
                         PluginId = f.PluginId ?? string.Empty,
-                        RequireLockPassword = !string.IsNullOrEmpty(f.LockPasswordHash),
-                        ExistingLockHash = f.LockPasswordHash,
+                        RequireLockPassword =
+                            hasManagedLock || !string.IsNullOrEmpty(f.LockPasswordHash),
+                        ExistingLockHash = hasManagedLock
+                            ? brandFeed!.LockPasswordHash
+                            : f.LockPasswordHash,
+                        IsIdentityLocked = isWhitelabel,
+                        IsLockManaged = hasManagedLock,
                         ReportUrl = f.ReportUrl ?? string.Empty,
                         ReportSecret = decryptedReportSecret,
                         ReportCustomerId = f.ReportCustomerId ?? string.Empty,
@@ -268,6 +288,9 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void AddFeed()
     {
+        if (!CanAddFeeds)
+            return;
+
         ShowRecommendedFeeds = HasRecommendedFeeds;
         Feeds.Add(
             new FeedViewModel { Id = Guid.NewGuid().ToString(), Name = $"Feed {Feeds.Count + 1}" }
@@ -300,6 +323,9 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private void RemoveFeed(FeedViewModel feed)
     {
+        if (feed.IsIdentityLocked)
+            return;
+
         Feeds.Remove(feed);
     }
 
@@ -323,25 +349,45 @@ public partial class SettingsViewModel : ObservableObject
             List<string> feedsNeedingInitialReport = FeedsWithChangedReportConfig();
 
             FeedConfiguration[] feeds = Feeds
-                .Select(f => new FeedConfiguration(
-                    f.Id,
-                    f.Name,
-                    f.Url,
-                    !string.IsNullOrWhiteSpace(f.Repository) ? f.Repository : null,
-                    !string.IsNullOrEmpty(f.Username) ? f.Username : null,
-                    !string.IsNullOrEmpty(f.Password)
-                        ? _encryptionService.Encrypt(f.Password)
-                        : null,
-                    !string.IsNullOrEmpty(f.PluginId) ? f.PluginId : null,
-                    ResolveLockHash(f),
-                    !string.IsNullOrWhiteSpace(f.ReportUrl) ? f.ReportUrl.Trim() : null,
-                    !string.IsNullOrEmpty(f.ReportSecret)
-                        ? _encryptionService.Encrypt(f.ReportSecret)
-                        : null,
-                    !string.IsNullOrWhiteSpace(f.ReportCustomerId)
-                        ? f.ReportCustomerId.Trim()
-                        : null
-                ))
+                .Select(f =>
+                {
+                    bool isWhitelabel =
+                        Branding.Current.HasFeed && f.Id == Branding.WhitelabelFeedId;
+                    BrandingFeed? brandFeed = Branding.Current.Feed;
+
+                    string name =
+                        isWhitelabel && !string.IsNullOrWhiteSpace(brandFeed?.Name)
+                            ? brandFeed!.Name!
+                            : f.Name;
+                    string url =
+                        isWhitelabel && !string.IsNullOrWhiteSpace(brandFeed?.Url)
+                            ? brandFeed!.Url!
+                            : f.Url;
+                    string? lockHash =
+                        isWhitelabel && !string.IsNullOrEmpty(brandFeed?.LockPasswordHash)
+                            ? brandFeed!.LockPasswordHash
+                            : ResolveLockHash(f);
+
+                    return new FeedConfiguration(
+                        f.Id,
+                        name,
+                        url,
+                        !string.IsNullOrWhiteSpace(f.Repository) ? f.Repository : null,
+                        !string.IsNullOrEmpty(f.Username) ? f.Username : null,
+                        !string.IsNullOrEmpty(f.Password)
+                            ? _encryptionService.Encrypt(f.Password)
+                            : null,
+                        !string.IsNullOrEmpty(f.PluginId) ? f.PluginId : null,
+                        lockHash,
+                        !string.IsNullOrWhiteSpace(f.ReportUrl) ? f.ReportUrl.Trim() : null,
+                        !string.IsNullOrEmpty(f.ReportSecret)
+                            ? _encryptionService.Encrypt(f.ReportSecret)
+                            : null,
+                        !string.IsNullOrWhiteSpace(f.ReportCustomerId)
+                            ? f.ReportCustomerId.Trim()
+                            : null
+                    );
+                })
                 .ToArray();
 
             ProxySettings? proxy = !string.IsNullOrEmpty(ProxyHost)

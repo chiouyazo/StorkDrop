@@ -11,6 +11,7 @@
     />
     <TextBox
       Text="{Binding FeedName, UpdateSourceTrigger=PropertyChanged}"
+      IsReadOnly="{Binding IsFeedIdentityLocked}"
       Padding="8,6"
       FontSize="13"
       Margin="0,0,0,12"
@@ -23,6 +24,7 @@
     />
     <TextBox
       Text="{Binding FeedUrl, UpdateSourceTrigger=PropertyChanged}"
+      IsReadOnly="{Binding IsFeedIdentityLocked}"
       Padding="8,6"
       FontSize="13"
       Margin="0,0,0,12"
