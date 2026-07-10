@@ -25,6 +25,7 @@ public partial class InstalledViewModel : ObservableObject
     private readonly INotificationService _notificationService;
     private readonly DialogService _dialogService;
     private readonly IFeedLockService _feedLock;
+    private readonly IIntegrityService _integrity;
     private readonly ILogger<InstalledViewModel> _logger;
 
     public InstalledViewModel(
@@ -36,6 +37,7 @@ public partial class InstalledViewModel : ObservableObject
         INotificationService notificationService,
         DialogService dialogService,
         IFeedLockService feedLock,
+        IIntegrityService integrity,
         ILogger<InstalledViewModel> logger
     )
     {
@@ -47,6 +49,7 @@ public partial class InstalledViewModel : ObservableObject
         _notificationService = notificationService;
         _dialogService = dialogService;
         _feedLock = feedLock;
+        _integrity = integrity;
         _logger = logger;
     }
 
@@ -378,6 +381,104 @@ public partial class InstalledViewModel : ObservableObject
     private void SwitchChannel(InstalledProductViewModel product)
     {
         NavigateToProductDetail?.Invoke(product.ProductId);
+    }
+
+    /// <summary>
+    /// Verifies the product's installed files against their install-time hashes and, if any are
+    /// corrupted or missing, offers a dialog to selectively repair them by re-downloading.
+    /// </summary>
+    [RelayCommand]
+    private async Task VerifyFilesAsync(InstalledProductViewModel product)
+    {
+        try
+        {
+            InstalledProduct? installed = await Task.Run(() =>
+                _productRepository.GetByIdAsync(product.ProductId, product.InstanceId)
+            );
+            if (installed is null)
+                return;
+
+            TrackedInstallation tracked = _tracker.StartInstallation(
+                product.ProductId,
+                $"Verifying: {product.Title}"
+            );
+            tracked.AddLog($"Verifying files for {product.Title} v{product.Version}");
+            Progress<int> progress = new Progress<int>(p =>
+            {
+                tracked.Percentage = p;
+                tracked.StatusMessage = $"Verifying files... {p}%";
+            });
+
+            IntegrityReport report = await Task.Run(() =>
+                _integrity.VerifyAsync(installed, progress, tracked.Cts.Token)
+            );
+            tracked.Complete(true);
+            _tracker.NotifyChanged();
+
+            if (!report.HasProblems)
+            {
+                _dialogService.ShowInfo(
+                    LocalizationManager
+                        .GetString("Integrity_AllOk")
+                        .Replace("{0}", report.OkCount.ToString())
+                );
+                return;
+            }
+
+            IReadOnlyList<string>? selected = System.Windows.Application.Current.Dispatcher.Invoke(
+                () =>
+                {
+                    Views.IntegrityDialog dialog = new Views.IntegrityDialog(
+                        product.Title,
+                        report.Problems
+                    )
+                    {
+                        Owner = System.Windows.Application.Current.MainWindow,
+                    };
+                    return dialog.ShowDialog() == true ? dialog.SelectedPaths : null;
+                }
+            );
+
+            if (selected is null || selected.Count == 0)
+                return;
+
+            if (
+                !await _feedLock.EnsureAuthorizedAsync(
+                    product.FeedId,
+                    LocalizationManager.GetString("FeedLock_Op_Repair")
+                )
+            )
+                return;
+
+            TrackedInstallation repairTracked = _tracker.StartInstallation(
+                product.ProductId,
+                $"Repairing: {product.Title}"
+            );
+            Progress<int> repairProgress = new Progress<int>(p =>
+            {
+                repairTracked.Percentage = p;
+                repairTracked.StatusMessage = $"Repairing files... {p}%";
+            });
+
+            int repaired = await Task.Run(() =>
+                _integrity.RepairAsync(installed, selected, repairProgress, repairTracked.Cts.Token)
+            );
+            repairTracked.Complete(true);
+            _tracker.NotifyChanged();
+
+            _dialogService.ShowInfo(
+                LocalizationManager
+                    .GetString("Integrity_Repaired")
+                    .Replace("{0}", repaired.ToString())
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Verify/repair failed for {ProductId}", product.ProductId);
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Integrity_Failed") + ": " + ex.Message
+            );
+        }
     }
 
     [RelayCommand]

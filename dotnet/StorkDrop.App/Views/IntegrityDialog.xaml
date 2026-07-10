@@ -1,0 +1,90 @@
+<Window
+  x:Class="StorkDrop.App.Views.IntegrityDialog"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Title="{DynamicResource Integrity_Title}"
+  Width="620"
+  Height="480"
+  WindowStartupLocation="CenterOwner"
+  Background="White"
+>
+  <Grid Margin="20">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <TextBlock
+      x:Name="HeaderText"
+      Style="{DynamicResource HeadingSmall}"
+      TextWrapping="Wrap"
+      Margin="0,0,0,4"
+    />
+    <TextBlock
+      Grid.Row="1"
+      Text="{DynamicResource Integrity_DialogHint}"
+      FontSize="12"
+      Foreground="#666666"
+      TextWrapping="Wrap"
+      Margin="0,0,0,12"
+    />
+
+    <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="6">
+      <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ItemsControl x:Name="FilesList" Margin="8">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate>
+              <Grid Margin="0,3">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" />
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <CheckBox
+                  IsChecked="{Binding IsSelected}"
+                  VerticalAlignment="Center"
+                  Margin="0,0,8,0"
+                />
+                <TextBlock
+                  Grid.Column="1"
+                  Text="{Binding Path}"
+                  FontSize="12"
+                  TextTrimming="CharacterEllipsis"
+                  VerticalAlignment="Center"
+                />
+                <TextBlock
+                  Grid.Column="2"
+                  Text="{Binding StatusText}"
+                  FontSize="11"
+                  Foreground="#E65100"
+                  VerticalAlignment="Center"
+                  Margin="12,0,0,0"
+                />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Border>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button
+        Content="{DynamicResource Integrity_Cancel}"
+        Style="{DynamicResource OutlinedButton}"
+        Padding="16,8"
+        Margin="0,0,8,0"
+        IsCancel="True"
+      />
+      <Button
+        x:Name="RepairButton"
+        Content="{DynamicResource Integrity_RepairSelected}"
+        Style="{DynamicResource FilledAccentButton}"
+        Padding="16,8"
+        Click="OnRepairClick"
+        IsDefault="True"
+      />
+    </StackPanel>
+  </Grid>
+</Window>

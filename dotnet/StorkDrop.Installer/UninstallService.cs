@@ -494,8 +494,7 @@ public sealed class UninstallService
 
         try
         {
-            string json = await File.ReadAllTextAsync(manifestPath, cancellationToken);
-            return JsonSerializer.Deserialize<List<string>>(json);
+            return await FileManifestStore.ReadPathsAsync(manifestPath, cancellationToken);
         }
         catch
         {

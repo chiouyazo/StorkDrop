@@ -43,9 +43,6 @@ public sealed class InstallationEngine : IInstallationEngine
     public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
 
-    private static readonly JsonSerializerOptions FileManifestJsonOptions =
-        new JsonSerializerOptions { WriteIndented = true };
-
     /// <summary>
     /// Initializes a new instance of the <see cref="InstallationEngine"/> class.
     /// </summary>
@@ -3251,7 +3248,7 @@ public sealed class InstallationEngine : IInstallationEngine
             HashSet<string> excluded = ResolveExcludedFiles(installPath, excludeFiles);
 
             string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
-            List<string> relativePaths = new List<string>();
+            List<TrackedFile> tracked = new List<TrackedFile>();
             foreach (string file in allFiles)
             {
                 if (excluded.Contains(file))
@@ -3259,11 +3256,12 @@ public sealed class InstallationEngine : IInstallationEngine
                     continue;
                 }
 
-                relativePaths.Add(Path.GetRelativePath(installPath, file));
+                string relativePath = Path.GetRelativePath(installPath, file);
+                string sha = await FileHasher.ComputeSha256Async(file, cancellationToken);
+                tracked.Add(new TrackedFile(relativePath, sha, new FileInfo(file).Length));
             }
 
-            string json = JsonSerializer.Serialize(relativePaths, FileManifestJsonOptions);
-            await File.WriteAllTextAsync(manifestPath, json, cancellationToken);
+            await FileManifestStore.WriteAsync(manifestPath, tracked, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -3523,8 +3521,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 return null;
         }
 
-        string json = await File.ReadAllTextAsync(path, cancellationToken);
-        return System.Text.Json.JsonSerializer.Deserialize<List<string>>(json);
+        return await FileManifestStore.ReadPathsAsync(path, cancellationToken);
     }
 
     private void ReportProgress(InstallStage stage, int percentage, string message)

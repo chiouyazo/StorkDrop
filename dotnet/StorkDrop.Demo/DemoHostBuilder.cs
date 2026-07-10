@@ -53,6 +53,7 @@ internal static class DemoHostBuilder
                 services.AddSingleton<FileOperations>();
                 services.AddSingleton<IFeedReportService, FeedReportService>();
                 services.AddSingleton<IFeedLockService, FeedLockService>();
+                services.AddSingleton<IIntegrityService, IntegrityService>();
 
                 services.AddSingleton<IStorkDropPlugin, DemoStorkDropPlugin>();
 

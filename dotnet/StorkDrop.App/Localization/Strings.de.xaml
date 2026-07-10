@@ -120,7 +120,7 @@
 
   <!-- Settings fields -->
   <system:String x:Key="Settings_AutoStart">Mit Windows starten</system:String>
-  <system:String x:Key="Settings_AutoUpdate">Automatisch nach Updates suchen</system:String>
+  <system:String x:Key="Settings_AutoUpdate">Automatisch nach Produkt-Updates suchen</system:String>
   <system:String x:Key="Settings_CheckInterval">Pr&#252;fintervall (Stunden)</system:String>
   <system:String x:Key="Settings_Proxy">Proxy-Einstellungen</system:String>
   <system:String x:Key="Settings_ProxyHost">Proxy-Host</system:String>
@@ -408,7 +408,7 @@
 
   <!-- Settings tooltip -->
   <system:String x:Key="Settings_AutoUpdateHint"
-    >StorkDrop pr&#252;ft im Hintergrund auf Updates und zeigt Benachrichtigungen an.</system:String
+    >StorkDrop pr&#252;ft installierte Produkte im Hintergrund auf Updates und zeigt Toast-Benachrichtigungen an.</system:String
   >
 
   <!-- Loading error -->
@@ -460,6 +460,22 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
   <system:String x:Key="FeedLock_Op_Update">Aktualisieren</system:String>
   <system:String x:Key="FeedLock_Op_Uninstall">Deinstallieren</system:String>
   <system:String x:Key="FeedLock_Op_Action">Aktionen ausf&#252;hren</system:String>
+  <system:String x:Key="FeedLock_Op_Repair">Dateien reparieren</system:String>
+  <system:String x:Key="Integrity_Button">Dateien pr&#252;fen</system:String>
+  <system:String x:Key="Integrity_Title">Dateien pr&#252;fen</system:String>
+  <system:String x:Key="Integrity_DialogHint"
+    >W&#228;hle die zu reparierenden Dateien. Sie werden aus dem Feed neu geladen und &#252;berschrieben; andere Dateien bleiben unber&#252;hrt.</system:String
+  >
+  <system:String x:Key="Integrity_ProblemsFound"
+    >{0} Datei(en) haben die Pr&#252;fung f&#252;r {1} nicht bestanden:</system:String
+  >
+  <system:String x:Key="Integrity_StatusMissing">fehlt</system:String>
+  <system:String x:Key="Integrity_StatusModified">ge&#228;ndert</system:String>
+  <system:String x:Key="Integrity_RepairSelected">Ausgew&#228;hlte reparieren</system:String>
+  <system:String x:Key="Integrity_Cancel">Abbrechen</system:String>
+  <system:String x:Key="Integrity_AllOk">Alle {0} Dateien sind intakt.</system:String>
+  <system:String x:Key="Integrity_Repaired">{0} Datei(en) repariert.</system:String>
+  <system:String x:Key="Integrity_Failed">Dateipr&#252;fung fehlgeschlagen</system:String>
   <system:String x:Key="FeedLock_Op_RemoveLock">Sperre entfernen</system:String>
   <system:String x:Key="FeedLock_Op_SaveChanges">&#196;nderungen speichern</system:String>
   <system:String x:Key="FeedLock_SaveCancelled"

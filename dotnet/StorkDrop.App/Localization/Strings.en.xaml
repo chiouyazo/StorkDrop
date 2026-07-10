@@ -116,7 +116,7 @@
 
   <!-- Settings fields -->
   <system:String x:Key="Settings_AutoStart">Start with Windows</system:String>
-  <system:String x:Key="Settings_AutoUpdate">Automatically check for updates</system:String>
+  <system:String x:Key="Settings_AutoUpdate">Automatically check for product updates</system:String>
   <system:String x:Key="Settings_CheckInterval">Check interval (hours)</system:String>
   <system:String x:Key="Settings_Proxy">Proxy Settings</system:String>
   <system:String x:Key="Settings_ProxyHost">Proxy Host</system:String>
@@ -378,7 +378,7 @@
 
   <!-- Settings tooltip -->
   <system:String x:Key="Settings_AutoUpdateHint"
-    >StorkDrop checks for updates in the background and shows notifications.</system:String
+    >StorkDrop checks your installed products for updates in the background and shows toast notifications.</system:String
   >
 
   <!-- Loading error -->
@@ -426,6 +426,22 @@ Are you sure you want to close?</system:String
   <system:String x:Key="FeedLock_Op_Update">Update</system:String>
   <system:String x:Key="FeedLock_Op_Uninstall">Uninstall</system:String>
   <system:String x:Key="FeedLock_Op_Action">Run actions</system:String>
+  <system:String x:Key="FeedLock_Op_Repair">Repair files</system:String>
+  <system:String x:Key="Integrity_Button">Verify files</system:String>
+  <system:String x:Key="Integrity_Title">Verify files</system:String>
+  <system:String x:Key="Integrity_DialogHint"
+    >Select the files to repair. They are re-downloaded from the feed and overwritten; no other files are touched.</system:String
+  >
+  <system:String x:Key="Integrity_ProblemsFound"
+    >{0} file(s) failed verification for {1}:</system:String
+  >
+  <system:String x:Key="Integrity_StatusMissing">missing</system:String>
+  <system:String x:Key="Integrity_StatusModified">modified</system:String>
+  <system:String x:Key="Integrity_RepairSelected">Repair selected</system:String>
+  <system:String x:Key="Integrity_Cancel">Cancel</system:String>
+  <system:String x:Key="Integrity_AllOk">All {0} files are intact.</system:String>
+  <system:String x:Key="Integrity_Repaired">{0} file(s) repaired.</system:String>
+  <system:String x:Key="Integrity_Failed">File verification failed</system:String>
   <system:String x:Key="FeedLock_Op_RemoveLock">Remove the lock</system:String>
   <system:String x:Key="FeedLock_Op_SaveChanges">Save changes</system:String>
   <system:String x:Key="FeedLock_SaveCancelled"
