@@ -415,13 +415,24 @@ public partial class InstalledViewModel : ObservableObject
             tracked.Complete(true);
             _tracker.NotifyChanged();
 
+            if (report.Files.Count == 0)
+            {
+                _dialogService.ShowInfo(LocalizationManager.GetString("Integrity_NoFiles"));
+                return;
+            }
+
             if (!report.HasProblems)
             {
-                _dialogService.ShowInfo(
-                    LocalizationManager
-                        .GetString("Integrity_AllOk")
-                        .Replace("{0}", report.OkCount.ToString())
-                );
+                string okMessage =
+                    report.UnverifiableCount > 0
+                        ? LocalizationManager
+                            .GetString("Integrity_OkWithUnverifiable")
+                            .Replace("{0}", report.OkCount.ToString())
+                            .Replace("{1}", report.UnverifiableCount.ToString())
+                        : LocalizationManager
+                            .GetString("Integrity_AllOk")
+                            .Replace("{0}", report.OkCount.ToString());
+                _dialogService.ShowInfo(okMessage);
                 return;
             }
 

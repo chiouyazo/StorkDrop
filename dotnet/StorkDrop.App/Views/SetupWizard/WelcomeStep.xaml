@@ -43,8 +43,7 @@
       Style="{DynamicResource BodyText}"
       Foreground="{DynamicResource OnSurfaceVariantBrush}"
     >
-      This wizard will guide you through the initial setup. You will configure
-      your feed connection to start downloading and installing products.
+      This wizard will guide you through the initial setup. You will configure your feed connection to start downloading and installing products.
     </TextBlock
     >
 

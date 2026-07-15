@@ -3248,20 +3248,26 @@ public sealed class InstallationEngine : IInstallationEngine
             HashSet<string> excluded = ResolveExcludedFiles(installPath, excludeFiles);
 
             string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
-            List<TrackedFile> tracked = new List<TrackedFile>();
-            foreach (string file in allFiles)
+            System.Collections.Concurrent.ConcurrentBag<TrackedFile> tracked =
+                new System.Collections.Concurrent.ConcurrentBag<TrackedFile>();
+
+            ParallelOptions parallelOptions = new ParallelOptions
             {
-                if (excluded.Contains(file))
+                MaxDegreeOfParallelism = Environment.ProcessorCount,
+                CancellationToken = cancellationToken,
+            };
+            await Parallel.ForEachAsync(
+                allFiles.Where(file => !excluded.Contains(file)),
+                parallelOptions,
+                async (file, ct) =>
                 {
-                    continue;
+                    string relativePath = Path.GetRelativePath(installPath, file);
+                    string sha = await FileHasher.ComputeSha256Async(file, ct);
+                    tracked.Add(new TrackedFile(relativePath, sha, new FileInfo(file).Length));
                 }
+            );
 
-                string relativePath = Path.GetRelativePath(installPath, file);
-                string sha = await FileHasher.ComputeSha256Async(file, cancellationToken);
-                tracked.Add(new TrackedFile(relativePath, sha, new FileInfo(file).Length));
-            }
-
-            await FileManifestStore.WriteAsync(manifestPath, tracked, cancellationToken);
+            await FileManifestStore.WriteAsync(manifestPath, tracked.ToList(), cancellationToken);
         }
         catch (Exception ex)
         {

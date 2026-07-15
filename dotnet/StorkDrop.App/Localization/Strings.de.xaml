@@ -24,16 +24,19 @@
 
   <!-- Setup wizard -->
   <system:String x:Key="Setup_Welcome_Title">Willkommen</system:String>
-  <system:String x:Key="Setup_Welcome_Subtitle"
-    >Ihr Werkzeug f&#252;r Produktinstallation und -verwaltung.</system:String
+  <system:String x:Key="Setup_Welcome_Subtitle">
+    Ihr Werkzeug f&#252;r Produktinstallation und -verwaltung.
+  </system:String
   >
   <system:String x:Key="Setup_Connection_Title">Feed-Verbindung</system:String>
-  <system:String x:Key="Setup_Connection_Subtitle"
-    >Konfigurieren Sie die Verbindung zu Ihrem Produkt-Feed.</system:String
+  <system:String x:Key="Setup_Connection_Subtitle">
+    Konfigurieren Sie die Verbindung zu Ihrem Produkt-Feed.
+  </system:String
   >
   <system:String x:Key="Setup_Summary_Title">Setup-Zusammenfassung</system:String>
-  <system:String x:Key="Setup_Summary_Subtitle"
-    >&#220;berpr&#252;fen Sie Ihre Konfiguration vor dem Abschluss.</system:String
+  <system:String x:Key="Setup_Summary_Subtitle">
+    &#220;berpr&#252;fen Sie Ihre Konfiguration vor dem Abschluss.
+  </system:String
   >
 
   <!-- Status messages -->
@@ -42,11 +45,13 @@
   <system:String x:Key="Status_Disconnected">Nicht verbunden</system:String>
   <system:String x:Key="Status_Timeout">Zeit&#252;berschreitung</system:String>
   <system:String x:Key="Status_TestSuccess">Verbindung erfolgreich!</system:String>
-  <system:String x:Key="Status_TestSuccess_WithRepos"
-    >Verbunden. {0} Repositories gefunden.</system:String
+  <system:String x:Key="Status_TestSuccess_WithRepos">
+    Verbunden. {0} Repositories gefunden.
+  </system:String
   >
-  <system:String x:Key="Settings_FeedRepo_Hint"
-    >Leer lassen um alle Repositories automatisch zu erkennen</system:String
+  <system:String x:Key="Settings_FeedRepo_Hint">
+    Leer lassen um alle Repositories automatisch zu erkennen
+  </system:String
   >
   <system:String x:Key="Status_Downloading">{0} v{1} wird heruntergeladen...</system:String>
   <system:String x:Key="Status_DownloadComplete">Download abgeschlossen.</system:String>
@@ -55,14 +60,16 @@
   <system:String x:Key="Status_CopyingFiles">Dateien werden kopiert...</system:String>
   <system:String x:Key="Status_FilesCopied">Dateien kopiert.</system:String>
   <system:String x:Key="Status_Verifying">Installation wird &#252;berpr&#252;ft...</system:String>
-  <system:String x:Key="Status_VerificationComplete"
-    >&#220;berpr&#252;fung abgeschlossen.</system:String
+  <system:String x:Key="Status_VerificationComplete">
+    &#220;berpr&#252;fung abgeschlossen.
+  </system:String
   >
 
   <!-- Settings -->
   <system:String x:Key="Settings_Title">Einstellungen</system:String>
-  <system:String x:Key="Settings_Hint"
-    >Sie k&#246;nnen diese Einstellungen jederzeit &#228;ndern.</system:String
+  <system:String x:Key="Settings_Hint">
+    Sie k&#246;nnen diese Einstellungen jederzeit &#228;ndern.
+  </system:String
   >
   <system:String x:Key="Language_Label">Sprache</system:String>
   <system:String x:Key="Settings_LogLevel">Protokollierungsstufe</system:String>
@@ -74,8 +81,9 @@
   <system:String x:Key="Manage_Button">Verwalten</system:String>
   <system:String x:Key="Install_Download">Herunterladen</system:String>
   <system:String x:Key="Install_AsAdmin">Als Administrator installieren</system:String>
-  <system:String x:Key="Install_AdminHint"
-    >Dieses Verzeichnis erfordert Administratorrechte.</system:String
+  <system:String x:Key="Install_AdminHint">
+    Dieses Verzeichnis erfordert Administratorrechte.
+  </system:String
   >
   <system:String x:Key="Install_Cancel">Abbrechen</system:String>
   <system:String x:Key="Install_Directory">Installationsverzeichnis</system:String>
@@ -102,8 +110,9 @@
   <!-- Re-execute -->
   <system:String x:Key="ReExecute_Run">Ausfuhren</system:String>
   <system:String x:Key="ReExecute_Button">Aktionen ausfuhren</system:String>
-  <system:String x:Key="ReExecute_Success"
-    >{0} Plugin-Aktionen erfolgreich ausgefuhrt.</system:String
+  <system:String x:Key="ReExecute_Success">
+    {0} Plugin-Aktionen erfolgreich ausgefuhrt.
+  </system:String
   >
   <system:String x:Key="ReExecute_Failed">Plugin-Aktionen fur {0} fehlgeschlagen</system:String>
 
@@ -140,46 +149,57 @@
   <system:String x:Key="Refresh">Aktualisieren</system:String>
 
   <!-- Error messages -->
-  <system:String x:Key="Error_ManifestNotFound"
-    >Manifest f&#252;r {0} nicht gefunden.</system:String
+  <system:String x:Key="Error_ManifestNotFound">
+    Manifest f&#252;r {0} nicht gefunden.
+  </system:String
   >
   <system:String x:Key="Error_InstallFailed">Installation von {0} fehlgeschlagen</system:String>
   <system:String x:Key="Error_InstallFailed_Generic">Installation fehlgeschlagen</system:String>
-  <system:String x:Key="Error_InstallCancelled"
-    >Installation vom Benutzer abgebrochen.</system:String
+  <system:String x:Key="Error_InstallCancelled">
+    Installation vom Benutzer abgebrochen.
+  </system:String
   >
-  <system:String x:Key="Error_AdminDenied"
-    >Installation abgebrochen: Administratorrechte wurden verweigert.</system:String
+  <system:String x:Key="Error_AdminDenied">
+    Installation abgebrochen: Administratorrechte wurden verweigert.
+  </system:String
   >
   <system:String x:Key="Error_ExtractionFailed">Extraktion fehlgeschlagen</system:String>
   <system:String x:Key="Error_CopyFailed">Dateikopie fehlgeschlagen</system:String>
-  <system:String x:Key="Error_VerificationFailed"
-    >&#220;berpr&#252;fung fehlgeschlagen: Keine Dateien im Zielverzeichnis.</system:String
+  <system:String x:Key="Error_VerificationFailed">
+    &#220;berpr&#252;fung fehlgeschlagen: Keine Dateien im Zielverzeichnis.
+  </system:String
   >
-  <system:String x:Key="Error_PreInstallFailed"
-    >Vorinstallationspr&#252;fung fehlgeschlagen.</system:String
+  <system:String x:Key="Error_PreInstallFailed">
+    Vorinstallationspr&#252;fung fehlgeschlagen.
+  </system:String
   >
-  <system:String x:Key="Error_PreUninstallFailed"
-    >Vor-Deinstallationspr&#252;fung fehlgeschlagen.</system:String
+  <system:String x:Key="Error_PreUninstallFailed">
+    Vor-Deinstallationspr&#252;fung fehlgeschlagen.
+  </system:String
   >
-  <system:String x:Key="Error_PluginLoadFailed"
-    >Plugin {0} konnte nicht instanziiert werden.</system:String
+  <system:String x:Key="Error_PluginLoadFailed">
+    Plugin {0} konnte nicht instanziiert werden.
+  </system:String
   >
   <system:String x:Key="Error_FileInUse">'{0}' wird verwendet von: {1}</system:String>
   <system:String x:Key="Error_UninstallFailed">Deinstallation fehlgeschlagen</system:String>
-  <system:String x:Key="Error_UninstallFileLocked"
-    >Deinstallation nicht m&#246;glich: Datei '{0}' ist gesperrt von: {1}</system:String
+  <system:String x:Key="Error_UninstallFileLocked">
+    Deinstallation nicht m&#246;glich: Datei '{0}' ist gesperrt von: {1}
+  </system:String
   >
-  <system:String x:Key="Error_LoadProductsFailed"
-    >Produkte konnten nicht geladen werden</system:String
+  <system:String x:Key="Error_LoadProductsFailed">
+    Produkte konnten nicht geladen werden
+  </system:String
   >
-  <system:String x:Key="Error_ServerConnectionFailed"
-    >Verbindung zum Server fehlgeschlagen</system:String
+  <system:String x:Key="Error_ServerConnectionFailed">
+    Verbindung zum Server fehlgeschlagen
+  </system:String
   >
   <system:String x:Key="Error_UpdateFailed">Update fehlgeschlagen</system:String>
   <system:String x:Key="Error_UpdateProductFailed">Update von {0} fehlgeschlagen</system:String>
-  <system:String x:Key="Error_LoadSettingsFailed"
-    >Fehler beim Laden der Einstellungen</system:String
+  <system:String x:Key="Error_LoadSettingsFailed">
+    Fehler beim Laden der Einstellungen
+  </system:String
   >
   <system:String x:Key="Error_SaveFailed">Speichern fehlgeschlagen</system:String>
   <system:String x:Key="Error_ExportFailed">Export fehlgeschlagen</system:String>
@@ -192,28 +212,33 @@
 
   <!-- Validation messages -->
   <system:String x:Key="Validation_FieldRequired">Dieses Feld ist erforderlich.</system:String>
-  <system:String x:Key="Validation_InvalidNumber"
-    >Bitte geben Sie eine g&#252;ltige Zahl ein.</system:String
+  <system:String x:Key="Validation_InvalidNumber">
+    Bitte geben Sie eine g&#252;ltige Zahl ein.
+  </system:String
   >
   <system:String x:Key="Validation_Minimum">Minimum</system:String>
   <system:String x:Key="Validation_Maximum">Maximum</system:String>
-  <system:String x:Key="Validation_InvalidBoolean"
-    >Bitte geben Sie einen g&#252;ltigen Wahrheitswert ein.</system:String
+  <system:String x:Key="Validation_InvalidBoolean">
+    Bitte geben Sie einen g&#252;ltigen Wahrheitswert ein.
+  </system:String
   >
 
   <!-- Locked files dialog -->
   <system:String x:Key="LockedFiles_Title">Dateien in Verwendung</system:String>
-  <system:String x:Key="LockedFiles_Message"
-    >Die folgenden Prozesse verwenden Dateien, die aktualisiert werden m&#252;ssen. Sie k&#246;nnen diese beenden oder &#252;berspringen, um mit einer verz&#246;gerten Ersetzung fortzufahren.</system:String
+  <system:String x:Key="LockedFiles_Message">
+    Die folgenden Prozesse verwenden Dateien, die aktualisiert werden m&#252;ssen. Sie k&#246;nnen diese beenden oder &#252;berspringen, um mit einer verz&#246;gerten Ersetzung fortzufahren.
+  </system:String
   >
   <system:String x:Key="LockedFiles_Kill">Ausgew&#228;hlte Prozesse beenden</system:String>
   <system:String x:Key="LockedFiles_Refresh">Aktualisieren</system:String>
   <system:String x:Key="LockedFiles_Skip">&#220;berspringen</system:String>
-  <system:String x:Key="LockedFiles_SkipHint"
-    >Dateien in Verwendung werden umbenannt und beim Neustart ersetzt. Laufende Prozesse k&#246;nnen instabil werden.</system:String
+  <system:String x:Key="LockedFiles_SkipHint">
+    Dateien in Verwendung werden umbenannt und beim Neustart ersetzt. Laufende Prozesse k&#246;nnen instabil werden.
+  </system:String
   >
-  <system:String x:Key="LockedFiles_KillFailed"
-    >Prozess konnte nicht beendet werden: {0}</system:String
+  <system:String x:Key="LockedFiles_KillFailed">
+    Prozess konnte nicht beendet werden: {0}
+  </system:String
   >
   <system:String x:Key="LockedFiles_ProcessName">Prozess</system:String>
   <system:String x:Key="LockedFiles_PID">PID</system:String>
@@ -222,82 +247,98 @@
   <system:String x:Key="LockedFiles_File">Datei</system:String>
 
   <!-- Confirmation dialogs -->
-  <system:String x:Key="Confirm_Uninstall"
-    >M&#246;chten Sie {0} wirklich deinstallieren?</system:String
+  <system:String x:Key="Confirm_Uninstall">
+    M&#246;chten Sie {0} wirklich deinstallieren?
+  </system:String
   >
 
   <!-- Required components -->
   <system:String x:Key="RequiredComponents_Title">Fehlende Voraussetzungen</system:String>
-  <system:String x:Key="RequiredComponents_Message"
-    >Die folgenden Komponenten werden für {0} benötigt, wurden aber nicht gefunden. Sie können trotzdem fortfahren, aber das Produkt funktioniert möglicherweise nicht korrekt.</system:String
+  <system:String x:Key="RequiredComponents_Message">
+    Die folgenden Komponenten werden für {0} benötigt, wurden aber nicht gefunden. Sie können trotzdem fortfahren, aber das Produkt funktioniert möglicherweise nicht korrekt.
+  </system:String
   >
   <system:String x:Key="RequiredComponents_Proceed">Trotzdem installieren</system:String>
   <system:String x:Key="RequiredComponents_Cancel">Abbrechen</system:String>
-  <system:String x:Key="RequiredProducts_InstallContinue"
-    >Ausgewählte installieren und fortfahren</system:String
+  <system:String x:Key="RequiredProducts_InstallContinue">
+    Ausgewählte installieren und fortfahren
+  </system:String
   >
   <system:String x:Key="RequiredProducts_SkipContinue">Uberspringen und fortfahren</system:String>
 
   <!-- Optional post-products -->
   <system:String x:Key="OptionalProducts_Title">Optionale Zusatzprodukte</system:String>
-  <system:String x:Key="OptionalProducts_Message"
-    >Die folgenden Zusatzprodukte sind für {0} verfügbar. Wählen Sie aus, welche installiert werden sollen:</system:String
+  <system:String x:Key="OptionalProducts_Message">
+    Die folgenden Zusatzprodukte sind für {0} verfügbar. Wählen Sie aus, welche installiert werden sollen:
+  </system:String
   >
   <system:String x:Key="OptionalProducts_Install">Ausgewählte installieren</system:String>
   <system:String x:Key="OptionalProducts_Skip">Überspringen</system:String>
   <system:String x:Key="OptionalProducts_AlreadyInstalled">(bereits installiert)</system:String>
-  <system:String x:Key="OptionalProducts_NotAvailable"
-    >{0} wird empfohlen, ist aber in Ihren konfigurierten Feeds nicht verfügbar.</system:String
+  <system:String x:Key="OptionalProducts_NotAvailable">
+    {0} wird empfohlen, ist aber in Ihren konfigurierten Feeds nicht verfügbar.
+  </system:String
   >
 
   <!-- Restart -->
-  <system:String x:Key="Restart_PluginInstalled"
-    >{0} wurde installiert. StorkDrop muss neu gestartet werden, um das neue Plugin zu laden. Jetzt neu starten?</system:String
+  <system:String x:Key="Restart_PluginInstalled">
+    {0} wurde installiert. StorkDrop muss neu gestartet werden, um das neue Plugin zu laden. Jetzt neu starten?
+  </system:String
   >
 
   <!-- Info messages -->
   <system:String x:Key="Info_UninstallSuccess">{0} wurde deinstalliert.</system:String>
-  <system:String x:Key="Info_UninstallNeedsReboot"
-    >{0} wurde deinstalliert. Einige Dateien sind noch in Verwendung und werden beim nächsten Neustart entfernt.</system:String
+  <system:String x:Key="Info_UninstallNeedsReboot">
+    {0} wurde deinstalliert. Einige Dateien sind noch in Verwendung und werden beim nächsten Neustart entfernt.
+  </system:String
   >
   <system:String x:Key="Info_InstallSuccess">{0} wurde erfolgreich installiert.</system:String>
 
   <!-- File operations -->
   <system:String x:Key="Error_SourcePathEmpty">Quellpfad darf nicht leer sein.</system:String>
   <system:String x:Key="Error_TargetPathEmpty">Zielpfad darf nicht leer sein.</system:String>
-  <system:String x:Key="Error_SourceFilePathEmpty"
-    >Quelldateipfad darf nicht leer sein.</system:String
+  <system:String x:Key="Error_SourceFilePathEmpty">
+    Quelldateipfad darf nicht leer sein.
+  </system:String
   >
-  <system:String x:Key="Error_TargetFilePathEmpty"
-    >Zieldateipfad darf nicht leer sein.</system:String
+  <system:String x:Key="Error_TargetFilePathEmpty">
+    Zieldateipfad darf nicht leer sein.
+  </system:String
   >
   <system:String x:Key="Error_TargetFileExists">Zieldatei existiert bereits: {0}</system:String>
 
   <!-- Encryption -->
-  <system:String x:Key="Error_DecryptionFailed_InvalidBase64"
-    >Entschl&#252;sselung fehlgeschlagen: Der verschl&#252;sselte Text ist kein g&#252;ltiger Base64-String.</system:String
+  <system:String x:Key="Error_DecryptionFailed_InvalidBase64">
+    Entschl&#252;sselung fehlgeschlagen: Der verschl&#252;sselte Text ist kein g&#252;ltiger Base64-String.
+  </system:String
   >
-  <system:String x:Key="Error_DecryptionFailed_WrongUser"
-    >Entschl&#252;sselung fehlgeschlagen: Die Daten konnten nicht entschl&#252;sselt werden. M&#246;glicherweise wurden sie von einem anderen Benutzer oder Computer verschl&#252;sselt.</system:String
+  <system:String x:Key="Error_DecryptionFailed_WrongUser">
+    Entschl&#252;sselung fehlgeschlagen: Die Daten konnten nicht entschl&#252;sselt werden. M&#246;glicherweise wurden sie von einem anderen Benutzer oder Computer verschl&#252;sselt.
+  </system:String
   >
-  <system:String x:Key="Error_DecryptionFailed_TooShort"
-    >Entschl&#252;sselung fehlgeschlagen: Die verschl&#252;sselten Daten sind zu kurz.</system:String
+  <system:String x:Key="Error_DecryptionFailed_TooShort">
+    Entschl&#252;sselung fehlgeschlagen: Die verschl&#252;sselten Daten sind zu kurz.
+  </system:String
   >
-  <system:String x:Key="Error_DecryptionFailed_Generic"
-    >Entschl&#252;sselung fehlgeschlagen: Die Daten konnten nicht entschl&#252;sselt werden.</system:String
+  <system:String x:Key="Error_DecryptionFailed_Generic">
+    Entschl&#252;sselung fehlgeschlagen: Die Daten konnten nicht entschl&#252;sselt werden.
+  </system:String
   >
 
   <!-- Configuration -->
-  <system:String x:Key="Error_NoConfigToExport"
-    >Keine Konfiguration zum Exportieren vorhanden.</system:String
+  <system:String x:Key="Error_NoConfigToExport">
+    Keine Konfiguration zum Exportieren vorhanden.
+  </system:String
   >
   <system:String x:Key="Error_ImportFileNotFound">Importdatei nicht gefunden.</system:String>
   <system:String x:Key="Error_InvalidConfigFile">Ung&#252;ltige Konfigurationsdatei.</system:String>
-  <system:String x:Key="Error_ConfigRequiresFeed"
-    >Konfiguration ung&#252;ltig: Mindestens ein Feed ist erforderlich.</system:String
+  <system:String x:Key="Error_ConfigRequiresFeed">
+    Konfiguration ung&#252;ltig: Mindestens ein Feed ist erforderlich.
+  </system:String
   >
-  <system:String x:Key="Error_DuplicateProductId"
-    >Doppelte ProductId in installierter Produktliste: {0}</system:String
+  <system:String x:Key="Error_DuplicateProductId">
+    Doppelte ProductId in installierter Produktliste: {0}
+  </system:String
   >
 
   <!-- Product detail -->
@@ -318,8 +359,9 @@
   <system:String x:Key="Filter_Type">Typ</system:String>
 
   <!-- Tray -->
-  <system:String x:Key="Tray_FirstMinimize"
-    >StorkDrop l&#228;uft im Hintergrund. Sie k&#246;nnen dies in den Einstellungen &#228;ndern.</system:String
+  <system:String x:Key="Tray_FirstMinimize">
+    StorkDrop l&#228;uft im Hintergrund. Sie k&#246;nnen dies in den Einstellungen &#228;ndern.
+  </system:String
   >
   <system:String x:Key="Tray_Title">StorkDrop</system:String>
   <system:String x:Key="Tray_Open">&#214;ffnen</system:String>
@@ -335,14 +377,17 @@
   <!-- Install dialog -->
   <system:String x:Key="InstallDialog_DownloadSize">Downloadgr&#246;&#223;e</system:String>
   <system:String x:Key="InstallDialog_DiskSpace">Verf&#252;gbarer Speicherplatz</system:String>
-  <system:String x:Key="InstallDialog_Steps"
-    >Schritte: Download &#x2192; Extrahieren &#x2192; Dateien kopieren &#x2192; Verkn&#252;pfungen erstellen</system:String
+  <system:String x:Key="InstallDialog_Steps">
+    Schritte: Download &#x2192; Extrahieren &#x2192; Dateien kopieren &#x2192; Verkn&#252;pfungen erstellen
+  </system:String
   >
-  <system:String x:Key="InstallDialog_Shortcuts"
-    >{0} Verkn&#252;pfung(en) werden erstellt</system:String
+  <system:String x:Key="InstallDialog_Shortcuts">
+    {0} Verkn&#252;pfung(en) werden erstellt
+  </system:String
   >
-  <system:String x:Key="InstallDialog_NoShortcuts"
-    >Keine Verkn&#252;pfungen werden erstellt</system:String
+  <system:String x:Key="InstallDialog_NoShortcuts">
+    Keine Verkn&#252;pfungen werden erstellt
+  </system:String
   >
 
   <!-- Feed suggestions -->
@@ -353,14 +398,17 @@
 
   <!-- Uninstall -->
   <system:String x:Key="Uninstall_AsAdmin">Als Administrator deinstallieren</system:String>
-  <system:String x:Key="Uninstall_AdminHint"
-    >Dieses Produkt ist in einem gesch&#252;tzten Verzeichnis installiert und erfordert Administratorrechte zur Deinstallation.</system:String
+  <system:String x:Key="Uninstall_AdminHint">
+    Dieses Produkt ist in einem gesch&#252;tzten Verzeichnis installiert und erfordert Administratorrechte zur Deinstallation.
+  </system:String
   >
-  <system:String x:Key="Error_AdminDenied_Uninstall"
-    >Deinstallation abgebrochen: Administratorrechte wurden verweigert.</system:String
+  <system:String x:Key="Error_AdminDenied_Uninstall">
+    Deinstallation abgebrochen: Administratorrechte wurden verweigert.
+  </system:String
   >
-  <system:String x:Key="Error_ElevatedUninstallFailed"
-    >Deinstallation mit erh&#246;hten Rechten fehlgeschlagen. Bitte versuchen Sie es erneut.</system:String
+  <system:String x:Key="Error_ElevatedUninstallFailed">
+    Deinstallation mit erh&#246;hten Rechten fehlgeschlagen. Bitte versuchen Sie es erneut.
+  </system:String
   >
 
   <!-- Dialog titles -->
@@ -393,8 +441,9 @@
   <system:String x:Key="PluginConfig_Continue">Weiter</system:String>
 
   <!-- Plugins view -->
-  <system:String x:Key="Plugins_NoPluginsHint"
-    >Keine Plugins geladen. Legen Sie Plugin-DLLs im plugins/-Verzeichnis neben der Anwendung ab.</system:String
+  <system:String x:Key="Plugins_NoPluginsHint">
+    Keine Plugins geladen. Legen Sie Plugin-DLLs im plugins/-Verzeichnis neben der Anwendung ab.
+  </system:String
   >
   <system:String x:Key="Plugins_PluginId">Plugin-ID:</system:String>
   <system:String x:Key="Plugins_AssociatedFeeds">Zugeordnete Feeds:</system:String>
@@ -407,40 +456,44 @@
   <system:String x:Key="ActivityLog_Status">Status</system:String>
 
   <!-- Settings tooltip -->
-  <system:String x:Key="Settings_AutoUpdateHint"
-    >StorkDrop pr&#252;ft installierte Produkte im Hintergrund auf Updates und zeigt Toast-Benachrichtigungen an.</system:String
+  <system:String x:Key="Settings_AutoUpdateHint">
+    StorkDrop pr&#252;ft installierte Produkte im Hintergrund auf Updates und zeigt Toast-Benachrichtigungen an.
+  </system:String
   >
 
   <!-- Loading error -->
   <system:String x:Key="Error_LoadFailed">Fehler beim Laden: {0}</system:String>
 
   <!-- Install dialog plugin hint -->
-  <system:String x:Key="InstallDialog_PluginHint"
-    >Ein Plugin ist mit diesem Produkt verbunden und fordert möglicherweise zusätzliche Konfiguration während der Installation an.</system:String
+  <system:String x:Key="InstallDialog_PluginHint">
+    Ein Plugin ist mit diesem Produkt verbunden und fordert möglicherweise zusätzliche Konfiguration während der Installation an.
+  </system:String
   >
 
   <!-- Activity log -->
   <system:String x:Key="ActivityLog_ViewLogs">Anwendungsprotokolle anzeigen</system:String>
 
   <!-- Closing confirmation -->
-  <system:String x:Key="Closing_ActiveInstallations"
-    >Es laufen noch {0} Installation(en). Das Schlie&#223;en von StorkDrop kann diese in einem unvollst&#228;ndigen Zustand hinterlassen.
-
-M&#246;chten Sie wirklich schlie&#223;en?</system:String
+  <system:String x:Key="Closing_ActiveInstallations">
+    Es laufen noch {0} Installation(en). Das Schlie&#223;en von StorkDrop kann diese in einem unvollst&#228;ndigen Zustand hinterlassen. M&#246;chten Sie wirklich schlie&#223;en?
+  </system:String
   >
-  <system:String x:Key="Closing_ActiveInstallations_Title"
-    >Installationen in Bearbeitung</system:String
+  <system:String x:Key="Closing_ActiveInstallations_Title">
+    Installationen in Bearbeitung
+  </system:String
   >
 
   <!-- StorkDrop self-update -->
   <system:String x:Key="Settings_StorkDropUpdates">StorkDrop-Updates</system:String>
   <system:String x:Key="Settings_CheckForUpdates">Nach StorkDrop-Updates suchen</system:String>
-  <system:String x:Key="Settings_IncludeDevVersions"
-    >Entwicklungsversionen einschlie&#223;en</system:String
+  <system:String x:Key="Settings_IncludeDevVersions">
+    Entwicklungsversionen einschlie&#223;en
+  </system:String
   >
   <system:String x:Key="Update_Available_Title">Update verf&#252;gbar</system:String>
-  <system:String x:Key="Update_Available_Message"
-    >StorkDrop {0} ist verf&#252;gbar. M&#246;chten Sie es herunterladen und installieren?</system:String
+  <system:String x:Key="Update_Available_Message">
+    StorkDrop {0} ist verf&#252;gbar. M&#246;chten Sie es herunterladen und installieren?
+  </system:String
   >
   <system:String x:Key="Update_Now">Jetzt aktualisieren</system:String>
   <system:String x:Key="Update_Later">Sp&#228;ter</system:String>
@@ -448,13 +501,15 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
 
   <!-- Feed soft lock -->
   <system:String x:Key="FeedLock_Title">Feed gesperrt</system:String>
-  <system:String x:Key="FeedLock_Message"
-    >F&#252;r den Vorgang &#8222;{0}&#8220; am gesperrten Feed &#8222;{1}&#8220; ist das Feed-Passwort erforderlich. Bitte eingeben, um fortzufahren.</system:String
+  <system:String x:Key="FeedLock_Message">
+    F&#252;r den Vorgang &#8222;{0}&#8220; am gesperrten Feed &#8222;{1}&#8220; ist das Feed-Passwort erforderlich. Bitte eingeben, um fortzufahren.
+  </system:String
   >
   <system:String x:Key="FeedLock_Unlock">Entsperren</system:String>
   <system:String x:Key="FeedLock_Cancel">Abbrechen</system:String>
-  <system:String x:Key="FeedLock_WrongPassword"
-    >Falsches Passwort. Bitte erneut versuchen.</system:String
+  <system:String x:Key="FeedLock_WrongPassword">
+    Falsches Passwort. Bitte erneut versuchen.
+  </system:String
   >
   <system:String x:Key="FeedLock_Op_Install">Installieren</system:String>
   <system:String x:Key="FeedLock_Op_Update">Aktualisieren</system:String>
@@ -463,37 +518,52 @@ M&#246;chten Sie wirklich schlie&#223;en?</system:String
   <system:String x:Key="FeedLock_Op_Repair">Dateien reparieren</system:String>
   <system:String x:Key="Integrity_Button">Dateien pr&#252;fen</system:String>
   <system:String x:Key="Integrity_Title">Dateien pr&#252;fen</system:String>
-  <system:String x:Key="Integrity_DialogHint"
-    >W&#228;hle die zu reparierenden Dateien. Sie werden aus dem Feed neu geladen und &#252;berschrieben; andere Dateien bleiben unber&#252;hrt.</system:String
+  <system:String x:Key="Integrity_DialogHint">
+    W&#228;hle die zu reparierenden Dateien. Sie werden aus dem Feed neu geladen und &#252;berschrieben; andere Dateien bleiben unber&#252;hrt.
+  </system:String
   >
-  <system:String x:Key="Integrity_ProblemsFound"
-    >{0} Datei(en) haben die Pr&#252;fung f&#252;r {1} nicht bestanden:</system:String
+  <system:String x:Key="Integrity_ProblemsFound">
+    {0} Datei(en) haben die Pr&#252;fung f&#252;r {1} nicht bestanden:
+  </system:String
   >
   <system:String x:Key="Integrity_StatusMissing">fehlt</system:String>
   <system:String x:Key="Integrity_StatusModified">ge&#228;ndert</system:String>
   <system:String x:Key="Integrity_RepairSelected">Ausgew&#228;hlte reparieren</system:String>
   <system:String x:Key="Integrity_Cancel">Abbrechen</system:String>
   <system:String x:Key="Integrity_AllOk">Alle {0} Dateien sind intakt.</system:String>
+  <system:String x:Key="Integrity_OkWithUnverifiable">
+    {0} Dateien sind intakt. {1} konnten nicht gepr&#252;ft werden (vor der Integrit&#228;tspr&#252;fung installiert, keine gespeicherten Hashes).
+  </system:String
+  >
+  <system:String x:Key="Integrity_NoFiles">
+    F&#252;r dieses Produkt gibt es kein Datei-Manifest zum Pr&#252;fen. Das ist in der Demo normal und bei Installationen von vor der Integrit&#228;tspr&#252;fung; eine echte Installation speichert Datei-Hashes, die hier gepr&#252;ft werden.
+  </system:String
+  >
   <system:String x:Key="Integrity_Repaired">{0} Datei(en) repariert.</system:String>
   <system:String x:Key="Integrity_Failed">Dateipr&#252;fung fehlgeschlagen</system:String>
   <system:String x:Key="FeedLock_Op_RemoveLock">Sperre entfernen</system:String>
   <system:String x:Key="FeedLock_Op_SaveChanges">&#196;nderungen speichern</system:String>
-  <system:String x:Key="FeedLock_SaveCancelled"
-    >Speichern abgebrochen &#8212; f&#252;r &#196;nderungen an einem gesperrten Feed ist das Feed-Passwort erforderlich.</system:String
+  <system:String x:Key="FeedLock_SaveCancelled">
+    Speichern abgebrochen &#8212; f&#252;r &#196;nderungen an einem gesperrten Feed ist das Feed-Passwort erforderlich.
+  </system:String
   >
-  <system:String x:Key="Settings_FeedLock"
-    >Passwort f&#252;r Installation/Update/Deinstallation/Aktionen verlangen</system:String
+  <system:String x:Key="Settings_FeedLock">
+    Passwort f&#252;r Installation/Update/Deinstallation/Aktionen verlangen
+  </system:String
   >
-  <system:String x:Key="Settings_FeedLock_Hint"
-    >Soft-Lock: Vor jeder Aktion an Produkten aus diesem Feed erscheint eine lokale Passwortabfrage. Feld leer lassen, um das aktuelle Passwort beizubehalten.</system:String
+  <system:String x:Key="Settings_FeedLock_Hint">
+    Soft-Lock: Vor jeder Aktion an Produkten aus diesem Feed erscheint eine lokale Passwortabfrage. Feld leer lassen, um das aktuelle Passwort beizubehalten.
+  </system:String
   >
   <system:String x:Key="Settings_FeedReportUrl">Report-URL (optional)</system:String>
-  <system:String x:Key="Settings_FeedReport_Hint"
-    >Wenn gesetzt, wird bei jeder Installation/Aktualisierung/Entfernung eines Produkts aus diesem Feed der vollst&#228;ndige Bestand an diese Adresse gesendet.</system:String
+  <system:String x:Key="Settings_FeedReport_Hint">
+    Wenn gesetzt, wird bei jeder Installation/Aktualisierung/Entfernung eines Produkts aus diesem Feed der vollst&#228;ndige Bestand an diese Adresse gesendet.
+  </system:String
   >
   <system:String x:Key="Settings_FeedReportSecret">Report-Secret</system:String>
   <system:String x:Key="Settings_FeedReportSecret_Hint">HMAC-SHA256</system:String>
-  <system:String x:Key="Settings_FeedReportCustomer"
-    >Kunden-/Deployment-ID (optional)</system:String
+  <system:String x:Key="Settings_FeedReportCustomer">
+    Kunden-/Deployment-ID (optional)
+  </system:String
   >
 </ResourceDictionary>
