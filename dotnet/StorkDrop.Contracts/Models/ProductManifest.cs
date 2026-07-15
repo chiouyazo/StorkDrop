@@ -29,5 +29,6 @@ public sealed record ProductManifest(
     string[]? PreserveOnSwitch = null,
     bool AllowMultipleInstances = false,
     string[]? ExcludeFiles = null,
-    Dictionary<string, string>? Metadata = null
+    Dictionary<string, string>? Metadata = null,
+    bool SharedInstallLocation = false
 );

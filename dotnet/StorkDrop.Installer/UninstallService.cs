@@ -188,6 +188,15 @@ public sealed class UninstallService
 
                 CleanupEmptyDirectories(product.InstalledPath);
             }
+            else if (await IsSharedInstallLocationAsync(product, cancellationToken))
+            {
+                _logger.LogWarning(
+                    "No file manifest for {ProductId} in shared install location '{Path}'; leaving "
+                        + "the directory intact to avoid removing other products' files.",
+                    product.ProductId,
+                    product.InstalledPath
+                );
+            }
             else
             {
                 _logger.LogWarning(
@@ -472,6 +481,34 @@ public sealed class UninstallService
         foreach (string file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
             File.Copy(file, file.Replace(source, destination), true);
+        }
+    }
+
+    private static async Task<bool> IsSharedInstallLocationAsync(
+        InstalledProduct product,
+        CancellationToken cancellationToken
+    )
+    {
+        string manifestPath = Path.Combine(product.InstalledPath, ".stork", "manifest.json");
+        if (!File.Exists(manifestPath))
+            return false;
+
+        try
+        {
+            string json = await File.ReadAllTextAsync(manifestPath, cancellationToken);
+            ProductManifest? manifest =
+                System.Text.Json.JsonSerializer.Deserialize<ProductManifest>(
+                    json,
+                    new System.Text.Json.JsonSerializerOptions
+                    {
+                        PropertyNameCaseInsensitive = true,
+                    }
+                );
+            return manifest?.SharedInstallLocation ?? false;
+        }
+        catch
+        {
+            return false;
         }
     }
 

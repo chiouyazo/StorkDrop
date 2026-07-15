@@ -966,6 +966,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 resolvedPath,
                 pluginContext,
                 extractPath,
+                copySourcePath,
+                handledFiles,
                 instanceUniqueId,
                 progress,
                 cancellationToken,
@@ -1677,7 +1679,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 StringComparison.OrdinalIgnoreCase
             ) && !(p.ProductId == manifest.ProductId && p.InstanceId == options.InstanceId)
         );
-        if (conflict is not null)
+        if (conflict is not null && !manifest.SharedInstallLocation)
         {
             string conflictMsg =
                 $"Install path '{resolvedTargetPath}' is already used by {conflict.ProductId}/{conflict.InstanceId}. "
@@ -1692,6 +1694,18 @@ public sealed class InstallationEngine : IInstallationEngine
                     ErrorMessage = conflictMsg,
                     FailedStep = "PathConflict",
                 }
+            );
+        }
+
+        if (conflict is not null)
+        {
+            _logger.LogInformation(
+                "Install path '{Path}' is a declared shared install location; {ProductId} installs "
+                    + "alongside {ConflictId}/{ConflictInstance}.",
+                resolvedTargetPath,
+                manifest.ProductId,
+                conflict.ProductId,
+                conflict.InstanceId
             );
         }
 
@@ -1892,6 +1906,8 @@ public sealed class InstallationEngine : IInstallationEngine
         string resolvedPath,
         PluginContext pluginContext,
         string extractPath,
+        string copySourcePath,
+        HashSet<string> handledFiles,
         string instanceUniqueId,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken,
@@ -1960,6 +1976,9 @@ public sealed class InstallationEngine : IInstallationEngine
             instanceUniqueId,
             resolvedPath,
             manifest.ExcludeFiles,
+            manifest.SharedInstallLocation,
+            copySourcePath,
+            handledFiles,
             cancellationToken
         );
 
@@ -3236,6 +3255,9 @@ public sealed class InstallationEngine : IInstallationEngine
         string uniqueId,
         string installPath,
         string[]? excludeFiles,
+        bool sharedInstallLocation,
+        string contentSourcePath,
+        HashSet<string> handledFiles,
         CancellationToken cancellationToken
     )
     {
@@ -3247,7 +3269,32 @@ public sealed class InstallationEngine : IInstallationEngine
 
             HashSet<string> excluded = ResolveExcludedFiles(installPath, excludeFiles);
 
-            string[] allFiles = Directory.GetFiles(installPath, "*", SearchOption.AllDirectories);
+            string sourceRoot = sharedInstallLocation ? contentSourcePath : installPath;
+            string[] sourceFiles =
+                sharedInstallLocation && !Directory.Exists(contentSourcePath)
+                    ? Array.Empty<string>()
+                    : Directory.GetFiles(sourceRoot, "*", SearchOption.AllDirectories);
+
+            List<(string RelativePath, string TargetPath)> toHash = new List<(string, string)>();
+            foreach (string file in sourceFiles)
+            {
+                // Files claimed by plugin file handlers were not copied into the target.
+                if (sharedInstallLocation && handledFiles.Contains(file))
+                    continue;
+
+                string relativePath = Path.GetRelativePath(sourceRoot, file);
+                string targetPath = sharedInstallLocation
+                    ? Path.Combine(installPath, relativePath)
+                    : file;
+
+                if (excluded.Contains(targetPath))
+                    continue;
+                if (!File.Exists(targetPath))
+                    continue;
+
+                toHash.Add((relativePath, targetPath));
+            }
+
             System.Collections.Concurrent.ConcurrentBag<TrackedFile> tracked =
                 new System.Collections.Concurrent.ConcurrentBag<TrackedFile>();
 
@@ -3257,13 +3304,18 @@ public sealed class InstallationEngine : IInstallationEngine
                 CancellationToken = cancellationToken,
             };
             await Parallel.ForEachAsync(
-                allFiles.Where(file => !excluded.Contains(file)),
+                toHash,
                 parallelOptions,
-                async (file, ct) =>
+                async (item, ct) =>
                 {
-                    string relativePath = Path.GetRelativePath(installPath, file);
-                    string sha = await FileHasher.ComputeSha256Async(file, ct);
-                    tracked.Add(new TrackedFile(relativePath, sha, new FileInfo(file).Length));
+                    string sha = await FileHasher.ComputeSha256Async(item.TargetPath, ct);
+                    tracked.Add(
+                        new TrackedFile(
+                            item.RelativePath,
+                            sha,
+                            new FileInfo(item.TargetPath).Length
+                        )
+                    );
                 }
             );
 
