@@ -148,23 +148,35 @@ public sealed class UninstallService
 
         if (Directory.Exists(product.InstalledPath))
         {
-            List<string>? trackedFiles = await LoadFileManifestAsync(
+            List<TrackedFile>? entries = await LoadFileManifestEntriesAsync(
                 product.ProductId,
                 product.InstanceUniqueId ?? string.Empty,
                 cancellationToken
             );
+            bool shared = await IsSharedInstallLocationAsync(product, cancellationToken);
 
-            if (trackedFiles is not null && trackedFiles.Count > 0)
+            List<string> filesToDelete;
+            if (entries is null)
+                filesToDelete = new List<string>();
+            else if (shared)
+                filesToDelete = entries
+                    .Where(e => !string.IsNullOrEmpty(e.Sha256))
+                    .Select(e => e.Path)
+                    .ToList();
+            else
+                filesToDelete = entries.Select(e => e.Path).ToList();
+
+            if (filesToDelete.Count > 0)
             {
                 _logger.LogInformation(
                     "Deleting {Count} tracked files for {ProductId}",
-                    trackedFiles.Count,
+                    filesToDelete.Count,
                     product.ProductId
                 );
 
-                int totalFiles = trackedFiles.Count;
+                int totalFiles = filesToDelete.Count;
                 int deletedCount = 0;
-                foreach (string relativePath in trackedFiles)
+                foreach (string relativePath in filesToDelete)
                 {
                     string fullPath = Path.Combine(product.InstalledPath, relativePath);
                     if (File.Exists(fullPath))
@@ -188,11 +200,11 @@ public sealed class UninstallService
 
                 CleanupEmptyDirectories(product.InstalledPath);
             }
-            else if (await IsSharedInstallLocationAsync(product, cancellationToken))
+            else if (shared)
             {
                 _logger.LogWarning(
-                    "No file manifest for {ProductId} in shared install location '{Path}'; leaving "
-                        + "the directory intact to avoid removing other products' files.",
+                    "No verifiable tracked files for {ProductId} in shared install location '{Path}'; "
+                        + "leaving the directory intact to avoid removing other products' or the host's files.",
                     product.ProductId,
                     product.InstalledPath
                 );
@@ -509,6 +521,32 @@ public sealed class UninstallService
         catch
         {
             return false;
+        }
+    }
+
+    private static async Task<List<TrackedFile>?> LoadFileManifestEntriesAsync(
+        string productId,
+        string uniqueId,
+        CancellationToken cancellationToken
+    )
+    {
+        string manifestPath = StorkPaths.FileManifestPath(productId, uniqueId);
+        if (!File.Exists(manifestPath))
+        {
+            string legacyPath = StorkPaths.LegacyFileManifestPath(productId);
+            if (File.Exists(legacyPath))
+                manifestPath = legacyPath;
+            else
+                return null;
+        }
+
+        try
+        {
+            return await FileManifestStore.ReadAsync(manifestPath, cancellationToken);
+        }
+        catch
+        {
+            return null;
         }
     }
 

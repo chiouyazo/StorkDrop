@@ -1976,7 +1976,6 @@ public sealed class InstallationEngine : IInstallationEngine
             instanceUniqueId,
             resolvedPath,
             manifest.ExcludeFiles,
-            manifest.SharedInstallLocation,
             copySourcePath,
             handledFiles,
             cancellationToken
@@ -2214,7 +2213,15 @@ public sealed class InstallationEngine : IInstallationEngine
                     cancellationToken
                 );
 
-                if (trackedFiles is not null)
+                if (newManifest.SharedInstallLocation)
+                {
+                    _logger.LogInformation(
+                        "Shared install location for {ProductId}; overwriting in place without "
+                            + "deleting existing files.",
+                        installed.ProductId
+                    );
+                }
+                else if (trackedFiles is not null)
                 {
                     HashSet<string> excluded = ResolveExcludedFiles(
                         installed.InstalledPath,
@@ -3255,7 +3262,6 @@ public sealed class InstallationEngine : IInstallationEngine
         string uniqueId,
         string installPath,
         string[]? excludeFiles,
-        bool sharedInstallLocation,
         string contentSourcePath,
         HashSet<string> handledFiles,
         CancellationToken cancellationToken
@@ -3269,23 +3275,19 @@ public sealed class InstallationEngine : IInstallationEngine
 
             HashSet<string> excluded = ResolveExcludedFiles(installPath, excludeFiles);
 
-            string sourceRoot = sharedInstallLocation ? contentSourcePath : installPath;
-            string[] sourceFiles =
-                sharedInstallLocation && !Directory.Exists(contentSourcePath)
-                    ? Array.Empty<string>()
-                    : Directory.GetFiles(sourceRoot, "*", SearchOption.AllDirectories);
+            string[] sourceFiles = Directory.Exists(contentSourcePath)
+                ? Directory.GetFiles(contentSourcePath, "*", SearchOption.AllDirectories)
+                : Array.Empty<string>();
 
             List<(string RelativePath, string TargetPath)> toHash = new List<(string, string)>();
             foreach (string file in sourceFiles)
             {
                 // Files claimed by plugin file handlers were not copied into the target.
-                if (sharedInstallLocation && handledFiles.Contains(file))
+                if (handledFiles.Contains(file))
                     continue;
 
-                string relativePath = Path.GetRelativePath(sourceRoot, file);
-                string targetPath = sharedInstallLocation
-                    ? Path.Combine(installPath, relativePath)
-                    : file;
+                string relativePath = Path.GetRelativePath(contentSourcePath, file);
+                string targetPath = Path.Combine(installPath, relativePath);
 
                 if (excluded.Contains(targetPath))
                     continue;
