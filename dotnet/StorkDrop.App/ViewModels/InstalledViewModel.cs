@@ -116,7 +116,10 @@ public partial class InstalledViewModel : ObservableObject
                 foreach (InstalledProduct p in installed)
                 {
                     bool hasPlugins = false;
-                    string manifestPath = Path.Combine(p.InstalledPath, ".stork", "manifest.json");
+                    string manifestPath = StorkPaths.ProductManifestFile(
+                        p.ProductId,
+                        p.InstanceUniqueId ?? string.Empty
+                    );
                     if (File.Exists(manifestPath))
                     {
                         try
@@ -146,7 +149,10 @@ public partial class InstalledViewModel : ObservableObject
                     }
 
                     bool hasFileHandlerData = false;
-                    string storkFilesDir = Path.Combine(p.InstalledPath, ".stork", "files");
+                    string storkFilesDir = StorkPaths.ProductHandledFilesDir(
+                        p.ProductId,
+                        p.InstanceUniqueId ?? string.Empty
+                    );
                     try
                     {
                         if (

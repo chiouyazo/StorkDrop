@@ -80,6 +80,35 @@ public sealed class StorkPathsTests
     }
 
     [Fact]
+    public void ProductMetadata_LivesUnderConfig_NotInInstallDirectory()
+    {
+        string installPath = @"C:\Program Files (x86)\STAPS\Application";
+        string metadataDir = StorkPaths.ProductMetadataDir("some-product", "ab12cd34");
+
+        // The whole point of the fix: metadata must NOT live inside the product's install directory
+        // (which may be shared), but under StorkDrop's own per-instance config.
+        metadataDir.Should().StartWith(StorkPaths.StorkConfigDir);
+        metadataDir.Should().NotStartWith(installPath);
+        StorkPaths.ProductManifestFile("some-product", "ab12cd34").Should().StartWith(metadataDir);
+        StorkPaths.ProductPluginsDir("some-product", "ab12cd34").Should().StartWith(metadataDir);
+        StorkPaths
+            .ProductHandledFilesDir("some-product", "ab12cd34")
+            .Should()
+            .StartWith(metadataDir);
+    }
+
+    [Fact]
+    public void ProductMetadata_IsIsolatedPerProductAndInstance()
+    {
+        string a = StorkPaths.ProductMetadataDir("product-a", "inst0001");
+        string b = StorkPaths.ProductMetadataDir("product-b", "inst0001");
+        string a2 = StorkPaths.ProductMetadataDir("product-a", "inst0002");
+
+        a.Should().NotBe(b);
+        a.Should().NotBe(a2);
+    }
+
+    [Fact]
     public void Branding_Default_UsesPlainStorkDropFolder()
     {
         Branding.Initialize(BrandingInfo.Default);

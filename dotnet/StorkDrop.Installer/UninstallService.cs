@@ -254,7 +254,10 @@ public sealed class UninstallService
         await _activityLog.LogAsync(entry, cancellationToken);
 
         progress?.Report(new InstallProgress(InstallStage.Uninstalling, 95, "Cleaning up..."));
-        string storkDir = Path.Combine(product.InstalledPath, ".stork");
+        string storkDir = StorkPaths.ProductMetadataDir(
+            product.ProductId,
+            product.InstanceUniqueId ?? string.Empty
+        );
         if (Directory.Exists(storkDir))
         {
             try
@@ -263,7 +266,7 @@ public sealed class UninstallService
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not delete .stork directory");
+                _logger.LogWarning(ex, "Could not delete product metadata directory");
             }
         }
 
@@ -283,7 +286,10 @@ public sealed class UninstallService
         CancellationToken cancellationToken
     )
     {
-        string manifestPath = Path.Combine(product.InstalledPath, ".stork", "manifest.json");
+        string manifestPath = StorkPaths.ProductManifestFile(
+            product.ProductId,
+            product.InstanceUniqueId ?? string.Empty
+        );
         if (!File.Exists(manifestPath))
             return;
 
@@ -302,7 +308,10 @@ public sealed class UninstallService
             if (manifest?.Plugins is not { Length: > 0 })
                 return;
 
-            string storkPluginsDir = Path.Combine(product.InstalledPath, ".stork");
+            string storkPluginsDir = StorkPaths.ProductMetadataDir(
+                product.ProductId,
+                product.InstanceUniqueId ?? string.Empty
+            );
 
             Dictionary<string, string> savedConfigValues = new Dictionary<string, string>();
             try
@@ -501,7 +510,10 @@ public sealed class UninstallService
         CancellationToken cancellationToken
     )
     {
-        string manifestPath = Path.Combine(product.InstalledPath, ".stork", "manifest.json");
+        string manifestPath = StorkPaths.ProductManifestFile(
+            product.ProductId,
+            product.InstanceUniqueId ?? string.Empty
+        );
         if (!File.Exists(manifestPath))
             return false;
 

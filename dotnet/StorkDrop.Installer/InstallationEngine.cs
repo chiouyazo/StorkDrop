@@ -857,7 +857,10 @@ public sealed class InstallationEngine : IInstallationEngine
             string pluginsExtractDir = Path.Combine(extractPath, "plugins");
             if (Directory.Exists(pluginsExtractDir))
             {
-                string storkPluginsDir = Path.Combine(resolvedPath, ".stork", "plugins");
+                string storkPluginsDir = StorkPaths.ProductPluginsDir(
+                    manifest.ProductId,
+                    instanceUniqueId
+                );
                 _logger.LogInformation("Copying product plugins to {Dir}", storkPluginsDir);
                 ReportProgress(InstallStage.Installing, 0, "Copying product plugins...");
                 FileOperations pluginCopyOps = new();
@@ -907,7 +910,10 @@ public sealed class InstallationEngine : IInstallationEngine
 
             if (handledFiles.Count > 0)
             {
-                string storkFilesDir = Path.Combine(resolvedPath, ".stork", "files");
+                string storkFilesDir = StorkPaths.ProductHandledFilesDir(
+                    manifest.ProductId,
+                    instanceUniqueId
+                );
                 Directory.CreateDirectory(storkFilesDir);
                 foreach (string handledFile in handledFiles)
                 {
@@ -935,7 +941,10 @@ public sealed class InstallationEngine : IInstallationEngine
 
             if (manifest.Plugins is { Length: > 0 })
             {
-                string storkDir = Path.Combine(resolvedPath, ".stork");
+                string storkDir = StorkPaths.ProductMetadataDir(
+                    manifest.ProductId,
+                    instanceUniqueId
+                );
                 Directory.CreateDirectory(storkDir);
                 string manifestJson = System.Text.Json.JsonSerializer.Serialize(
                     manifest,
@@ -946,7 +955,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     manifestJson,
                     cancellationToken
                 );
-                _logger.LogDebug("Saved product manifest to .stork/manifest.json");
+                _logger.LogDebug("Saved product manifest to {Dir}", storkDir);
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -2248,7 +2257,10 @@ public sealed class InstallationEngine : IInstallationEngine
                     }
                 }
 
-                string oldStorkDir = Path.Combine(installed.InstalledPath, ".stork");
+                string oldStorkDir = StorkPaths.ProductMetadataDir(
+                    installed.ProductId,
+                    installed.InstanceUniqueId ?? string.Empty
+                );
                 try
                 {
                     if (Directory.Exists(oldStorkDir))
@@ -2431,7 +2443,10 @@ public sealed class InstallationEngine : IInstallationEngine
                 $"Loading plugin data for {product.Title}..."
             );
 
-            string storkDir = Path.Combine(product.InstalledPath, ".stork");
+            string storkDir = StorkPaths.ProductMetadataDir(
+                product.ProductId,
+                product.InstanceUniqueId ?? string.Empty
+            );
             string manifestPath = Path.Combine(storkDir, "manifest.json");
 
             if (!File.Exists(manifestPath))
@@ -2888,7 +2903,10 @@ public sealed class InstallationEngine : IInstallationEngine
                 )
                     pluginSearchPath = extractPath;
                 else
-                    pluginSearchPath = Path.Combine(options.TargetPath, ".stork");
+                    pluginSearchPath = StorkPaths.ProductMetadataDir(
+                        manifest.ProductId,
+                        context.InstanceUniqueId
+                    );
                 plugin = LoadPlugin(pluginSearchPath, pluginInfo, _activePluginContexts);
                 if (plugin is null)
                 {

@@ -64,6 +64,27 @@ public static class StorkPaths
         Path.Combine(StorkConfigDir, $"{productId}_{uniqueId}.files.json");
 
     /// <summary>
+    /// Per-product-instance metadata directory holding the product manifest copy, plugin DLLs and
+    /// stored file-handler files used for uninstall and re-execute. It lives under StorkDrop's own
+    /// config, NOT inside the product's install directory, so products that share an install folder
+    /// never overwrite or delete each other's metadata.
+    /// </summary>
+    public static string ProductMetadataDir(string productId, string uniqueId) =>
+        Path.Combine(StorkConfigDir, "metadata", $"{productId}_{uniqueId}");
+
+    /// <summary>The product manifest copy for a specific instance (inside <see cref="ProductMetadataDir"/>).</summary>
+    public static string ProductManifestFile(string productId, string uniqueId) =>
+        Path.Combine(ProductMetadataDir(productId, uniqueId), "manifest.json");
+
+    /// <summary>The plugin DLL directory for a specific instance (inside <see cref="ProductMetadataDir"/>).</summary>
+    public static string ProductPluginsDir(string productId, string uniqueId) =>
+        Path.Combine(ProductMetadataDir(productId, uniqueId), "plugins");
+
+    /// <summary>The stored file-handler files directory for a specific instance (inside <see cref="ProductMetadataDir"/>).</summary>
+    public static string ProductHandledFilesDir(string productId, string uniqueId) =>
+        Path.Combine(ProductMetadataDir(productId, uniqueId), "files");
+
+    /// <summary>
     /// Gets the plugin configuration values path for a specific product instance.
     /// Uses the 8-char InstanceUniqueId, not the user-facing InstanceId.
     /// </summary>
