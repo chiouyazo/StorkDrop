@@ -424,7 +424,8 @@ public partial class App : Application
                 await Dispatcher.InvokeAsync(() =>
                 {
                     owner.IsEnabled = false;
-                    owner.Title = $"StorkDrop - Downloading update v{update.Version}...";
+                    owner.Title =
+                        $"{Branding.Current.WindowTitle} - Downloading update v{update.Version}...";
                 });
 
                 try
@@ -436,7 +437,7 @@ public partial class App : Application
                     await Dispatcher.InvokeAsync(() =>
                     {
                         owner.IsEnabled = true;
-                        owner.Title = "StorkDrop";
+                        owner.Title = Branding.Current.WindowTitle;
                         MessageBox.Show(
                             $"Update download failed: {dlEx.Message}",
                             "Update Error",

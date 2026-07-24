@@ -97,6 +97,9 @@ public partial class SettingsViewModel : ObservableObject
     private bool _includeDevVersions;
 
     [ObservableProperty]
+    private bool _runInBackground = true;
+
+    [ObservableProperty]
     private bool _isCheckingForUpdates;
 
     [ObservableProperty]
@@ -185,6 +188,7 @@ public partial class SettingsViewModel : ObservableObject
 
             CheckForStorkDropUpdates = config.CheckForStorkDropUpdates;
             IncludeDevVersions = config.IncludeDevVersions;
+            RunInBackground = config.RunInBackground;
 
             SelectedLanguage = config.Language;
             SelectedLogLevel = config.LogLevel ?? "Information";
@@ -405,7 +409,8 @@ public partial class SettingsViewModel : ObservableObject
                 Language: SelectedLanguage,
                 LogLevel: SelectedLogLevel,
                 CheckForStorkDropUpdates: CheckForStorkDropUpdates,
-                IncludeDevVersions: IncludeDevVersions
+                IncludeDevVersions: IncludeDevVersions,
+                RunInBackground: RunInBackground
             );
 
             await Task.Run(() => _configurationService.SaveAsync(config));

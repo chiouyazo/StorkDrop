@@ -244,7 +244,7 @@ public partial class MarketplaceViewModel : ObservableObject
 
                     foreach (ResolvedPostProduct reqProduct in reqDialog.SelectedProducts)
                     {
-                        await InstallPostProductAsync(reqProduct);
+                        bool requiredIsPlugin = await InstallPostProductAsync(reqProduct);
 
                         IReadOnlyList<InstalledProduct> checkInstances = await Task.Run(() =>
                             _productRepository.GetInstancesAsync(reqProduct.Manifest.ProductId)
@@ -254,6 +254,20 @@ public partial class MarketplaceViewModel : ObservableObject
                             _logger.LogWarning(
                                 "Required product {ProductId} was not installed successfully, aborting",
                                 reqProduct.Manifest.ProductId
+                            );
+                            return;
+                        }
+
+                        if (requiredIsPlugin)
+                        {
+                            _logger.LogInformation(
+                                "Required product {ProductId} is a plugin; stopping install of {ParentId} until restart and configuration",
+                                reqProduct.Manifest.ProductId,
+                                manifest.ProductId
+                            );
+                            PluginInstallHelper.PromptRestartForRequiredPlugin(
+                                reqProduct.Manifest.Title,
+                                product.Title
                             );
                             return;
                         }
@@ -462,7 +476,8 @@ public partial class MarketplaceViewModel : ObservableObject
         }
     }
 
-    private async Task InstallPostProductAsync(ResolvedPostProduct postProduct)
+    /// <returns>True when the installed product is a plugin (installed into the plugins directory).</returns>
+    private async Task<bool> InstallPostProductAsync(ResolvedPostProduct postProduct)
     {
         ProductManifest manifest = postProduct.Manifest;
 
@@ -484,7 +499,7 @@ public partial class MarketplaceViewModel : ObservableObject
         dialog.Owner = System.Windows.Application.Current.MainWindow;
 
         if (dialog.ShowDialog() != true || !dialog.Confirmed)
-            return;
+            return false;
 
         string targetPath = dialog.SelectedPath;
 
@@ -530,7 +545,7 @@ public partial class MarketplaceViewModel : ObservableObject
             {
                 // Notification failures should never block
             }
-            return;
+            return false;
         }
 
         tracked.Complete(true);
@@ -556,6 +571,8 @@ public partial class MarketplaceViewModel : ObservableObject
             card.HasUpdate = false;
             card.InstalledVersion = manifest.Version;
         }
+
+        return PluginInstallHelper.IsPluginTarget(targetPath);
     }
 
     /// <summary>

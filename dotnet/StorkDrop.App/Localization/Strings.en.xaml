@@ -123,6 +123,9 @@
 
   <!-- Settings fields -->
   <system:String x:Key="Settings_AutoStart">Start with Windows</system:String>
+  <system:String x:Key="Settings_RunInBackground"
+    >Keep running in the background when the window is closed</system:String
+  >
   <system:String x:Key="Settings_AutoUpdate">Automatically check for product updates</system:String>
   <system:String x:Key="Settings_CheckInterval">Check interval (hours)</system:String>
   <system:String x:Key="Settings_Proxy">Proxy Settings</system:String>
@@ -247,6 +250,10 @@
   <!-- Restart -->
   <system:String x:Key="Restart_PluginInstalled">
     {0} has been installed. StorkDrop needs to restart to load the new plugin. Restart now?
+  </system:String
+  >
+  <system:String x:Key="Restart_RequiredPluginInstalled">
+    The required plugin '{0}' has been installed. StorkDrop needs to restart so the plugin is loaded and can be configured before '{1}' can be installed. The installation of '{1}' has been stopped. Restart now?
   </system:String
   >
 
@@ -413,6 +420,10 @@
   <!-- Settings tooltip -->
   <system:String x:Key="Settings_AutoUpdateHint">
     StorkDrop checks your installed products for updates in the background and shows toast notifications.
+  </system:String
+  >
+  <system:String x:Key="Settings_RunInBackgroundHint">
+    When enabled, closing the window keeps StorkDrop running in the system tray so background update checks and notifications continue. When disabled, closing the window exits StorkDrop completely.
   </system:String
   >
 

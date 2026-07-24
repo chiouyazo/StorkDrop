@@ -129,6 +129,9 @@
 
   <!-- Settings fields -->
   <system:String x:Key="Settings_AutoStart">Mit Windows starten</system:String>
+  <system:String x:Key="Settings_RunInBackground"
+    >Beim Schlie&#223;en des Fensters im Hintergrund weiterlaufen</system:String
+  >
   <system:String x:Key="Settings_AutoUpdate">Automatisch nach Produkt-Updates suchen</system:String>
   <system:String x:Key="Settings_CheckInterval">Pr&#252;fintervall (Stunden)</system:String>
   <system:String x:Key="Settings_Proxy">Proxy-Einstellungen</system:String>
@@ -283,6 +286,10 @@
   <!-- Restart -->
   <system:String x:Key="Restart_PluginInstalled">
     {0} wurde installiert. StorkDrop muss neu gestartet werden, um das neue Plugin zu laden. Jetzt neu starten?
+  </system:String
+  >
+  <system:String x:Key="Restart_RequiredPluginInstalled">
+    Das erforderliche Plugin '{0}' wurde installiert. StorkDrop muss neu gestartet werden, damit das Plugin geladen und konfiguriert werden kann, bevor '{1}' installiert werden kann. Die Installation von '{1}' wurde gestoppt. Jetzt neu starten?
   </system:String
   >
 
@@ -458,6 +465,10 @@
   <!-- Settings tooltip -->
   <system:String x:Key="Settings_AutoUpdateHint">
     StorkDrop pr&#252;ft installierte Produkte im Hintergrund auf Updates und zeigt Toast-Benachrichtigungen an.
+  </system:String
+  >
+  <system:String x:Key="Settings_RunInBackgroundHint">
+    Wenn aktiviert, l&#228;uft StorkDrop beim Schlie&#223;en des Fensters im Infobereich weiter, sodass Hintergrund-Updatepr&#252;fungen und Benachrichtigungen fortgesetzt werden. Wenn deaktiviert, wird StorkDrop beim Schlie&#223;en des Fensters vollst&#228;ndig beendet.
   </system:String
   >
 

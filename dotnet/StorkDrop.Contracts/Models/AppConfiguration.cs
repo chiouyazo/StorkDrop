@@ -13,5 +13,6 @@ public sealed record AppConfiguration(
     string? LogLevel = "Information",
     bool HasShownTrayToast = false,
     bool CheckForStorkDropUpdates = true,
-    bool IncludeDevVersions = false
+    bool IncludeDevVersions = false,
+    bool RunInBackground = true
 );

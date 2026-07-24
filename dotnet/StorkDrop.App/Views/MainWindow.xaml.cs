@@ -74,17 +74,33 @@ public partial class MainWindow : Window
         }
 
         TrayIconService? trayService = App.Services.GetService<TrayIconService>();
-        if (trayService?.IsVisible == true)
+        if (trayService?.IsVisible == true && ShouldRunInBackground())
         {
             e.Cancel = true;
             Hide();
         }
         else
         {
+            trayService?.Hide();
             Application.Current.Shutdown();
         }
 
         base.OnClosing(e);
+    }
+
+    private static bool ShouldRunInBackground()
+    {
+        try
+        {
+            IConfigurationService configService =
+                App.Services.GetRequiredService<IConfigurationService>();
+            AppConfiguration? config = configService.LoadAsync().GetAwaiter().GetResult();
+            return config?.RunInBackground ?? true;
+        }
+        catch
+        {
+            return true;
+        }
     }
 
     private static bool ShouldCancelForActiveInstallations()

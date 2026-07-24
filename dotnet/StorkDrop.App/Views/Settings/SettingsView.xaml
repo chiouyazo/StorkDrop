@@ -357,6 +357,32 @@
 
           <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
             <CheckBox
+              Content="{DynamicResource Settings_RunInBackground}"
+              IsChecked="{Binding RunInBackground}"
+            />
+            <Border
+              ToolTip="{DynamicResource Settings_RunInBackgroundHint}"
+              Margin="8,0,0,0"
+              Width="18"
+              Height="18"
+              CornerRadius="9"
+              Background="#CCCCCC"
+              Cursor="Help"
+              VerticalAlignment="Center"
+            >
+              <TextBlock
+                Text="?"
+                FontSize="11"
+                FontWeight="Bold"
+                Foreground="White"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+              />
+            </Border>
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <CheckBox
               Content="{DynamicResource Settings_AutoUpdate}"
               IsChecked="{Binding AutoCheckForUpdates}"
             />
