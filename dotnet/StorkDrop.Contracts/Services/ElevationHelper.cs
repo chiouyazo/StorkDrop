@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Security.Principal;
+using System.Text;
 
 namespace StorkDrop.Contracts.Services;
 
@@ -65,7 +66,10 @@ public static class ElevationHelper
         string targetPath,
         string feedId,
         string instanceId = InstanceIdHelper.DefaultInstanceId,
-        string? configFilePath = null
+        string? configFilePath = null,
+        Action<string>? onProgressLine = null,
+        Func<string, bool>? onLongRunning = null,
+        CancellationToken cancellationToken = default
     )
     {
         try
@@ -89,12 +93,16 @@ public static class ElevationHelper
                     $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" {pluginDirArgs} {configFileArg}".Trim(),
             };
 
-            Process? process = Process.Start(startInfo);
-            if (process is null)
-                return false;
-
-            process.WaitForExit(TimeSpan.FromMinutes(10));
-            return process.ExitCode == 0;
+            return WaitForElevatedProcess(
+                startInfo,
+                onProgressLine,
+                onLongRunning,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
@@ -104,7 +112,10 @@ public static class ElevationHelper
 
     public static bool RunElevatedUninstall(
         string productId,
-        string instanceId = InstanceIdHelper.DefaultInstanceId
+        string instanceId = InstanceIdHelper.DefaultInstanceId,
+        Action<string>? onProgressLine = null,
+        Func<string, bool>? onLongRunning = null,
+        CancellationToken cancellationToken = default
     )
     {
         try
@@ -124,12 +135,16 @@ public static class ElevationHelper
                     $"--uninstall \"{productId}\" --instance \"{instanceId}\" {GetPluginDirArgs()}".Trim(),
             };
 
-            Process? process = Process.Start(startInfo);
-            if (process is null)
-                return false;
-
-            process.WaitForExit(TimeSpan.FromMinutes(10));
-            return process.ExitCode == 0;
+            return WaitForElevatedProcess(
+                startInfo,
+                onProgressLine,
+                onLongRunning,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
@@ -142,7 +157,10 @@ public static class ElevationHelper
         string targetPath,
         string feedId,
         string instanceId = InstanceIdHelper.DefaultInstanceId,
-        string? configFilePath = null
+        string? configFilePath = null,
+        Action<string>? onProgressLine = null,
+        Func<string, bool>? onLongRunning = null,
+        CancellationToken cancellationToken = default
     )
     {
         try
@@ -165,16 +183,182 @@ public static class ElevationHelper
                     $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
             };
 
-            Process? process = Process.Start(startInfo);
-            if (process is null)
-                return false;
-
-            process.WaitForExit(TimeSpan.FromMinutes(10));
-            return process.ExitCode == 0;
+            return WaitForElevatedProcess(
+                startInfo,
+                onProgressLine,
+                onLongRunning,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {
             return false;
+        }
+    }
+
+    // Timeout after which onLongRunning is consulted before killing the child.
+    private static readonly TimeSpan LongRunningThreshold = TimeSpan.FromMinutes(10);
+
+    /// <summary>
+    /// Starts an elevated child process and waits for it to exit, surfacing progress by tailing
+    /// the shared StorkDrop rolling log file (stdout cannot be redirected under <c>runas</c>).
+    /// </summary>
+    /// <param name="startInfo">The elevated child process to start.</param>
+    /// <param name="onProgressLine">Invoked for each new non-empty log line appended while waiting.</param>
+    /// <param name="onLongRunning">
+    /// Invoked with the last observed log line when the process has run past the long-running
+    /// threshold without exiting. Return <c>true</c> to keep waiting, <c>false</c> to kill it.
+    /// When null, a long-running process is killed.
+    /// </param>
+    /// <param name="cancellationToken">
+    /// When cancellation is requested the elevated child is killed and an
+    /// <see cref="OperationCanceledException"/> is thrown.
+    /// </param>
+    /// <returns><c>true</c> only if the process exited with code 0.</returns>
+    private static bool WaitForElevatedProcess(
+        ProcessStartInfo startInfo,
+        Action<string>? onProgressLine,
+        Func<string, bool>? onLongRunning,
+        CancellationToken cancellationToken = default
+    )
+    {
+        // Determine the log file to tail and its current end position BEFORE starting the child,
+        // so we only surface lines produced by the elevated install.
+        string? logPath = GetNewestLogFile();
+        long position = 0;
+        if (logPath is not null)
+        {
+            try
+            {
+                position = new FileInfo(logPath).Length;
+            }
+            catch
+            {
+                position = 0;
+            }
+        }
+
+        Process? process = Process.Start(startInfo);
+        if (process is null)
+            return false;
+
+        string currentStep = string.Empty;
+        Stopwatch stopwatch = Stopwatch.StartNew();
+
+        while (!process.WaitForExit(1000))
+        {
+            (position, currentStep) = TailLog(logPath, position, currentStep, onProgressLine);
+
+            if (cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+                catch
+                {
+                    // Best effort; the process may have exited in the meantime.
+                }
+                cancellationToken.ThrowIfCancellationRequested();
+            }
+
+            if (stopwatch.Elapsed >= LongRunningThreshold)
+            {
+                bool keepWaiting = onLongRunning?.Invoke(currentStep) ?? false;
+                if (!keepWaiting)
+                {
+                    try
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                    catch
+                    {
+                        // Best effort; the process may have exited in the meantime.
+                    }
+                    return false;
+                }
+
+                stopwatch.Restart();
+            }
+        }
+
+        // Flush any lines appended just before exit.
+        TailLog(logPath, position, currentStep, onProgressLine);
+        return process.ExitCode == 0;
+    }
+
+    /// <summary>
+    /// Reads bytes appended to <paramref name="logPath"/> since <paramref name="position"/>, forwards
+    /// each new non-empty line via <paramref name="onProgressLine"/>, and returns the updated position
+    /// and last non-empty line seen.
+    /// </summary>
+    private static (long Position, string CurrentStep) TailLog(
+        string? logPath,
+        long position,
+        string currentStep,
+        Action<string>? onProgressLine
+    )
+    {
+        if (logPath is null)
+            return (position, currentStep);
+
+        try
+        {
+            using FileStream stream = new FileStream(
+                logPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete
+            );
+
+            if (position > stream.Length)
+                position = 0; // File was rolled/truncated; restart from the beginning.
+
+            stream.Seek(position, SeekOrigin.Begin);
+            using StreamReader reader = new StreamReader(stream, Encoding.UTF8);
+            string content = reader.ReadToEnd();
+            position = stream.Position;
+
+            foreach (string rawLine in content.Split('\n'))
+            {
+                string line = rawLine.TrimEnd('\r');
+                if (line.Length == 0)
+                    continue;
+
+                currentStep = line;
+                onProgressLine?.Invoke(line);
+            }
+        }
+        catch
+        {
+            // Log unavailable this tick; try again next poll.
+        }
+
+        return (position, currentStep);
+    }
+
+    /// <summary>Finds the most recently written <c>storkdrop-*.log</c> in the log directory, if any.</summary>
+    private static string? GetNewestLogFile()
+    {
+        try
+        {
+            string dir = StorkPaths.LogDir;
+            if (!Directory.Exists(dir))
+                return null;
+
+            return new DirectoryInfo(dir)
+                .GetFiles("storkdrop-*.log")
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .FirstOrDefault()
+                ?.FullName;
+        }
+        catch
+        {
+            return null;
         }
     }
 

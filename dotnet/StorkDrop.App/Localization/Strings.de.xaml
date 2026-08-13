@@ -129,8 +129,9 @@
 
   <!-- Settings fields -->
   <system:String x:Key="Settings_AutoStart">Mit Windows starten</system:String>
-  <system:String x:Key="Settings_RunInBackground"
-    >Beim Schlie&#223;en des Fensters im Hintergrund weiterlaufen</system:String
+  <system:String x:Key="Settings_RunInBackground">
+    Beim Schlie&#223;en des Fensters im Hintergrund weiterlaufen
+  </system:String
   >
   <system:String x:Key="Settings_AutoUpdate">Automatisch nach Produkt-Updates suchen</system:String>
   <system:String x:Key="Settings_CheckInterval">Pr&#252;fintervall (Stunden)</system:String>
@@ -212,6 +213,31 @@
   <system:String x:Key="Error_ValidationFailed">Validierungsfehler</system:String>
   <system:String x:Key="Error_UpdateCheckFailed">Update-Prüfung fehlgeschlagen</system:String>
   <system:String x:Key="Error_LoadLogFailed">Fehler beim Laden des Logs</system:String>
+
+  <!-- Elevated install -->
+  <system:String x:Key="Elevation_TakingLong_Title">
+    Installation dauert länger als erwartet
+  </system:String
+  >
+  <system:String x:Key="Elevation_TakingLong_Message">
+    Die Installation mit erhöhten Rechten läuft seit über 10 Minuten und ist noch nicht abgeschlossen.
+
+Aktueller Schritt: {0}
+
+Möchten Sie weiter warten oder die Installation abbrechen?
+  </system:String
+  >
+  <system:String x:Key="Elevation_Starting"
+    >Installation läuft mit Administratorrechten...</system:String
+  >
+  <system:String x:Key="Elevation_WaitMore">10 Minuten weiter warten</system:String>
+  <system:String x:Key="Elevation_Cancel">Installation abbrechen</system:String>
+  <system:String x:Key="Cancel_Install_Button">Installation abbrechen</system:String>
+  <system:String x:Key="Cancel_Install_Confirm_Title">Installation abbrechen?</system:String>
+  <system:String x:Key="Cancel_Install_Confirm_Message">
+    Möchten Sie diese Installation wirklich abbrechen? Bereits installierte Dateien werden zurückgesetzt.
+  </system:String
+  >
 
   <!-- Validation messages -->
   <system:String x:Key="Validation_FieldRequired">Dieses Feld ist erforderlich.</system:String>

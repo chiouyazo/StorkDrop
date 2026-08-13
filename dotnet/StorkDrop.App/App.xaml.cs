@@ -281,6 +281,11 @@ public partial class App : Application
                 return result;
             };
 
+            engine.OnLocalize = (key, args) =>
+                args.Length > 0
+                    ? Localization.LocalizationManager.GetString(key, args)
+                    : Localization.LocalizationManager.GetString(key);
+
             UninstallService uninstallService = Services.GetRequiredService<UninstallService>();
             uninstallService.OnLockedFilesDetected = lockedFilesHandler;
 

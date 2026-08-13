@@ -83,6 +83,12 @@ public interface IInstallationEngine
     /// </summary>
     Func<Models.PluginPrompt, Models.PluginPromptResult>? OnPrompt { get; set; }
 
+    /// <summary>
+    /// Set by the UI layer to resolve a localization key (with optional format arguments) to a
+    /// display string. When null, keys are returned verbatim.
+    /// </summary>
+    Func<string, object[], string>? OnLocalize { get; set; }
+
     IInteractiveStorkPlugin? CurrentInteractivePlugin { get; }
 
     /// <summary>

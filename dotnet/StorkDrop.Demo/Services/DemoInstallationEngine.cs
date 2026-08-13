@@ -24,6 +24,7 @@ internal sealed class DemoInstallationEngine : IInstallationEngine
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public LockedFilesCallback? OnLockedFilesDetected { get; set; }
     public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
+    public Func<string, object[], string>? OnLocalize { get; set; }
 
     public Task<Dictionary<string, string>> LoadSavedPluginConfigAsync(
         string productId,

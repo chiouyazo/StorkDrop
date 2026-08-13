@@ -123,8 +123,9 @@
 
   <!-- Settings fields -->
   <system:String x:Key="Settings_AutoStart">Start with Windows</system:String>
-  <system:String x:Key="Settings_RunInBackground"
-    >Keep running in the background when the window is closed</system:String
+  <system:String x:Key="Settings_RunInBackground">
+    Keep running in the background when the window is closed
+  </system:String
   >
   <system:String x:Key="Settings_AutoUpdate">Automatically check for product updates</system:String>
   <system:String x:Key="Settings_CheckInterval">Check interval (hours)</system:String>
@@ -185,6 +186,31 @@
   <system:String x:Key="Error_ValidationFailed">Validation error</system:String>
   <system:String x:Key="Error_UpdateCheckFailed">Update check failed</system:String>
   <system:String x:Key="Error_LoadLogFailed">Error loading log</system:String>
+
+  <!-- Elevated install -->
+  <system:String x:Key="Elevation_TakingLong_Title">
+    Installation is taking longer than expected
+  </system:String
+  >
+  <system:String x:Key="Elevation_TakingLong_Message">
+    The elevated installation has been running for over 10 minutes and has not finished yet.
+
+Current step: {0}
+
+Do you want to keep waiting, or cancel the installation?
+  </system:String
+  >
+  <system:String x:Key="Elevation_Starting"
+    >Running installation with administrator privileges...</system:String
+  >
+  <system:String x:Key="Elevation_WaitMore">Wait 10 more minutes</system:String>
+  <system:String x:Key="Elevation_Cancel">Cancel installation</system:String>
+  <system:String x:Key="Cancel_Install_Button">Cancel installation</system:String>
+  <system:String x:Key="Cancel_Install_Confirm_Title">Cancel installation?</system:String>
+  <system:String x:Key="Cancel_Install_Confirm_Message">
+    Do you really want to cancel this installation? Partially installed files will be rolled back.
+  </system:String
+  >
 
   <!-- Validation messages -->
   <system:String x:Key="Validation_FieldRequired">This field is required.</system:String>

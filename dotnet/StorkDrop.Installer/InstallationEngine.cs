@@ -41,7 +41,11 @@ public sealed class InstallationEngine : IInstallationEngine
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public LockedFilesCallback? OnLockedFilesDetected { get; set; }
     public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
+    public Func<string, object[], string>? OnLocalize { get; set; }
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
+
+    private string Localize(string key, params object[] args) =>
+        OnLocalize?.Invoke(key, args) ?? key;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="InstallationEngine"/> class.
@@ -1123,13 +1127,17 @@ public sealed class InstallationEngine : IInstallationEngine
                 instanceUniqueId
             );
 
+            ReportProgress(InstallStage.Installing, 0, Localize("Elevation_Starting"));
             bool elevated = ElevationHelper.RunElevatedInstall(
                 manifest.ProductId,
                 manifest.Version,
                 targetPath,
                 options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
                 options.InstanceId,
-                configFilePath
+                configFilePath,
+                onProgressLine: ReportElevatedProgressLine,
+                onLongRunning: HandleElevatedLongRunning,
+                cancellationToken: cancellationToken
             );
 
             if (!elevated)
@@ -1598,13 +1606,17 @@ public sealed class InstallationEngine : IInstallationEngine
                 string configJson = System.Text.Json.JsonSerializer.Serialize(elevationConfig);
                 await File.WriteAllTextAsync(configFilePath, configJson, cancellationToken);
 
+                ReportProgress(InstallStage.Installing, 0, Localize("Elevation_Starting"));
                 bool elevated = ElevationHelper.RunElevatedInstall(
                     manifest.ProductId,
                     manifest.Version,
                     resolvedTargetPath,
                     options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
                     options.InstanceId,
-                    configFilePath
+                    configFilePath,
+                    onProgressLine: ReportElevatedProgressLine,
+                    onLongRunning: HandleElevatedLongRunning,
+                    cancellationToken: cancellationToken
                 );
                 if (!elevated)
                     return (
@@ -3605,6 +3617,62 @@ public sealed class InstallationEngine : IInstallationEngine
     private void ReportProgress(InstallStage stage, int percentage, string message)
     {
         _currentProgress?.Report(new InstallProgress(stage, percentage, message));
+    }
+
+    /// <summary>
+    /// Forwards a log line emitted by the elevated child process to the install UI, stripping the
+    /// leading Serilog timestamp+level prefix (e.g. "2026-08-13 11:45:16.012 +02:00 [INF] ") so the
+    /// UI shows clean status text. Falls back to the raw line if parsing fails.
+    /// </summary>
+    private void ReportElevatedProgressLine(string line)
+    {
+        ReportProgress(InstallStage.Installing, 0, StripLogPrefix(line));
+    }
+
+    /// <summary>
+    /// Removes the Serilog line prefix up to and including the "[LVL] " level token, leaving the
+    /// message (and any embedded context such as "[Plugin] ..."). Returns the input unchanged when
+    /// no recognizable prefix is present.
+    /// </summary>
+    private static string StripLogPrefix(string line)
+    {
+        // Serilog default: "<timestamp> [LVL] <message>". Cut after the first "] " that follows a
+        // short bracketed level token near the start of the line.
+        int levelClose = line.IndexOf("] ", StringComparison.Ordinal);
+        if (levelClose > 0 && levelClose < 80)
+        {
+            int levelOpen = line.LastIndexOf('[', levelClose);
+            if (levelOpen >= 0 && levelClose - levelOpen <= 6)
+                return line[(levelClose + 2)..].TrimStart();
+        }
+
+        return line;
+    }
+
+    /// <summary>
+    /// Builds and shows the "installation is taking longer than expected" prompt via <see cref="OnPrompt"/>.
+    /// Returns true when the user chooses to keep waiting; false on cancel/dismiss or when no prompt
+    /// handler is registered (headless).
+    /// </summary>
+    private bool HandleElevatedLongRunning(string currentStep)
+    {
+        if (OnPrompt is null)
+            return false;
+
+        string step = string.IsNullOrWhiteSpace(currentStep)
+            ? string.Empty
+            : StripLogPrefix(currentStep);
+
+        PluginPrompt prompt = new PluginPrompt
+        {
+            Title = Localize("Elevation_TakingLong_Title"),
+            Message = Localize("Elevation_TakingLong_Message", step),
+            Options = { Localize("Elevation_WaitMore"), Localize("Elevation_Cancel") },
+            DefaultOptionIndex = 0,
+        };
+
+        PluginPromptResult response = OnPrompt(prompt);
+        return response.ChosenIndex == 0;
     }
 
     public Task<Dictionary<string, string>> LoadSavedPluginConfigAsync(
