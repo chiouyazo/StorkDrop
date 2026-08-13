@@ -200,6 +200,56 @@ public static class ElevationHelper
         }
     }
 
+    public static bool RunElevatedReExecute(
+        string productId,
+        string instanceId,
+        bool runPreInstall,
+        bool runPostInstall,
+        string? configFilePath = null,
+        Action<string>? onProgressLine = null,
+        Func<string, bool>? onLongRunning = null,
+        CancellationToken cancellationToken = default
+    )
+    {
+        try
+        {
+            string exePath =
+                Environment.ProcessPath
+                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
+            if (string.IsNullOrEmpty(exePath))
+                return false;
+
+            string configFileArg = configFilePath is not null
+                ? $"--config-file \"{configFilePath}\""
+                : "";
+            string skipPre = runPreInstall ? "" : "--skip-pre";
+            string skipPost = runPostInstall ? "" : "--skip-post";
+            ProcessStartInfo startInfo = new ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = true,
+                Verb = "runas",
+                Arguments =
+                    $"--reexecute \"{productId}\" --instance \"{instanceId}\" {skipPre} {skipPost} {GetPluginDirArgs()} {configFileArg}".Trim(),
+            };
+
+            return WaitForElevatedProcess(
+                startInfo,
+                onProgressLine,
+                onLongRunning,
+                cancellationToken
+            );
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     // Timeout after which onLongRunning is consulted before killing the child.
     private static readonly TimeSpan LongRunningThreshold = TimeSpan.FromMinutes(10);
 

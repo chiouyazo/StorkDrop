@@ -2743,6 +2743,27 @@ public sealed class InstallationEngine : IInstallationEngine
             Dictionary<string, string> effectiveConfig =
                 configValues ?? options.PluginConfigValues ?? new Dictionary<string, string>();
 
+            // Plugin phases (e.g. PostInstall) may write into the install dir. When that path needs
+            // admin and we are not elevated, re-run them in an elevated child - config was already
+            // gathered above, file handlers already ran here in the parent.
+            if (
+                hasPlugins
+                && manifest!.Plugins!.Any(p =>
+                    !disabledGroups.Contains($"preinstall-{p.TypeName}")
+                    || !disabledGroups.Contains($"postinstall-{p.TypeName}")
+                )
+                && !ElevationHelper.IsRunningAsAdmin()
+                && ElevationHelper.PathRequiresAdmin(product.InstalledPath)
+            )
+            {
+                return await ReExecuteElevatedAsync(
+                    product,
+                    effectiveConfig,
+                    options,
+                    cancellationToken
+                );
+            }
+
             if (hasPlugins)
             {
                 InstallOptions installOptions = new InstallOptions(
@@ -2871,6 +2892,46 @@ public sealed class InstallationEngine : IInstallationEngine
             CurrentInteractivePlugin = null;
             _currentProgress = null;
         }
+    }
+
+    private async Task<InstallResult> ReExecuteElevatedAsync(
+        InstalledProduct product,
+        Dictionary<string, string> configValues,
+        ReExecuteOptions options,
+        CancellationToken cancellationToken
+    )
+    {
+        string configFilePath = Path.Combine(
+            StorkPaths.TempDir,
+            $"elevation-config-{Guid.NewGuid()}.json"
+        );
+        Directory.CreateDirectory(StorkPaths.TempDir);
+        string json = System.Text.Json.JsonSerializer.Serialize(configValues);
+        await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
+
+        ReportProgress(InstallStage.RunningPlugins, 0, Localize("Elevation_Starting"));
+        bool elevated = ElevationHelper.RunElevatedReExecute(
+            product.ProductId,
+            product.InstanceId,
+            options.RunPreInstall,
+            options.RunPostInstall,
+            configFilePath,
+            onProgressLine: ReportElevatedProgressLine,
+            onLongRunning: HandleElevatedLongRunning,
+            cancellationToken: cancellationToken
+        );
+
+        if (!elevated)
+        {
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = "Plugin actions cancelled: administrator rights were denied.",
+                FailedStep = "Elevation",
+            };
+        }
+
+        return new InstallResult { Success = true };
     }
 
     private sealed class PluginPhaseResult

@@ -59,6 +59,15 @@ public partial class App : Application
             return;
         }
 
+        if (args.Length >= 3 && args[1] == "--reexecute")
+        {
+            string reExecuteInstanceId =
+                GetArgValue(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
+            await RunElevatedReExecuteAsync(args[2], reExecuteInstanceId);
+            Shutdown();
+            return;
+        }
+
         if (args.Length >= 2 && args[1] == "--cli")
         {
             await RunCliModeAsync(args);
@@ -556,6 +565,42 @@ public partial class App : Application
                     );
                     Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
                     await engine.UpdateAsync(installed, manifest, options, progress);
+                }
+            }
+        );
+    }
+
+    private Task RunElevatedReExecuteAsync(string productId, string instanceId)
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        bool skipPre = args.Contains("--skip-pre");
+        bool skipPost = args.Contains("--skip-post");
+        Dictionary<string, string>? configValues = LoadElevationConfigFile();
+
+        return RunElevatedAsync(
+            "re-execute",
+            async services =>
+            {
+                IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
+                IProductRepository productRepository =
+                    services.GetRequiredService<IProductRepository>();
+
+                InstalledProduct? installed = await productRepository.GetByIdAsync(
+                    productId,
+                    instanceId
+                );
+                if (installed is not null)
+                {
+                    ReExecuteOptions options = new ReExecuteOptions
+                    {
+                        RunPreInstall = !skipPre,
+                        RunPostInstall = !skipPost,
+                        // File handlers already ran in the non-elevated parent.
+                        RunFileHandlers = false,
+                        PluginConfigValues = configValues,
+                    };
+                    Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
+                    await engine.ReExecutePluginsAsync(installed, options, progress);
                 }
             }
         );

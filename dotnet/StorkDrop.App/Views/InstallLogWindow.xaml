@@ -14,20 +14,50 @@
       <RowDefinition Height="Auto" />
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
-      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <!-- Header -->
     <Border Background="#F5F5F5" Padding="16,12">
-      <StackPanel>
-        <TextBlock Text="{Binding Title}" FontSize="16" FontWeight="SemiBold" />
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
         <TextBlock
+          Text="{Binding Title}"
+          FontSize="16"
+          FontWeight="SemiBold"
+          VerticalAlignment="Center"
+        />
+        <TextBlock
+          Grid.Column="1"
           Text="{Binding StatusMessage}"
           FontSize="12"
           Foreground="#666666"
-          Margin="0,4,0,0"
+          TextTrimming="CharacterEllipsis"
+          HorizontalAlignment="Right"
+          VerticalAlignment="Center"
+          Margin="16,0,16,0"
         />
-      </StackPanel>
+        <Button
+          Grid.Column="2"
+          x:Name="CancelButton"
+          Content="{DynamicResource Cancel_Install_Button}"
+          Click="CancelButton_Click"
+          VerticalAlignment="Center"
+        >
+          <Button.Style>
+            <Style TargetType="Button" BasedOn="{StaticResource FilledAccentButton}">
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding IsCompleted}" Value="True">
+                  <Setter Property="IsEnabled" Value="False" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Button.Style>
+        </Button>
+      </Grid>
     </Border>
 
     <!-- Progress -->
@@ -63,27 +93,5 @@
       HorizontalScrollBarVisibility="Auto"
       Padding="8,4"
     />
-
-    <!-- Footer -->
-    <Border Grid.Row="3" Background="#F5F5F5" Padding="16,10">
-      <Button
-        x:Name="CancelButton"
-        Content="{DynamicResource Cancel_Install_Button}"
-        HorizontalAlignment="Right"
-        Padding="14,6"
-        Click="CancelButton_Click"
-      >
-        <Button.Style>
-          <Style TargetType="Button">
-            <Setter Property="Visibility" Value="Visible" />
-            <Style.Triggers>
-              <DataTrigger Binding="{Binding IsCompleted}" Value="True">
-                <Setter Property="Visibility" Value="Collapsed" />
-              </DataTrigger>
-            </Style.Triggers>
-          </Style>
-        </Button.Style>
-      </Button>
-    </Border>
   </Grid>
 </Window>
