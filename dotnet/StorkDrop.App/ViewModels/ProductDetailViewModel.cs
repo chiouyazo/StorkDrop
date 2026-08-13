@@ -102,13 +102,20 @@ public partial class ProductDetailViewModel : ObservableObject
 
     public bool HasFeedDisplay => !string.IsNullOrEmpty(FeedName);
 
-    public bool CanInstallSelectedVersion => !IsInstalling && !IsSelectedVersionInstalled;
+    public bool AllowMultipleInstances => Manifest?.AllowMultipleInstances ?? false;
+
+    public bool CanInstallSelectedVersion =>
+        !IsInstalling && (AllowMultipleInstances || !IsSelectedVersionInstalled);
     public bool CanReExecutePlugins => IsInstalled && HasPlugins && !IsInstalling;
 
     public event Action? GoBackRequested;
 
-    partial void OnManifestChanged(ProductManifest? value) =>
+    partial void OnManifestChanged(ProductManifest? value)
+    {
         OnPropertyChanged(nameof(VersionDisplay));
+        OnPropertyChanged(nameof(AllowMultipleInstances));
+        OnPropertyChanged(nameof(CanInstallSelectedVersion));
+    }
 
     partial void OnAvailableChannelsChanged(ObservableCollection<ChannelInfo> value) =>
         OnPropertyChanged(nameof(HasMultipleChannels));
@@ -188,6 +195,14 @@ public partial class ProductDetailViewModel : ObservableObject
     private void UpdateInstallButtonText()
     {
         bool isExecutable = Manifest?.InstallType == InstallType.Executable;
+
+        // Multi-instance products can always be installed again as a new instance.
+        if (AllowMultipleInstances)
+        {
+            IsSelectedVersionInstalled = false;
+            InstallButtonText = LocalizationManager.GetString("Install_Button");
+            return;
+        }
 
         if (IsInstalled && _installedFeedId is not null && FeedId != _installedFeedId)
         {
@@ -464,7 +479,16 @@ public partial class ProductDetailViewModel : ObservableObject
             );
             tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
 
-            InstallOptions options = new InstallOptions(TargetPath: targetPath, FeedId: FeedId);
+            // Multi-instance + already installed -> new instance (fresh InstanceId), not overwrite.
+            string instanceId =
+                AllowMultipleInstances && IsInstalled
+                    ? InstanceIdHelper.GenerateUniqueId()
+                    : InstanceIdHelper.DefaultInstanceId;
+            InstallOptions options = new InstallOptions(
+                TargetPath: targetPath,
+                FeedId: FeedId,
+                InstanceId: instanceId
+            );
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
                 tracked.Percentage = p.Percentage;
