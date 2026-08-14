@@ -302,6 +302,10 @@ public partial class InstalledViewModel : ObservableObject
                     product.ProductId,
                     $"Uninstalling: {product.DisplayName}"
                 );
+                using var logScope = Serilog.Context.LogContext.PushProperty(
+                    "InstallId",
+                    tracked.Id
+                );
                 tracked.AddLog($"Uninstalling {product.Title} v{product.Version}");
 
                 Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
@@ -408,6 +412,10 @@ public partial class InstalledViewModel : ObservableObject
                 product.ProductId,
                 $"Verifying: {product.Title}"
             );
+            using var verifyScope = Serilog.Context.LogContext.PushProperty(
+                "InstallId",
+                tracked.Id
+            );
             tracked.AddLog($"Verifying files for {product.Title} v{product.Version}");
             Progress<int> progress = new Progress<int>(p =>
             {
@@ -471,6 +479,10 @@ public partial class InstalledViewModel : ObservableObject
                 product.ProductId,
                 $"Repairing: {product.Title}"
             );
+            using var repairScope = Serilog.Context.LogContext.PushProperty(
+                "InstallId",
+                repairTracked.Id
+            );
             Progress<int> repairProgress = new Progress<int>(p =>
             {
                 repairTracked.Percentage = p;
@@ -521,6 +533,7 @@ public partial class InstalledViewModel : ObservableObject
                 product.ProductId,
                 $"Running actions: {product.Title}"
             );
+            using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Re-executing plugin actions for {product.Title} v{product.Version}");
 
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>

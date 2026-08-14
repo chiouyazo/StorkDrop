@@ -282,6 +282,7 @@ public partial class MarketplaceViewModel : ObservableObject
                 product.ProductId,
                 product.Title
             );
+            using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Installing {product.Title} v{product.Version} to {targetPath}");
 
             InstallOptions options = new InstallOptions(
@@ -507,6 +508,7 @@ public partial class MarketplaceViewModel : ObservableObject
             manifest.ProductId,
             manifest.Title
         );
+        using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
         tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
 
         InstallOptions options = new InstallOptions(

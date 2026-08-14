@@ -28,6 +28,7 @@ public sealed partial class InstallationTracker : ObservableObject
             Title = title,
             StartedAt = DateTime.Now,
         };
+        InstallLogRouter.Register(install);
         System.Windows.Application.Current.Dispatcher.BeginInvoke(() =>
         {
             Installations.Insert(0, install);
@@ -73,6 +74,8 @@ public sealed partial class TrackedInstallation : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _logEntries = [];
 
+    public string Id { get; } = Guid.NewGuid().ToString("N");
+
     public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
 
     private string? _lastLogMessage;
@@ -99,5 +102,6 @@ public sealed partial class TrackedInstallation : ObservableObject
         IsSuccess = success;
         ErrorMessage = error ?? string.Empty;
         StatusMessage = success ? "Completed" : $"Failed: {error}";
+        InstallLogRouter.Unregister(Id);
     }
 }
