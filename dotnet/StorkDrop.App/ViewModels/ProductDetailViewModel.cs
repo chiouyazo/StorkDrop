@@ -477,6 +477,7 @@ public partial class ProductDetailViewModel : ObservableObject
                 manifest.ProductId,
                 manifest.Title
             );
+            using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
 
             // Multi-instance + already installed -> new instance (fresh InstanceId), not overwrite.
@@ -678,6 +679,7 @@ public partial class ProductDetailViewModel : ObservableObject
             manifest.ProductId,
             manifest.Title
         );
+        using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
         tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
 
         InstallOptions options = new InstallOptions(
@@ -752,6 +754,7 @@ public partial class ProductDetailViewModel : ObservableObject
                 Manifest.ProductId,
                 $"Running actions: {Manifest.Title}"
             );
+            using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog(
                 $"Re-executing plugin actions for {Manifest.Title} v{installed.Version}"
             );

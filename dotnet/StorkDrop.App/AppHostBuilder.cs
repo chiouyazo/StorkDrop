@@ -50,8 +50,10 @@ public static class AppHostBuilder
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+            .Enrich.FromLogContext()
             .WriteTo.Console()
             .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 30)
+            .WriteTo.Sink(new InstallLogSink())
             .CreateLogger();
 
         IHostBuilder builder = Host.CreateDefaultBuilder();

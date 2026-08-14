@@ -214,6 +214,7 @@ public partial class UpdatesViewModel : ObservableObject
                 update.ProductId,
                 $"Updating: {update.Title} -> v{update.AvailableVersion}"
             );
+            using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog(
                 $"Updating {update.Title} from v{update.CurrentVersion} to v{update.AvailableVersion}"
             );
