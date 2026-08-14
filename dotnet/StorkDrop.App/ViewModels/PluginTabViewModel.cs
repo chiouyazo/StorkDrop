@@ -193,6 +193,16 @@ public partial class PluginTabViewModel : ObservableObject
     [RelayCommand]
     private async Task SaveAsync()
     {
+        List<string> missing = CollectMissingRequired();
+        if (missing.Count > 0)
+        {
+            StatusMessage = LocalizationManager.GetString(
+                "Plugin_Settings_RequiredMissing",
+                string.Join(", ", missing)
+            );
+            return;
+        }
+
         try
         {
             Dictionary<string, string> values = CollectValues();
@@ -208,6 +218,32 @@ public partial class PluginTabViewModel : ObservableObject
             );
             StatusMessage = LocalizationManager.GetString("Error_SaveFailed") + ": " + ex.Message;
         }
+    }
+
+    private List<string> CollectMissingRequired()
+    {
+        List<string> missing = [];
+        foreach (PluginSettingsSectionViewModel section in Sections)
+        {
+            foreach (PluginConfigFieldViewModel field in section.Fields)
+            {
+                if (field.Required && string.IsNullOrWhiteSpace(field.Value))
+                    missing.Add(field.Label);
+            }
+
+            foreach (GroupFieldViewModel group in section.GroupFields)
+            {
+                foreach (GroupInstanceViewModel instance in group.Instances)
+                {
+                    foreach (PluginConfigFieldViewModel field in instance.Fields)
+                    {
+                        if (field.Required && string.IsNullOrWhiteSpace(field.Value))
+                            missing.Add($"{group.Label} → {field.Label}");
+                    }
+                }
+            }
+        }
+        return missing.Distinct().ToList();
     }
 
     private Dictionary<string, string> CollectValues()

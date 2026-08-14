@@ -206,6 +206,7 @@
   </system:String
   >
   <system:String x:Key="Error_SaveFailed">Speichern fehlgeschlagen</system:String>
+  <system:String x:Key="Plugin_Settings_RequiredMissing">Bitte die Pflichtfelder ausfüllen: {0}</system:String>
   <system:String x:Key="Error_ExportFailed">Export fehlgeschlagen</system:String>
   <system:String x:Key="Error_ImportFailed">Import fehlgeschlagen</system:String>
   <system:String x:Key="Error_ConnectionFailed">Verbindung fehlgeschlagen</system:String>
