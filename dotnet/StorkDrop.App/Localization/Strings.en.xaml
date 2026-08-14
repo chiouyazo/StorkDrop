@@ -179,7 +179,9 @@
   <system:String x:Key="Error_UpdateProductFailed">Update of {0} failed</system:String>
   <system:String x:Key="Error_LoadSettingsFailed">Error loading settings</system:String>
   <system:String x:Key="Error_SaveFailed">Save failed</system:String>
-  <system:String x:Key="Plugin_Settings_RequiredMissing">Please fill in the required fields: {0}</system:String>
+  <system:String x:Key="Plugin_Settings_RequiredMissing"
+    >Please fill in the required fields: {0}</system:String
+  >
   <system:String x:Key="Error_ExportFailed">Export failed</system:String>
   <system:String x:Key="Error_ImportFailed">Import failed</system:String>
   <system:String x:Key="Error_ConnectionFailed">Connection failed</system:String>
