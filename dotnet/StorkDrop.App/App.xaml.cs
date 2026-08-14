@@ -494,18 +494,19 @@ public partial class App : Application
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
 
                 ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
-                if (manifest is not null)
-                {
-                    InstallOptions options = new InstallOptions(
-                        TargetPath: targetPath,
-                        InstanceId: instanceId,
-                        FeedId: feedId,
-                        SkipFileHandlers: true,
-                        PluginConfigValues: configValues
-                    );
-                    Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
-                    await engine.InstallAsync(manifest, options, progress);
-                }
+                if (manifest is null)
+                    return false;
+
+                InstallOptions options = new InstallOptions(
+                    TargetPath: targetPath,
+                    InstanceId: instanceId,
+                    FeedId: feedId,
+                    SkipFileHandlers: true,
+                    PluginConfigValues: configValues
+                );
+                Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
+                InstallResult result = await engine.InstallAsync(manifest, options, progress);
+                return result.Success;
             }
         );
     }
@@ -526,6 +527,7 @@ public partial class App : Application
                 );
                 if (installed is not null)
                     await engine.UninstallAsync(installed);
+                return true;
             }
         );
     }
@@ -555,17 +557,18 @@ public partial class App : Application
                 );
                 ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
 
-                if (installed is not null && manifest is not null)
-                {
-                    InstallOptions options = new InstallOptions(
-                        TargetPath: targetPath,
-                        InstanceId: instanceId,
-                        FeedId: feedId,
-                        PluginConfigValues: configValues
-                    );
-                    Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
-                    await engine.UpdateAsync(installed, manifest, options, progress);
-                }
+                if (installed is null || manifest is null)
+                    return false;
+
+                InstallOptions options = new InstallOptions(
+                    TargetPath: targetPath,
+                    InstanceId: instanceId,
+                    FeedId: feedId,
+                    PluginConfigValues: configValues
+                );
+                Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
+                await engine.UpdateAsync(installed, manifest, options, progress);
+                return true;
             }
         );
     }
@@ -589,19 +592,24 @@ public partial class App : Application
                     productId,
                     instanceId
                 );
-                if (installed is not null)
+                if (installed is null)
+                    return false;
+
+                ReExecuteOptions options = new ReExecuteOptions
                 {
-                    ReExecuteOptions options = new ReExecuteOptions
-                    {
-                        RunPreInstall = !skipPre,
-                        RunPostInstall = !skipPost,
-                        // File handlers already ran in the non-elevated parent.
-                        RunFileHandlers = false,
-                        PluginConfigValues = configValues,
-                    };
-                    Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
-                    await engine.ReExecutePluginsAsync(installed, options, progress);
-                }
+                    RunPreInstall = !skipPre,
+                    RunPostInstall = !skipPost,
+                    // File handlers already ran in the non-elevated parent.
+                    RunFileHandlers = false,
+                    PluginConfigValues = configValues,
+                };
+                Progress<InstallProgress> progress = new Progress<InstallProgress>(_ => { });
+                InstallResult result = await engine.ReExecutePluginsAsync(
+                    installed,
+                    options,
+                    progress
+                );
+                return result.Success;
             }
         );
     }
@@ -638,7 +646,7 @@ public partial class App : Application
         }
     }
 
-    private async Task RunElevatedAsync(string operation, Func<IServiceProvider, Task> action)
+    private async Task RunElevatedAsync(string operation, Func<IServiceProvider, Task<bool>> action)
     {
         try
         {
@@ -649,8 +657,7 @@ public partial class App : Application
             IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
             await feedRegistry.ReloadAsync();
 
-            await action(Services);
-            Environment.ExitCode = 0;
+            Environment.ExitCode = await action(Services) ? 0 : 1;
         }
         catch (Exception ex)
         {

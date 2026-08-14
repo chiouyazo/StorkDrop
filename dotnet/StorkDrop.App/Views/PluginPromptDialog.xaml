@@ -4,10 +4,12 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   Icon="pack://application:,,,/StorkDrop.App;component/Assets/stork.ico"
   Width="550"
+  MinWidth="420"
+  MinHeight="220"
   SizeToContent="Height"
-  MaxHeight="600"
+  MaxHeight="900"
   WindowStartupLocation="CenterOwner"
-  ResizeMode="NoResize"
+  ResizeMode="CanResize"
   Background="White"
 >
   <Grid Margin="24">
@@ -44,18 +46,22 @@
       CornerRadius="6"
       Padding="12,10"
       Margin="0,0,0,16"
-      MaxHeight="300"
       Visibility="Collapsed"
     >
-      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-        <TextBlock
-          x:Name="DetailText"
-          FontSize="12"
-          FontFamily="Consolas"
-          TextWrapping="NoWrap"
-          Foreground="#444444"
-        />
-      </ScrollViewer>
+      <TextBox
+        x:Name="DetailText"
+        IsReadOnly="True"
+        IsReadOnlyCaretVisible="True"
+        BorderThickness="0"
+        Background="Transparent"
+        Padding="0"
+        FontSize="12"
+        FontFamily="Consolas"
+        Foreground="#444444"
+        TextWrapping="NoWrap"
+        VerticalScrollBarVisibility="Auto"
+        HorizontalScrollBarVisibility="Auto"
+      />
     </Border>
 
     <ItemsControl x:Name="ButtonsPanel" Grid.Row="3">
