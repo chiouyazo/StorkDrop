@@ -22,6 +22,14 @@ public sealed class VersionComparer : IComparer<string>
         if (spanY.Length > 0 && (spanY[0] == 'v' || spanY[0] == 'V'))
             spanY = spanY[1..];
 
+        // Build metadata (after '+') is ignored for precedence per SemVer.
+        int plusIndexX = spanX.IndexOf('+');
+        if (plusIndexX >= 0)
+            spanX = spanX[..plusIndexX];
+        int plusIndexY = spanY.IndexOf('+');
+        if (plusIndexY >= 0)
+            spanY = spanY[..plusIndexY];
+
         // Split off pre-release suffix (everything after '-')
         ReadOnlySpan<char> preReleaseX = ReadOnlySpan<char>.Empty;
         ReadOnlySpan<char> preReleaseY = ReadOnlySpan<char>.Empty;
@@ -55,7 +63,75 @@ public sealed class VersionComparer : IComparer<string>
         if (xHasPreRelease && !yHasPreRelease)
             return -1;
 
-        return preReleaseX.SequenceCompareTo(preReleaseY);
+        return ComparePreRelease(preReleaseX, preReleaseY);
+    }
+
+    private static int ComparePreRelease(ReadOnlySpan<char> x, ReadOnlySpan<char> y)
+    {
+        while (!x.IsEmpty || !y.IsEmpty)
+        {
+            if (x.IsEmpty)
+                return -1;
+            if (y.IsEmpty)
+                return 1;
+
+            ReadOnlySpan<char> idX = TakeIdentifier(ref x);
+            ReadOnlySpan<char> idY = TakeIdentifier(ref y);
+
+            bool numericX = IsAllDigits(idX);
+            bool numericY = IsAllDigits(idY);
+
+            int cmp;
+            if (numericX && numericY)
+                cmp = CompareNumericIdentifier(idX, idY);
+            else if (numericX)
+                cmp = -1;
+            else if (numericY)
+                cmp = 1;
+            else
+                cmp = idX.SequenceCompareTo(idY);
+
+            if (cmp != 0)
+                return cmp;
+        }
+
+        return 0;
+    }
+
+    private static ReadOnlySpan<char> TakeIdentifier(ref ReadOnlySpan<char> span)
+    {
+        int dot = span.IndexOf('.');
+        if (dot < 0)
+        {
+            ReadOnlySpan<char> whole = span;
+            span = ReadOnlySpan<char>.Empty;
+            return whole;
+        }
+
+        ReadOnlySpan<char> identifier = span[..dot];
+        span = span[(dot + 1)..];
+        return identifier;
+    }
+
+    private static bool IsAllDigits(ReadOnlySpan<char> span)
+    {
+        if (span.IsEmpty)
+            return false;
+        foreach (char c in span)
+        {
+            if (!char.IsDigit(c))
+                return false;
+        }
+        return true;
+    }
+
+    private static int CompareNumericIdentifier(ReadOnlySpan<char> x, ReadOnlySpan<char> y)
+    {
+        ReadOnlySpan<char> trimmedX = x.TrimStart('0');
+        ReadOnlySpan<char> trimmedY = y.TrimStart('0');
+        if (trimmedX.Length != trimmedY.Length)
+            return trimmedX.Length < trimmedY.Length ? -1 : 1;
+        return trimmedX.SequenceCompareTo(trimmedY);
     }
 
     private static int CompareNumericParts(ReadOnlySpan<char> x, ReadOnlySpan<char> y)
@@ -124,6 +200,10 @@ public sealed class VersionComparer : IComparer<string>
         ReadOnlySpan<char> span = version.AsSpan();
         if (span.Length > 0 && (span[0] == 'v' || span[0] == 'V'))
             span = span[1..];
+
+        int plusIndex = span.IndexOf('+');
+        if (plusIndex >= 0)
+            span = span[..plusIndex];
 
         int dashIndex = span.IndexOf('-');
         if (dashIndex >= 0)

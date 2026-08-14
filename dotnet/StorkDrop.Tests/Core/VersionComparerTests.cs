@@ -90,6 +90,41 @@ public sealed class VersionComparerTests
         VersionComparer.IsValid(version).Should().Be(expected);
     }
 
+    [Theory]
+    [InlineData("1.0.0+build.5", "1.0.0", 0)]
+    [InlineData("1.0.0+build.9", "1.0.0+build.1", 0)]
+    [InlineData("1.0.0-alpha+build.9", "1.0.0-alpha+build.1", 0)]
+    [InlineData("1.0.1+build", "1.0.0+build", 1)]
+    public void Compare_ShouldIgnoreBuildMetadata(string x, string y, int expected)
+    {
+        Math.Sign(_comparer.Compare(x, y)).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("1.0.0-2", "1.0.0-10", -1)]
+    [InlineData("1.0.0-2386.20260814", "1.0.0-2386.20260813", 1)]
+    [InlineData("1.0.0-1", "1.0.0-alpha", -1)]
+    [InlineData("1.0.0-alpha.1", "1.0.0-alpha", 1)]
+    public void Compare_ShouldHandleSemVerPreReleaseIdentifiers(string x, string y, int expected)
+    {
+        Math.Sign(_comparer.Compare(x, y)).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("1.0.0-2386-20260814-1", "1.0.0-2386-20260813-9", 1)]
+    public void Compare_ShouldStillHandleDashOnlySuffix(string x, string y, int expected)
+    {
+        Math.Sign(_comparer.Compare(x, y)).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("1.0.0+build", true)]
+    [InlineData("1.0.0-alpha+build", true)]
+    public void IsValid_ShouldAcceptBuildMetadata(string version, bool expected)
+    {
+        VersionComparer.IsValid(version).Should().Be(expected);
+    }
+
     [Fact]
     public void Compare_SameReference_ShouldReturnZero()
     {
