@@ -157,6 +157,8 @@ public partial class PluginTabViewModel : ObservableObject
                 Options = new ObservableCollection<PluginOptionItem>(tmpl.Options),
                 Min = tmpl.Min,
                 Max = tmpl.Max,
+                IsEnabled = tmpl.IsEnabled,
+                EnabledWhen = tmpl.EnabledWhen,
             };
 
             if (values is not null && values.TryGetValue(tmpl.Key, out string? val))
@@ -166,7 +168,36 @@ public partial class PluginTabViewModel : ObservableObject
 
             instance.Fields.Add(fieldVm);
         }
+
+        WireEnabledConditions(instance);
         return instance;
+    }
+
+    private static void WireEnabledConditions(GroupInstanceViewModel instance)
+    {
+        void Evaluate()
+        {
+            Dictionary<string, string> values = instance.Fields.ToDictionary(
+                f => f.Key,
+                f => f.Value
+            );
+            foreach (PluginConfigFieldViewModel field in instance.Fields)
+            {
+                if (field.EnabledWhen is not null)
+                    field.IsEnabled = field.EnabledWhen(values);
+            }
+        }
+
+        foreach (PluginConfigFieldViewModel field in instance.Fields)
+        {
+            field.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(PluginConfigFieldViewModel.Value))
+                    Evaluate();
+            };
+        }
+
+        Evaluate();
     }
 
     [RelayCommand]
@@ -227,7 +258,7 @@ public partial class PluginTabViewModel : ObservableObject
         {
             foreach (PluginConfigFieldViewModel field in section.Fields)
             {
-                if (field.Required && string.IsNullOrWhiteSpace(field.Value))
+                if (field.Required && field.IsEnabled && string.IsNullOrWhiteSpace(field.Value))
                     missing.Add(field.Label);
             }
 
@@ -237,7 +268,11 @@ public partial class PluginTabViewModel : ObservableObject
                 {
                     foreach (PluginConfigFieldViewModel field in instance.Fields)
                     {
-                        if (field.Required && string.IsNullOrWhiteSpace(field.Value))
+                        if (
+                            field.Required
+                            && field.IsEnabled
+                            && string.IsNullOrWhiteSpace(field.Value)
+                        )
                             missing.Add($"{group.Label} → {field.Label}");
                     }
                 }
