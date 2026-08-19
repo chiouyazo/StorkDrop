@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Principal;
 using System.Text;
@@ -6,6 +7,9 @@ namespace StorkDrop.Contracts.Services;
 
 public static class ElevationHelper
 {
+    // Win32 ERROR_CANCELLED: ShellExecute "runas" throws this when the user declines the UAC request.
+    private const int ErrorCancelled = 1223;
+
     public static bool IsRunningAsAdmin()
     {
         using WindowsIdentity identity = WindowsIdentity.GetCurrent();
@@ -60,7 +64,7 @@ public static class ElevationHelper
         }
     }
 
-    public static bool RunElevatedInstall(
+    public static ElevationResult RunElevatedInstall(
         string productId,
         string version,
         string targetPath,
@@ -78,7 +82,7 @@ public static class ElevationHelper
                 Environment.ProcessPath
                 ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
-                return false;
+                return ElevationResult.Failed;
 
             string pluginDirArgs = GetPluginDirArgs();
             string configFileArg = configFilePath is not null
@@ -104,13 +108,17 @@ public static class ElevationHelper
         {
             throw;
         }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            return ElevationResult.DeniedByUser;
+        }
         catch
         {
-            return false;
+            return ElevationResult.Failed;
         }
     }
 
-    public static bool RunElevatedUninstall(
+    public static ElevationResult RunElevatedUninstall(
         string productId,
         string instanceId = InstanceIdHelper.DefaultInstanceId,
         Action<string>? onProgressLine = null,
@@ -124,7 +132,7 @@ public static class ElevationHelper
                 Environment.ProcessPath
                 ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
-                return false;
+                return ElevationResult.Failed;
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
@@ -146,13 +154,17 @@ public static class ElevationHelper
         {
             throw;
         }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            return ElevationResult.DeniedByUser;
+        }
         catch
         {
-            return false;
+            return ElevationResult.Failed;
         }
     }
 
-    public static bool RunElevatedUpdate(
+    public static ElevationResult RunElevatedUpdate(
         string productId,
         string targetPath,
         string feedId,
@@ -169,7 +181,7 @@ public static class ElevationHelper
                 Environment.ProcessPath
                 ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
-                return false;
+                return ElevationResult.Failed;
 
             string configFileArg = configFilePath is not null
                 ? $"--config-file \"{configFilePath}\""
@@ -194,13 +206,17 @@ public static class ElevationHelper
         {
             throw;
         }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            return ElevationResult.DeniedByUser;
+        }
         catch
         {
-            return false;
+            return ElevationResult.Failed;
         }
     }
 
-    public static bool RunElevatedReExecute(
+    public static ElevationResult RunElevatedReExecute(
         string productId,
         string instanceId,
         bool runPreInstall,
@@ -217,7 +233,7 @@ public static class ElevationHelper
                 Environment.ProcessPath
                 ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
             if (string.IsNullOrEmpty(exePath))
-                return false;
+                return ElevationResult.Failed;
 
             string configFileArg = configFilePath is not null
                 ? $"--config-file \"{configFilePath}\""
@@ -244,9 +260,13 @@ public static class ElevationHelper
         {
             throw;
         }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
+        {
+            return ElevationResult.DeniedByUser;
+        }
         catch
         {
-            return false;
+            return ElevationResult.Failed;
         }
     }
 
@@ -268,8 +288,12 @@ public static class ElevationHelper
     /// When cancellation is requested the elevated child is killed and an
     /// <see cref="OperationCanceledException"/> is thrown.
     /// </param>
-    /// <returns><c>true</c> only if the process exited with code 0.</returns>
-    private static bool WaitForElevatedProcess(
+    /// <returns>
+    /// <see cref="ElevationResult.Succeeded"/> only if the process exited with code 0; otherwise
+    /// <see cref="ElevationResult.Failed"/>. A child that never started or exited non-zero is a
+    /// failure, not a refusal - a refusal is caught as a <see cref="Win32Exception"/> by the caller.
+    /// </returns>
+    private static ElevationResult WaitForElevatedProcess(
         ProcessStartInfo startInfo,
         Action<string>? onProgressLine,
         Func<string, bool>? onLongRunning,
@@ -294,7 +318,7 @@ public static class ElevationHelper
 
         Process? process = Process.Start(startInfo);
         if (process is null)
-            return false;
+            return ElevationResult.Failed;
 
         string currentStep = string.Empty;
         Stopwatch stopwatch = Stopwatch.StartNew();
@@ -329,7 +353,7 @@ public static class ElevationHelper
                     {
                         // Best effort; the process may have exited in the meantime.
                     }
-                    return false;
+                    return ElevationResult.Failed;
                 }
 
                 stopwatch.Restart();
@@ -338,7 +362,7 @@ public static class ElevationHelper
 
         // Flush any lines appended just before exit.
         TailLog(logPath, position, currentStep, onProgressLine);
-        return process.ExitCode == 0;
+        return process.ExitCode == 0 ? ElevationResult.Succeeded : ElevationResult.Failed;
     }
 
     /// <summary>

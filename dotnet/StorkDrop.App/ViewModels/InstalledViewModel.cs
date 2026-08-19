@@ -262,14 +262,18 @@ public partial class InstalledViewModel : ObservableObject
         {
             if (needsAdmin)
             {
-                bool elevated = await Task.Run(() =>
+                ElevationResult elevated = await Task.Run(() =>
                     ElevationHelper.RunElevatedUninstall(product.ProductId, product.InstanceId)
                 );
 
-                if (!elevated)
+                if (elevated != ElevationResult.Succeeded)
                 {
                     _dialogService.ShowError(
-                        LocalizationManager.GetString("Error_AdminDenied_Uninstall")
+                        LocalizationManager.GetString(
+                            elevated == ElevationResult.DeniedByUser
+                                ? "Error_AdminDenied_Uninstall"
+                                : "Error_ElevatedUninstallFailed"
+                        )
                     );
                     return;
                 }
@@ -332,15 +336,23 @@ public partial class InstalledViewModel : ObservableObject
                         "Uninstall of {ProductId} failed with access denied, retrying elevated",
                         product.ProductId
                     );
-                    bool elevated = await Task.Run(() =>
+                    ElevationResult elevated = await Task.Run(() =>
                         ElevationHelper.RunElevatedUninstall(product.ProductId, product.InstanceId)
                     );
-                    if (!elevated)
+                    if (elevated != ElevationResult.Succeeded)
                     {
-                        tracked.Complete(false, "Administrator rights denied");
+                        bool denied = elevated == ElevationResult.DeniedByUser;
+                        tracked.Complete(
+                            false,
+                            denied ? "Administrator rights denied" : "Elevated uninstall failed"
+                        );
                         _tracker.NotifyChanged();
                         _dialogService.ShowError(
-                            LocalizationManager.GetString("Error_AdminDenied_Uninstall")
+                            LocalizationManager.GetString(
+                                denied
+                                    ? "Error_AdminDenied_Uninstall"
+                                    : "Error_ElevatedUninstallFailed"
+                            )
                         );
                         return;
                     }

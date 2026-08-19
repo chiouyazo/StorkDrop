@@ -1127,8 +1127,9 @@ public sealed class InstallationEngine : IInstallationEngine
                 instanceUniqueId
             );
 
+            _lastElevatedError = null;
             ReportProgress(InstallStage.Installing, 0, Localize("Elevation_Starting"));
-            bool elevated = ElevationHelper.RunElevatedInstall(
+            ElevationResult elevation = ElevationHelper.RunElevatedInstall(
                 manifest.ProductId,
                 manifest.Version,
                 targetPath,
@@ -1140,21 +1141,30 @@ public sealed class InstallationEngine : IInstallationEngine
                 cancellationToken: cancellationToken
             );
 
-            if (!elevated)
+            if (elevation != ElevationResult.Succeeded)
             {
-                _logger.LogWarning("Elevation denied by user for {ProductId}", manifest.ProductId);
-                progress.Report(
-                    new InstallProgress(
-                        InstallStage.Installing,
-                        0,
-                        $"Warning: Elevation denied by user for {manifest.ProductId}"
-                    )
+                string message = ElevationFailureMessage(
+                    elevation,
+                    "Installation cancelled: administrator rights were denied."
                 );
+                if (elevation == ElevationResult.DeniedByUser)
+                    _logger.LogWarning(
+                        "Elevation denied by user for {ProductId}",
+                        manifest.ProductId
+                    );
+                else
+                    _logger.LogError(
+                        "Elevated install failed for {ProductId}: {Message}",
+                        manifest.ProductId,
+                        message
+                    );
+                progress.Report(new InstallProgress(InstallStage.Installing, 0, message));
                 return new InstallResult
                 {
                     Success = false,
-                    ErrorMessage = "Installation cancelled: administrator rights were denied.",
-                    FailedStep = "Elevation",
+                    ErrorMessage = message,
+                    FailedStep =
+                        elevation == ElevationResult.DeniedByUser ? "Elevation" : "ElevatedInstall",
                 };
             }
 
@@ -1606,8 +1616,9 @@ public sealed class InstallationEngine : IInstallationEngine
                 string configJson = System.Text.Json.JsonSerializer.Serialize(elevationConfig);
                 await File.WriteAllTextAsync(configFilePath, configJson, cancellationToken);
 
+                _lastElevatedError = null;
                 ReportProgress(InstallStage.Installing, 0, Localize("Elevation_Starting"));
-                bool elevated = ElevationHelper.RunElevatedInstall(
+                ElevationResult elevation = ElevationHelper.RunElevatedInstall(
                     manifest.ProductId,
                     manifest.Version,
                     resolvedTargetPath,
@@ -1618,15 +1629,20 @@ public sealed class InstallationEngine : IInstallationEngine
                     onLongRunning: HandleElevatedLongRunning,
                     cancellationToken: cancellationToken
                 );
-                if (!elevated)
+                if (elevation != ElevationResult.Succeeded)
                     return (
                         resolvedTargetPath,
                         new InstallResult
                         {
                             Success = false,
-                            ErrorMessage =
-                                "Installation cancelled: administrator rights were denied.",
-                            FailedStep = "Elevation",
+                            ErrorMessage = ElevationFailureMessage(
+                                elevation,
+                                "Installation cancelled: administrator rights were denied."
+                            ),
+                            FailedStep =
+                                elevation == ElevationResult.DeniedByUser
+                                    ? "Elevation"
+                                    : "ElevatedInstall",
                         }
                     );
 
@@ -2909,8 +2925,9 @@ public sealed class InstallationEngine : IInstallationEngine
         string json = System.Text.Json.JsonSerializer.Serialize(configValues);
         await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
 
+        _lastElevatedError = null;
         ReportProgress(InstallStage.RunningPlugins, 0, Localize("Elevation_Starting"));
-        bool elevated = ElevationHelper.RunElevatedReExecute(
+        ElevationResult elevation = ElevationHelper.RunElevatedReExecute(
             product.ProductId,
             product.InstanceId,
             options.RunPreInstall,
@@ -2921,13 +2938,17 @@ public sealed class InstallationEngine : IInstallationEngine
             cancellationToken: cancellationToken
         );
 
-        if (!elevated)
+        if (elevation != ElevationResult.Succeeded)
         {
             return new InstallResult
             {
                 Success = false,
-                ErrorMessage = "Plugin actions cancelled: administrator rights were denied.",
-                FailedStep = "Elevation",
+                ErrorMessage = ElevationFailureMessage(
+                    elevation,
+                    "Plugin actions cancelled: administrator rights were denied."
+                ),
+                FailedStep =
+                    elevation == ElevationResult.DeniedByUser ? "Elevation" : "ElevatedReExecute",
             };
         }
 
@@ -3685,9 +3706,36 @@ public sealed class InstallationEngine : IInstallationEngine
     /// leading Serilog timestamp+level prefix (e.g. "2026-08-13 11:45:16.012 +02:00 [INF] ") so the
     /// UI shows clean status text. Falls back to the raw line if parsing fails.
     /// </summary>
+    private string? _lastElevatedError;
+
     private void ReportElevatedProgressLine(string line)
     {
-        ReportProgress(InstallStage.Installing, 0, StripLogPrefix(line));
+        string message = StripLogPrefix(line);
+        if (LooksLikeError(line))
+            _lastElevatedError = message;
+        ReportProgress(InstallStage.Installing, 0, message);
+    }
+
+    private static bool LooksLikeError(string rawLine) =>
+        rawLine.Contains("[ERR]", StringComparison.Ordinal)
+        || rawLine.Contains("denied", StringComparison.OrdinalIgnoreCase)
+        || rawLine.Contains("failed", StringComparison.OrdinalIgnoreCase)
+        || rawLine.Contains("exception", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Builds the result for an elevated child that did not succeed. A genuine refusal
+    /// (<see cref="ElevationResult.DeniedByUser"/>) keeps the "administrator rights were denied"
+    /// wording; a child that started elevated but failed inside surfaces its real error instead of
+    /// being mislabelled as a refusal.
+    /// </summary>
+    private string ElevationFailureMessage(ElevationResult elevation, string deniedMessage)
+    {
+        if (elevation == ElevationResult.DeniedByUser)
+            return deniedMessage;
+
+        return string.IsNullOrEmpty(_lastElevatedError)
+            ? "The elevated step failed. See the log for details."
+            : $"The elevated step failed: {_lastElevatedError}";
     }
 
     /// <summary>
