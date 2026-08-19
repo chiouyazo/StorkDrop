@@ -59,4 +59,59 @@ public sealed class FileManifestStoreTests
                 File.Delete(temp);
         }
     }
+
+    [Theory]
+    [InlineData("{ this is not json")]
+    [InlineData("[ { \"Path\": ")]
+    [InlineData("garbage")]
+    public void Parse_CorruptJson_ReturnsNull_InsteadOfThrowing(string json)
+    {
+        // A corrupt/half-written manifest must not crash uninstall or the integrity check.
+        FileManifestStore.Parse(json).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("\"a string\"")]
+    [InlineData("42")]
+    public void Parse_ValidJsonThatIsNotAnArray_ReturnsNull(string json)
+    {
+        FileManifestStore.Parse(json).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task Write_CreatesMissingDirectory_AndLeavesNoTempFile()
+    {
+        string dir = Path.Combine(
+            Path.GetTempPath(),
+            "sd-manifest-" + Guid.NewGuid().ToString("N")
+        );
+        string path = Path.Combine(dir, "sub", "product.files.json");
+        try
+        {
+            await FileManifestStore.WriteAsync(path, [new TrackedFile("bin/app.exe", "abc", 42)]);
+
+            File.Exists(path).Should().BeTrue();
+            File.Exists(path + ".tmp").Should().BeFalse();
+
+            List<TrackedFile>? read = await FileManifestStore.ReadAsync(path);
+            read.Should().ContainSingle();
+            read![0].Path.Should().Be("bin/app.exe");
+        }
+        finally
+        {
+            if (Directory.Exists(dir))
+                Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task Read_ReturnsNull_WhenFileMissing()
+    {
+        string path = Path.Combine(
+            Path.GetTempPath(),
+            "sd-missing-" + Guid.NewGuid().ToString("N") + ".json"
+        );
+        (await FileManifestStore.ReadAsync(path)).Should().BeNull();
+    }
 }

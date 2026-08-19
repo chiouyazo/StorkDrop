@@ -10,7 +10,8 @@ public sealed record BrandingInfo(
     string? DisplayName = null,
     string? LogoPath = null,
     bool ForbidNewFeeds = false,
-    BrandingFeed? Feed = null
+    BrandingFeed? Feed = null,
+    string[]? VisibleChannels = null
 )
 {
     public static BrandingInfo Default { get; } = new BrandingInfo();
@@ -21,10 +22,17 @@ public sealed record BrandingInfo(
         || !string.IsNullOrWhiteSpace(DisplayName)
         || !string.IsNullOrWhiteSpace(LogoPath);
 
-    /// <summary>True when the edition pre-configures a primary feed whose name and URL are vendor-fixed.</summary>
+    /// <summary>True when the edition pre-configures a primary feed whose identity is vendor-fixed.</summary>
     public bool HasFeed =>
         Feed is not null
-        && (!string.IsNullOrWhiteSpace(Feed.Name) || !string.IsNullOrWhiteSpace(Feed.Url));
+        && (
+            !string.IsNullOrWhiteSpace(Feed.Name)
+            || !string.IsNullOrWhiteSpace(Feed.Url)
+            || (
+                Feed.Provider == Models.FeedProvider.S3
+                && !string.IsNullOrWhiteSpace(Feed.S3?.Bucket)
+            )
+        );
 
     /// <summary>The install/config/data folder name, e.g. "acme-StorkDrop" or plain "StorkDrop".</summary>
     public string AppFolderName =>

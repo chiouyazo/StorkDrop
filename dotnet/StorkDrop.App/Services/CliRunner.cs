@@ -306,6 +306,39 @@ internal sealed class CliRunner
         string? user = GetFlag(args, "--user");
         string? password = GetFlag(args, "--password");
 
+        FeedProvider provider = GetFlag(args, "--provider")?.ToLowerInvariant() switch
+        {
+            "s3" => FeedProvider.S3,
+            "local" => FeedProvider.Local,
+            _ => FeedProvider.Nexus,
+        };
+
+        S3FeedSettings? s3 = null;
+        if (provider == FeedProvider.S3)
+        {
+            string? bucket = GetFlag(args, "--bucket");
+            if (string.IsNullOrWhiteSpace(bucket))
+                return Error("Missing --bucket for an S3 feed (--provider s3).");
+
+            string? secretKey = GetFlag(args, "--secret-key");
+            s3 = new S3FeedSettings(
+                Bucket: bucket,
+                Region: GetFlag(args, "--region"),
+                ServiceUrl: GetFlag(args, "--service-url"),
+                UsePathStyle: Array.Exists(args, a => a == "--path-style"),
+                AccessKeyId: GetFlag(args, "--access-key"),
+                EncryptedSecretKey: string.IsNullOrEmpty(secretKey)
+                    ? null
+                    : _encryptionService.Encrypt(secretKey),
+                Prefix: GetFlag(args, "--prefix"),
+                Channels: GetFlag(args, "--channels")
+                    ?.Split(
+                        ',',
+                        StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+                    )
+            );
+        }
+
         AppConfiguration config = await _configurationService.LoadAsync() ?? DefaultConfiguration();
 
         List<FeedConfiguration> feeds = config.Feeds.ToList();
@@ -319,14 +352,16 @@ internal sealed class CliRunner
 
         FeedConfiguration feed = new(
             Id: id ?? Guid.NewGuid().ToString(),
-            Name: name ?? new Uri(url).Host,
+            Name: name ?? DeriveFeedName(url),
             Url: url,
             Repository: string.IsNullOrWhiteSpace(repo) ? null : repo,
             Username: string.IsNullOrWhiteSpace(user) ? null : user,
             EncryptedPassword: string.IsNullOrEmpty(password)
                 ? null
                 : _encryptionService.Encrypt(password),
-            PluginId: null
+            PluginId: null,
+            Provider: provider,
+            S3: s3
         );
         feeds.Add(feed);
 
@@ -905,6 +940,22 @@ internal sealed class CliRunner
         return null;
     }
 
+    private static string DeriveFeedName(string url)
+    {
+        try
+        {
+            return
+                Uri.TryCreate(url, UriKind.Absolute, out Uri? parsed)
+                && !string.IsNullOrEmpty(parsed.Host)
+                ? parsed.Host
+                : url;
+        }
+        catch
+        {
+            return url;
+        }
+    }
+
     private static int Error(string message)
     {
         Console.Error.WriteLine(message);
@@ -1066,6 +1117,14 @@ internal sealed class CliRunner
                 Console.WriteLine("  --repo <repository>     Nexus repository");
                 Console.WriteLine("  --user <username>       Feed username");
                 Console.WriteLine("  --password <password>   Feed password (stored encrypted)");
+                Console.WriteLine("  --provider <nexus|s3|local>  Feed backend (default: nexus)");
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Local feed (developer sideloading): --provider local --url <folder>"
+                );
+                Console.WriteLine(
+                    "  The folder holds one product per subfolder, each with a manifest.json and one .zip."
+                );
                 break;
 
             case "remove-feed":

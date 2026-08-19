@@ -1,38 +1,37 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
-using StorkDrop.Registry.Nexus;
 
 namespace StorkDrop.Registry;
 
 /// <summary>
-/// Manages multiple feeds, creating a dedicated IRegistryClient per configured feed.
+/// Manages multiple feeds, delegating client creation to a per-backend <see cref="IRegistryClientFactory"/>.
+/// A single feed configuration may expand into several clients (Nexus repositories, S3 channels).
 /// </summary>
 public sealed class FeedRegistry : IFeedRegistry, IDisposable
 {
+    private static readonly string[] DefaultChannels = ["prod"];
+
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
-    private readonly IFeedConnectionService _connectionService;
-    private readonly ILoggerFactory _loggerFactory;
+    private readonly IReadOnlyList<IRegistryClientFactory> _factories;
     private readonly ILogger<FeedRegistry> _logger;
     private readonly object _lock = new object();
 
     private Dictionary<string, FeedEntry> _feeds = new Dictionary<string, FeedEntry>();
 
-    private sealed record FeedEntry(FeedInfo Info, IRegistryClient Client, HttpClient HttpClient);
+    private sealed record FeedEntry(FeedInfo Info, IRegistryClient Client, IDisposable? Owned);
 
     public FeedRegistry(
         IConfigurationService configurationService,
         IEncryptionService encryptionService,
-        IFeedConnectionService connectionService,
+        IEnumerable<IRegistryClientFactory> factories,
         ILoggerFactory loggerFactory
     )
     {
         _configurationService = configurationService;
         _encryptionService = encryptionService;
-        _connectionService = connectionService;
-        _loggerFactory = loggerFactory;
+        _factories = factories.ToList();
         _logger = loggerFactory.CreateLogger<FeedRegistry>();
     }
 
@@ -52,8 +51,7 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
             if (_feeds.TryGetValue(feedId, out FeedEntry? entry))
                 return entry.Client;
 
-            // Fallback: if feedId was a base config ID that is now expanded into composite IDs,
-            // find the first match with that prefix (handles migration from pinned to discovery mode)
+            // Fallback: a base config ID that expanded into composite IDs (discovery repos, S3 channels).
             string prefix = feedId + ":";
             FeedEntry? fallback = _feeds.Values.FirstOrDefault(f => f.Info.Id.StartsWith(prefix));
             if (fallback is not null)
@@ -91,86 +89,63 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
         _logger.LogInformation("Reloading feed registry");
         AppConfiguration? config = await _configurationService.LoadAsync(cancellationToken);
         FeedConfiguration[] feedConfigs = config?.Feeds ?? [];
-        _logger.LogInformation("Found {Count} feed configurations", feedConfigs.Length);
+        string[] visibleChannels = config?.VisibleChannels is { Length: > 0 } vc
+            ? vc
+            : DefaultChannels;
+        _logger.LogInformation(
+            "Found {Count} feed configurations, visible channels: {Channels}",
+            feedConfigs.Length,
+            string.Join(", ", visibleChannels)
+        );
 
         Dictionary<string, FeedEntry> newFeeds = new Dictionary<string, FeedEntry>();
 
         foreach (FeedConfiguration fc in feedConfigs)
         {
-            _logger.LogDebug("Loading feed {FeedName} ({FeedId}) at {Url}", fc.Name, fc.Id, fc.Url);
-            string password = DecryptPassword(fc);
-
-            HttpClient baseHttpClient = _connectionService.CreateAuthenticatedClient(
-                fc.Url,
-                fc.Username,
-                password
+            _logger.LogDebug(
+                "Loading feed {FeedName} ({FeedId}) provider {Provider}",
+                fc.Name,
+                fc.Id,
+                fc.Provider
             );
 
-            if (!string.IsNullOrWhiteSpace(fc.Repository))
+            IRegistryClientFactory? factory = _factories.FirstOrDefault(f =>
+                f.Provider == fc.Provider
+            );
+            if (factory is null)
             {
-                // Pinned mode
-                FeedEntry entry = CreateFeedEntry(
-                    fc.Id,
-                    fc.Name,
-                    fc.Url,
-                    fc.Repository,
-                    baseHttpClient
+                _logger.LogWarning(
+                    "No registry factory registered for provider {Provider} (feed {FeedId}), skipping",
+                    fc.Provider,
+                    fc.Id
                 );
-                newFeeds[fc.Id] = entry;
+                continue;
             }
-            else
+
+            try
             {
-                // Discovery Mode
-                try
+                DecryptedFeedSecrets secrets = DecryptSecrets(fc);
+                IReadOnlyList<RegistryClientRegistration> registrations = await factory
+                    .CreateAsync(fc, secrets, visibleChannels, cancellationToken)
+                    .ConfigureAwait(false);
+
+                foreach (RegistryClientRegistration registration in registrations)
                 {
-                    IReadOnlyList<NexusRepositoryInfo> repos =
-                        await NexusRegistryClient.ListRawHostedRepositoriesAsync(
-                            baseHttpClient,
-                            fc.Url,
-                            cancellationToken
-                        );
-
-                    _logger.LogInformation(
-                        "Discovered {Count} raw repositories on {FeedName}",
-                        repos.Count,
-                        fc.Name
+                    newFeeds[registration.FeedId] = new FeedEntry(
+                        new FeedInfo(registration.FeedId, registration.FeedName),
+                        registration.Client,
+                        registration.OwnedResource
                     );
-
-                    foreach (NexusRepositoryInfo repo in repos)
-                    {
-                        string feedId = $"{fc.Id}:{repo.Name}";
-                        string feedName = $"{fc.Name} / {repo.Name}";
-
-                        // Each discovered repo needs its own HttpClient (same auth)
-                        HttpClient repoHttpClient = _connectionService.CreateAuthenticatedClient(
-                            fc.Url,
-                            fc.Username,
-                            password
-                        );
-
-                        FeedEntry entry = CreateFeedEntry(
-                            feedId,
-                            feedName,
-                            fc.Url,
-                            repo.Name,
-                            repoHttpClient
-                        );
-                        newFeeds[feedId] = entry;
-                    }
-
-                    // Dispose the base client used only for discovery
-                    baseHttpClient.Dispose();
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(
-                        ex,
-                        "Failed to discover repositories for feed {FeedName} ({FeedId}), skipping",
-                        fc.Name,
-                        fc.Id
-                    );
-                    baseHttpClient.Dispose();
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Failed to load feed {FeedName} ({FeedId}), skipping",
+                    fc.Name,
+                    fc.Id
+                );
             }
         }
 
@@ -181,60 +156,56 @@ public sealed class FeedRegistry : IFeedRegistry, IDisposable
             _feeds = newFeeds;
         }
 
-        foreach (FeedEntry entry in oldFeeds.Values)
-            entry.HttpClient.Dispose();
+        DisposeAll(oldFeeds);
 
         _logger.LogInformation("Feed registry reloaded with {Count} feeds", newFeeds.Count);
     }
 
-    private string DecryptPassword(FeedConfiguration fc)
+    private DecryptedFeedSecrets DecryptSecrets(FeedConfiguration fc)
     {
-        if (string.IsNullOrEmpty(fc.EncryptedPassword))
-            return string.Empty;
+        return new DecryptedFeedSecrets(
+            Password: DecryptOrNull(fc.EncryptedPassword, fc, "password"),
+            S3SecretKey: DecryptOrNull(fc.S3?.EncryptedSecretKey, fc, "S3 secret key"),
+            S3SessionToken: DecryptOrNull(fc.S3?.EncryptedSessionToken, fc, "S3 session token")
+        );
+    }
+
+    private string? DecryptOrNull(string? encrypted, FeedConfiguration fc, string what)
+    {
+        if (string.IsNullOrEmpty(encrypted))
+            return null;
 
         try
         {
-            return _encryptionService.Decrypt(fc.EncryptedPassword);
+            return _encryptionService.Decrypt(encrypted);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(
                 ex,
-                "Failed to decrypt password for feed {FeedName} ({FeedId})",
+                "Failed to decrypt {What} for feed {FeedName} ({FeedId})",
+                what,
                 fc.Name,
                 fc.Id
             );
-            return string.Empty;
+            return null;
         }
     }
 
-    private FeedEntry CreateFeedEntry(
-        string feedId,
-        string feedName,
-        string baseUrl,
-        string repository,
-        HttpClient httpClient
-    )
+    private static void DisposeAll(Dictionary<string, FeedEntry> feeds)
     {
-        NexusOptions opts = new NexusOptions { BaseUrl = baseUrl, Repository = repository };
-
-        ILogger<NexusRegistryClient> logger = _loggerFactory.CreateLogger<NexusRegistryClient>();
-        NexusRegistryClient client = new NexusRegistryClient(
-            httpClient,
-            Options.Create(opts),
-            logger
-        );
-
-        return new FeedEntry(new FeedInfo(feedId, feedName), client, httpClient);
+        foreach (FeedEntry entry in feeds.Values)
+            entry.Owned?.Dispose();
     }
 
     public void Dispose()
     {
+        Dictionary<string, FeedEntry> feeds;
         lock (_lock)
         {
-            foreach (FeedEntry entry in _feeds.Values)
-                entry.HttpClient.Dispose();
-            _feeds.Clear();
+            feeds = _feeds;
+            _feeds = new Dictionary<string, FeedEntry>();
         }
+        DisposeAll(feeds);
     }
 }

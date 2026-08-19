@@ -2,6 +2,8 @@
 
 ## Repository structure
 
+This section describes the **Nexus** raw-repository layout. For the **S3** backend the manifest is identical, but the storage layout and publishing differ — see [S3 storage](s3-storage.md).
+
 Products are stored in Nexus raw repositories with this exact layout:
 
 ```
@@ -90,6 +92,7 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "publisher": "My Company",
   "imageUrl": "https://example.com/icon.png",
   "downloadSizeBytes": 52428800,
+  "contentSha256": "<hex sha-256 of the package zip; set by the S3 publisher, verified on download>",
   "requirements": ["Windows 10+", ".NET 8 Runtime"],
   "shortcuts": [
     { "exeName": "MyProduct.exe", "displayName": "My Product" },
@@ -138,6 +141,8 @@ Products can be published to multiple Nexus repositories with different badges. 
 | `badgeColor` | string | Hex color for the badge pill (e.g. "#2E7D32" for green, "#E53935" for red) |
 
 Same `productId` across different repos = one product with multiple channels. The channel dropdown in the product detail view lets users pick which channel to install from.
+
+On the **S3** backend, channels are the top-level prefix within a single bucket (`{channel}/{productId}/...`) rather than separate repositories, and access to a channel is enforced by IAM policy on that prefix. `badgeText`/`badgeColor` still drive the badge. See [S3 storage](s3-storage.md).
 
 Pipeline example:
 

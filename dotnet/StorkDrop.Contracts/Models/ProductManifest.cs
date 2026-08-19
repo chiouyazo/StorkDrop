@@ -30,5 +30,6 @@ public sealed record ProductManifest(
     bool AllowMultipleInstances = false,
     string[]? ExcludeFiles = null,
     Dictionary<string, string>? Metadata = null,
-    bool SharedInstallLocation = false
+    bool SharedInstallLocation = false,
+    string? ContentSha256 = null
 );

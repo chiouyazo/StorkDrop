@@ -227,9 +227,10 @@ public sealed class EnvironmentVariableService
 
         try
         {
-            string configDir = GetStorkConfigDir();
-            Directory.CreateDirectory(configDir);
             string path = StorkPaths.EnvVarsPath(productId, uniqueId);
+            string? directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
             string json = JsonSerializer.Serialize(applied, JsonOptions);
             await File.WriteAllTextAsync(path, json, cancellationToken);
         }

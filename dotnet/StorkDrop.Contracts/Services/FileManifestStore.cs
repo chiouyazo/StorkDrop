@@ -22,7 +22,32 @@ public static class FileManifestStore
     )
     {
         string json = JsonSerializer.Serialize(files, Options);
-        await File.WriteAllTextAsync(path, json, cancellationToken);
+
+        string? directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+
+        // Atomic write: a crash mid-write must never truncate the manifest, because it is the exact
+        // list of files uninstall/update is allowed to delete. Write a temp file, flush to disk, then
+        // replace.
+        string tempPath = path + ".tmp";
+        try
+        {
+            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, path, overwrite: true);
+        }
+        finally
+        {
+            try
+            {
+                if (File.Exists(tempPath))
+                    File.Delete(tempPath);
+            }
+            catch
+            {
+                // Best-effort cleanup of the temp copy.
+            }
+        }
     }
 
     public static async Task<List<TrackedFile>?> ReadAsync(
@@ -51,32 +76,46 @@ public static class FileManifestStore
         if (string.IsNullOrWhiteSpace(json))
             return null;
 
-        using JsonDocument document = JsonDocument.Parse(json);
-        if (document.RootElement.ValueKind != JsonValueKind.Array)
-            return null;
-
-        List<TrackedFile> result = new List<TrackedFile>();
-        foreach (JsonElement element in document.RootElement.EnumerateArray())
+        JsonDocument document;
+        try
         {
-            if (element.ValueKind == JsonValueKind.String)
-            {
-                string? legacyPath = element.GetString();
-                if (!string.IsNullOrEmpty(legacyPath))
-                    result.Add(new TrackedFile(legacyPath));
-            }
-            else if (element.ValueKind == JsonValueKind.Object)
-            {
-                string? filePath = ReadString(element, "Path");
-                if (string.IsNullOrEmpty(filePath))
-                    continue;
-
-                string? sha = ReadString(element, "Sha256");
-                long size = ReadLong(element, "Size");
-                result.Add(new TrackedFile(filePath, sha, size));
-            }
+            document = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            // A corrupt/half-written manifest must not crash uninstall or the integrity check; treat
+            // it as "no usable manifest" so callers fall back to their safe path.
+            return null;
         }
 
-        return result;
+        using (document)
+        {
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+                return null;
+
+            List<TrackedFile> result = new List<TrackedFile>();
+            foreach (JsonElement element in document.RootElement.EnumerateArray())
+            {
+                if (element.ValueKind == JsonValueKind.String)
+                {
+                    string? legacyPath = element.GetString();
+                    if (!string.IsNullOrEmpty(legacyPath))
+                        result.Add(new TrackedFile(legacyPath));
+                }
+                else if (element.ValueKind == JsonValueKind.Object)
+                {
+                    string? filePath = ReadString(element, "Path");
+                    if (string.IsNullOrEmpty(filePath))
+                        continue;
+
+                    string? sha = ReadString(element, "Sha256");
+                    long size = ReadLong(element, "Size");
+                    result.Add(new TrackedFile(filePath, sha, size));
+                }
+            }
+
+            return result;
+        }
     }
 
     private static string? ReadString(JsonElement element, string name)

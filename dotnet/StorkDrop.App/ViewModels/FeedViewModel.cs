@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using StorkDrop.Contracts.Models;
 
 namespace StorkDrop.App.ViewModels;
 
@@ -9,6 +10,59 @@ public partial class FeedViewModel : ObservableObject
 {
     [ObservableProperty]
     private string _id = string.Empty;
+
+    /// <summary>The storage backend for this feed (Nexus HTTP raw repo or S3 object storage).</summary>
+    [ObservableProperty]
+    private FeedProvider _provider = FeedProvider.Nexus;
+
+    public bool IsS3 => Provider == FeedProvider.S3;
+
+    public bool IsNexus => Provider == FeedProvider.Nexus;
+
+    public bool IsLocal => Provider == FeedProvider.Local;
+
+    public IReadOnlyList<FeedProvider> AvailableProviders { get; } =
+    [FeedProvider.Nexus, FeedProvider.S3, FeedProvider.Local];
+
+    partial void OnProviderChanged(FeedProvider value)
+    {
+        OnPropertyChanged(nameof(IsS3));
+        OnPropertyChanged(nameof(IsNexus));
+        OnPropertyChanged(nameof(IsLocal));
+    }
+
+    // --- S3 backend settings (only meaningful when Provider == S3) ---
+
+    [ObservableProperty]
+    private string _s3Bucket = string.Empty;
+
+    [ObservableProperty]
+    private string _s3Region = string.Empty;
+
+    /// <summary>Custom endpoint for S3-compatible services (MinIO, R2, Wasabi). Empty = AWS S3.</summary>
+    [ObservableProperty]
+    private string _s3ServiceUrl = string.Empty;
+
+    [ObservableProperty]
+    private bool _s3UsePathStyle;
+
+    [ObservableProperty]
+    private string _s3AccessKeyId = string.Empty;
+
+    /// <summary>Newly entered S3 secret key (transient). Empty keeps <see cref="ExistingS3EncryptedSecretKey"/>.</summary>
+    [ObservableProperty]
+    private string _s3SecretKey = string.Empty;
+
+    /// <summary>Optional base prefix within the bucket.</summary>
+    [ObservableProperty]
+    private string _s3Prefix = string.Empty;
+
+    /// <summary>Comma-separated channels this feed exposes (empty = use the app's visible channels).</summary>
+    [ObservableProperty]
+    private string _s3Channels = string.Empty;
+
+    /// <summary>The encrypted S3 secret loaded from config; preserved on save unless a new one is typed.</summary>
+    public string? ExistingS3EncryptedSecretKey { get; set; }
 
     [ObservableProperty]
     private string _name = string.Empty;

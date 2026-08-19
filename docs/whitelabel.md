@@ -42,6 +42,35 @@ unreadable file means plain, unbranded StorkDrop.
 | `forbidNewFeeds` | bool | When true, the "Add feed" button in Settings is disabled so the user cannot add feeds. |
 | `feed.name` / `feed.url` | string | Pre-configure the primary feed. Both are fixed by the vendor and read-only in the setup wizard and Settings; the user only supplies username and password. They are re-applied on load and save, so editing the config file by hand cannot change them. |
 | `feed.lockPasswordHash` | string | Optional. A `PasswordHasher` hash (Base64 of a 16-byte salt + 32-byte PBKDF2-SHA256 key) that locks install/update/uninstall behind a password. Shipping the one-way hash (never the plaintext) matches the existing soft-lock model. When set, the lock is enforced and its controls are disabled in the UI. |
+| `feed.provider` | string | `Nexus` (default) or `S3`. Selects the storage backend for the pre-configured feed. |
+| `feed.s3` | object | S3 coordinates when `provider` is `S3`: `bucket`, `region`, `serviceUrl` (omit for AWS), `usePathStyle`, `prefix`, `channels`. These are vendor-fixed and read-only; the customer only supplies the access key and secret. **No secret is ever baked into the edition.** |
+| `visibleChannels` | string[] | Channels the edition exposes (e.g. `["prod"]`). Locks the app-wide visible-channel set for the edition. |
+
+### Branded S3 edition example
+
+```jsonc
+{
+  "prefix": "acme",
+  "displayName": "Acme GmbH Edition",
+  "logo": "brand-logo.png",
+  "forbidNewFeeds": true,
+  "visibleChannels": ["prod"],
+  "feed": {
+    "name": "Acme Products",
+    "provider": "S3",
+    "lockPasswordHash": "<PasswordHasher base64 hash>",
+    "s3": {
+      "bucket": "acme-storkdrop",
+      "region": "eu-central-1",
+      "serviceUrl": "https://minio.acme.com",   // omit for AWS S3
+      "usePathStyle": true,
+      "channels": ["prod"]
+    }
+  }
+}
+```
+
+The customer runs the branded `Setup.exe`, then enters only their S3 access key and secret; the bucket, endpoint and channel are vendor-fixed and locked, and the edition can only ever see `prod`. See [S3 storage](s3-storage.md) for the access model.
 
 The sidebar shows the brand logo with a "powered by StorkDrop" line underneath when branded.
 

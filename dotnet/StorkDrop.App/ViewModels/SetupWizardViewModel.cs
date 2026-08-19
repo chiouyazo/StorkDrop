@@ -183,22 +183,36 @@ public partial class SetupWizardViewModel : ObservableObject
     {
         BrandingInfo branding = Branding.Current;
         bool locked = branding.HasFeed;
+        bool brandedS3 =
+            locked && branding.Feed!.Provider == FeedProvider.S3 && branding.Feed.S3 is not null;
+
+        string? encryptedPassword = !string.IsNullOrEmpty(Password)
+            ? _encryptionService.Encrypt(Password)
+            : null;
+
+        // For a branded S3 edition the wizard's credential fields carry the S3 access key / secret,
+        // which flow into the S3 settings; Username/EncryptedPassword stay unused in that case.
+        S3FeedSettings? s3 = brandedS3
+            ? BrandingFeedMapper.ToS3Settings(branding.Feed!, Username, encryptedPassword)
+            : null;
 
         FeedConfiguration feed = new FeedConfiguration(
             Id: locked ? Branding.WhitelabelFeedId : Guid.NewGuid().ToString(),
             Name: locked && !string.IsNullOrWhiteSpace(branding.Feed!.Name)
                 ? branding.Feed.Name!
                 : FeedName,
-            Url: locked && !string.IsNullOrWhiteSpace(branding.Feed!.Url)
-                ? branding.Feed.Url!
+            Url: brandedS3 ? (branding.Feed!.Url ?? $"s3://{branding.Feed.S3!.Bucket}")
+                : locked && !string.IsNullOrWhiteSpace(branding.Feed!.Url) ? branding.Feed.Url!
                 : FeedUrl,
-            Repository: !string.IsNullOrWhiteSpace(FeedRepository) ? FeedRepository : null,
-            Username: Username,
-            EncryptedPassword: !string.IsNullOrEmpty(Password)
-                ? _encryptionService.Encrypt(Password)
+            Repository: brandedS3 ? null
+                : !string.IsNullOrWhiteSpace(FeedRepository) ? FeedRepository
                 : null,
+            Username: brandedS3 ? null : Username,
+            EncryptedPassword: brandedS3 ? null : encryptedPassword,
             PluginId: null,
-            LockPasswordHash: locked ? branding.Feed!.LockPasswordHash : null
+            LockPasswordHash: locked ? branding.Feed!.LockPasswordHash : null,
+            Provider: brandedS3 ? FeedProvider.S3 : FeedProvider.Nexus,
+            S3: s3
         );
 
         ProxySettings? proxy = !string.IsNullOrEmpty(ProxyHost)
@@ -212,7 +226,8 @@ public partial class SetupWizardViewModel : ObservableObject
             CheckInterval: TimeSpan.FromHours(4),
             ProxySettings: proxy,
             Language: LocalizationManager.Language,
-            CheckForStorkDropUpdates: CheckForStorkDropUpdates
+            CheckForStorkDropUpdates: CheckForStorkDropUpdates,
+            VisibleChannels: branding.VisibleChannels
         );
 
         await _configurationService.SaveAsync(config);

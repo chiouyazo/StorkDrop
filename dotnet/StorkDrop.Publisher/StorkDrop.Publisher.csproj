@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <RootNamespace>StorkDrop.Publisher</RootNamespace>
+    <AssemblyName>storkdrop-publish</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.0.102" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\StorkDrop.Contracts\StorkDrop.Contracts.csproj" />
+    <ProjectReference Include="..\StorkDrop.Registry.S3\StorkDrop.Registry.S3.csproj" />
+  </ItemGroup>
+</Project>

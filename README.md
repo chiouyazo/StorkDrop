@@ -16,7 +16,7 @@
 
 ## What is StorkDrop?
 
-StorkDrop is a self-contained deployment client that installs, updates, and manages software from Nexus OSS registries. Products declare their install behavior in a JSON manifest. So no custom installer is needed.
+StorkDrop is a self-contained deployment client that installs, updates, and manages software from Nexus OSS registries or S3 object storage (AWS or any S3-compatible service). Products declare their install behavior in a JSON manifest. So no custom installer is needed.
 
 It's built for **server software and business tools** that:
 
@@ -61,7 +61,8 @@ Download **StorkDrop-Demo** from the [latest release](https://github.com/chiouya
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | [Features](docs/features.md)                           | Marketplace, installation tracking, isolation, backup/rollback, file-in-use handling, UAC elevation, file lock detection, data protection |
 | [Product Manifest](docs/manifest.md)                   | Repository structure, ZIP packaging, manifest reference, environment variables, uninstall behavior                                        |
-| [Multi-Feed Support](docs/multi-feed.md)               | Connecting to multiple Nexus repositories, adding custom feed backends                                                                    |
+| [Multi-Feed Support](docs/multi-feed.md)               | Connecting to multiple feeds, backend factories, adding custom feed backends                                                              |
+| [S3 Storage](docs/s3-storage.md)                       | S3 / S3-compatible backend: single-bucket layout, channels as prefixes, per-customer IAM access, checksum verification, publisher CLI     |
 | [App-Level Plugins](docs/app-level-plugins.md)         | Extend StorkDrop with custom file handlers, settings pages, and path resolvers                                                            |
 | [Product-Level Plugins](docs/product-level-plugins.md) | Ship pre/post install logic with your product (database setup, validation, config generation)                                             |
 | [CLI](docs/cli.md)                                     | Command-line interface for headless install, uninstall, update, list, and version queries                                                 |
@@ -116,10 +117,13 @@ The Activity Log page has a "View Application Logs" button that opens the log di
 StorkDrop.sln
 dotnet/
   StorkDrop.Contracts/     Models, interfaces, plugin contracts (NuGet, net10.0)
-  StorkDrop.Registry/      Nexus client, FeedRegistry (net10.0)
+  StorkDrop.Registry/      Nexus client + factory, FeedRegistry (net10.0)
+  StorkDrop.Registry.S3/   S3 / S3-compatible client + factory (net10.0)
+  StorkDrop.Publisher/     Publish products to S3 + IAM policy generator (net10.0)
   StorkDrop.Installer/     Install engine, coordinator (net10.0-windows)
   StorkDrop.App/           WPF application (net10.0-windows, win-x64)
   StorkDrop.Tests/         Unit tests (net10.0-windows)
+  StorkDrop.Registry.S3.IntegrationTests/  Real S3 tests against MinIO (net10.0)
 ```
 
 ## Building

@@ -108,6 +108,17 @@
             </StackPanel>
           </Border>
 
+          <TextBlock
+            Text="Visible channels (comma-separated, e.g. prod, dev, feature)"
+            Style="{DynamicResource CaptionText}"
+            Margin="0,0,0,4"
+          />
+          <TextBox
+            Text="{Binding VisibleChannels, UpdateSourceTrigger=PropertyChanged}"
+            Style="{DynamicResource StyledTextBox}"
+            Margin="0,0,0,12"
+          />
+
           <ItemsControl ItemsSource="{Binding Feeds}">
             <ItemsControl.ItemTemplate>
               <DataTemplate>
@@ -150,6 +161,18 @@
                     />
 
                     <TextBlock
+                      Text="Storage backend"
+                      Style="{DynamicResource CaptionText}"
+                      Margin="0,0,0,4"
+                    />
+                    <ComboBox
+                      ItemsSource="{Binding AvailableProviders}"
+                      SelectedItem="{Binding Provider}"
+                      IsEnabled="{Binding CanRemove}"
+                      Margin="0,0,0,8"
+                    />
+
+                    <TextBlock
                       Text="{DynamicResource Settings_FeedUrl}"
                       Style="{DynamicResource CaptionText}"
                       Margin="0,0,0,4"
@@ -161,67 +184,180 @@
                       Margin="0,0,0,8"
                     />
 
-                    <TextBlock
-                      Text="{DynamicResource Settings_FeedRepo}"
-                      Style="{DynamicResource CaptionText}"
-                      Margin="0,0,0,4"
-                    />
-                    <Grid Margin="0,0,0,8">
-                      <TextBox
-                        x:Name="RepoTextBox"
-                        Text="{Binding Repository, UpdateSourceTrigger=PropertyChanged}"
-                        Style="{DynamicResource StyledTextBox}"
-                      />
+                    <StackPanel>
+                      <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLocal}" Value="True">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </StackPanel.Style>
                       <TextBlock
-                        Text="{DynamicResource Settings_FeedRepo_Hint}"
-                        IsHitTestVisible="False"
-                        Foreground="#888"
-                        FontStyle="Italic"
-                        FontSize="12"
-                        VerticalAlignment="Center"
-                        Margin="10,0,0,0"
-                      >
-                        <TextBlock.Style>
-                          <Style TargetType="TextBlock">
-                            <Setter Property="Visibility" Value="Collapsed" />
-                            <Style.Triggers>
-                              <DataTrigger Binding="{Binding Repository}" Value="">
-                                <Setter Property="Visibility" Value="Visible" />
-                              </DataTrigger>
-                              <DataTrigger Binding="{Binding Repository}" Value="{x:Null}">
-                                <Setter Property="Visibility" Value="Visible" />
-                              </DataTrigger>
-                            </Style.Triggers>
-                          </Style>
-                        </TextBlock.Style>
-                      </TextBlock>
-                    </Grid>
+                        Text="{DynamicResource Settings_FeedRepo}"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <Grid Margin="0,0,0,8">
+                        <TextBox
+                          x:Name="RepoTextBox"
+                          Text="{Binding Repository, UpdateSourceTrigger=PropertyChanged}"
+                          Style="{DynamicResource StyledTextBox}"
+                        />
+                        <TextBlock
+                          Text="{DynamicResource Settings_FeedRepo_Hint}"
+                          IsHitTestVisible="False"
+                          Foreground="#888"
+                          FontStyle="Italic"
+                          FontSize="12"
+                          VerticalAlignment="Center"
+                          Margin="10,0,0,0"
+                        >
+                          <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                              <Setter Property="Visibility" Value="Collapsed" />
+                              <Style.Triggers>
+                                <DataTrigger Binding="{Binding Repository}" Value="">
+                                  <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Repository}" Value="{x:Null}">
+                                  <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                              </Style.Triggers>
+                            </Style>
+                          </TextBlock.Style>
+                        </TextBlock>
+                      </Grid>
 
-                    <TextBlock
-                      Text="{DynamicResource Settings_FeedUser}"
-                      Style="{DynamicResource CaptionText}"
-                      Margin="0,0,0,4"
-                    />
-                    <TextBox
-                      Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
-                      Style="{DynamicResource StyledTextBox}"
-                      Margin="0,0,0,8"
-                    />
+                      <TextBlock
+                        Text="{DynamicResource Settings_FeedUser}"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding Username, UpdateSourceTrigger=PropertyChanged}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
 
-                    <TextBlock
-                      Text="{DynamicResource Settings_FeedPass}"
-                      Style="{DynamicResource CaptionText}"
-                      Margin="0,0,0,4"
-                    />
-                    <PasswordBox
-                      Tag="{Binding}"
-                      Loaded="FeedPasswordBox_Loaded"
-                      PasswordChanged="FeedPasswordBox_PasswordChanged"
-                      MinHeight="32"
-                      Padding="8,6"
-                      VerticalContentAlignment="Center"
-                      Margin="0,0,0,8"
-                    />
+                      <TextBlock
+                        Text="{DynamicResource Settings_FeedPass}"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <PasswordBox
+                        Tag="{Binding}"
+                        Loaded="FeedPasswordBox_Loaded"
+                        PasswordChanged="FeedPasswordBox_PasswordChanged"
+                        MinHeight="32"
+                        Padding="8,6"
+                        VerticalContentAlignment="Center"
+                        Margin="0,0,0,8"
+                      />
+                    </StackPanel>
+
+                    <StackPanel Margin="0,0,0,8">
+                      <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                          <Setter Property="Visibility" Value="Collapsed" />
+                          <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsS3}" Value="True">
+                              <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                          </Style.Triggers>
+                        </Style>
+                      </StackPanel.Style>
+
+                      <TextBlock
+                        Text="S3 bucket"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3Bucket, UpdateSourceTrigger=PropertyChanged}"
+                        IsReadOnly="{Binding IsIdentityLocked}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <TextBlock
+                        Text="Region"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3Region, UpdateSourceTrigger=PropertyChanged}"
+                        IsReadOnly="{Binding IsIdentityLocked}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <TextBlock
+                        Text="Endpoint URL (leave empty for AWS S3)"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3ServiceUrl, UpdateSourceTrigger=PropertyChanged}"
+                        IsReadOnly="{Binding IsIdentityLocked}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <CheckBox
+                        Content="Use path-style addressing (required for MinIO and most S3-compatible services)"
+                        IsChecked="{Binding S3UsePathStyle}"
+                        IsEnabled="{Binding CanRemove}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <TextBlock
+                        Text="Access key ID"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3AccessKeyId, UpdateSourceTrigger=PropertyChanged}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <TextBlock
+                        Text="Secret access key"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3SecretKey, UpdateSourceTrigger=PropertyChanged}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <TextBlock
+                        Text="Prefix (optional)"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3Prefix, UpdateSourceTrigger=PropertyChanged}"
+                        IsReadOnly="{Binding IsIdentityLocked}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,8"
+                      />
+
+                      <TextBlock
+                        Text="Channels (comma-separated, empty = use visible channels)"
+                        Style="{DynamicResource CaptionText}"
+                        Margin="0,0,0,4"
+                      />
+                      <TextBox
+                        Text="{Binding S3Channels, UpdateSourceTrigger=PropertyChanged}"
+                        IsReadOnly="{Binding IsIdentityLocked}"
+                        Style="{DynamicResource StyledTextBox}"
+                        Margin="0,0,0,4"
+                      />
+                    </StackPanel>
 
                     <CheckBox
                       Content="{DynamicResource Settings_FeedLock}"

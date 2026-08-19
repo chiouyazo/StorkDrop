@@ -14,6 +14,7 @@ using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Services;
 using StorkDrop.Installer;
 using StorkDrop.Registry;
+using StorkDrop.Registry.S3;
 
 namespace StorkDrop.App;
 
@@ -52,7 +53,12 @@ public static class AppHostBuilder
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .Enrich.FromLogContext()
             .WriteTo.Console()
-            .WriteTo.File(logPath, rollingInterval: RollingInterval.Day, retainedFileCountLimit: 30)
+            .WriteTo.File(
+                logPath,
+                rollingInterval: RollingInterval.Day,
+                retainedFileCountLimit: 30,
+                shared: true
+            )
             .WriteTo.Sink(new InstallLogSink())
             .CreateLogger();
 
@@ -66,6 +72,7 @@ public static class AppHostBuilder
                 services.AddInstaller();
 
                 services.AddFeedRegistry();
+                services.AddS3Registry();
 
                 services.AddSingleton<NavigationService>();
                 services.AddSingleton<DialogService>();

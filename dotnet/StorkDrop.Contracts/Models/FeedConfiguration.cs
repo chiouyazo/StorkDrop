@@ -11,5 +11,7 @@ public sealed record FeedConfiguration(
     string? LockPasswordHash = null,
     string? ReportUrl = null,
     string? EncryptedReportSecret = null,
-    string? ReportCustomerId = null
+    string? ReportCustomerId = null,
+    FeedProvider Provider = FeedProvider.Nexus,
+    S3FeedSettings? S3 = null
 );

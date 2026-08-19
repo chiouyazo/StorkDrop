@@ -150,6 +150,17 @@ storkdrop --cli remove-feed dev
 `add-feed` replaces an existing feed with the same `--id` (or same url+repo) instead of
 duplicating, then reloads the feed registry and runs a connection test.
 
+A **local feed** points at a folder instead of a server, for installing local builds without
+Nexus/S3. The folder holds one product per subfolder, each with a `manifest.json` and one
+package `.zip`; the product then appears in the marketplace and installs through the normal
+pipeline (requirements, plugins, elevation).
+
+```
+storkdrop --cli add-feed --provider local --url C:\path\to\localfeed --id local --name "Local Dev"
+```
+
+The desktop UI does not offer adding a local feed, but shows it and lets you remove it.
+
 ### apply
 
 Install an ordered set of products described by an **environment manifest**. Products

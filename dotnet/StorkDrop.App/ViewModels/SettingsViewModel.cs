@@ -99,6 +99,13 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _runInBackground = true;
 
+    /// <summary>
+    /// Comma-separated channels shown from channel-aware feeds (S3). Empty defaults to "prod".
+    /// Customer editions keep this at prod; operators add "dev, feature".
+    /// </summary>
+    [ObservableProperty]
+    private string _visibleChannels = string.Empty;
+
     [ObservableProperty]
     private bool _isCheckingForUpdates;
 
@@ -189,6 +196,11 @@ public partial class SettingsViewModel : ObservableObject
             CheckForStorkDropUpdates = config.CheckForStorkDropUpdates;
             IncludeDevVersions = config.IncludeDevVersions;
             RunInBackground = config.RunInBackground;
+            string[]? effectiveChannels =
+                Branding.Current.VisibleChannels ?? config.VisibleChannels;
+            VisibleChannels = effectiveChannels is { Length: > 0 } vc
+                ? string.Join(", ", vc)
+                : string.Empty;
 
             SelectedLanguage = config.Language;
             SelectedLogLevel = config.LogLevel ?? "Information";
@@ -240,15 +252,53 @@ public partial class SettingsViewModel : ObservableObject
                         }
                     }
 
+                    string decryptedS3Secret = string.Empty;
+                    if (!string.IsNullOrEmpty(f.S3?.EncryptedSecretKey))
+                    {
+                        try
+                        {
+                            decryptedS3Secret = _encryptionService.Decrypt(f.S3.EncryptedSecretKey);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to decrypt S3 secret for feed {FeedId}",
+                                f.Id
+                            );
+                            decryptedS3Secret = string.Empty;
+                        }
+                    }
+
                     bool isWhitelabel =
                         Branding.Current.HasFeed && f.Id == Branding.WhitelabelFeedId;
                     BrandingFeed? brandFeed = Branding.Current.Feed;
                     bool hasManagedLock =
                         isWhitelabel && !string.IsNullOrEmpty(brandFeed?.LockPasswordHash);
 
+                    bool brandedS3 =
+                        isWhitelabel
+                        && brandFeed?.Provider == FeedProvider.S3
+                        && brandFeed.S3 is not null;
+                    BrandingS3? brandS3 = brandedS3 ? brandFeed!.S3 : null;
+                    FeedProvider provider = brandedS3 ? FeedProvider.S3 : f.Provider;
+                    string[]? s3Channels = brandS3?.Channels ?? f.S3?.Channels;
+
                     return new FeedViewModel
                     {
                         Id = f.Id,
+                        Provider = provider,
+                        S3Bucket = brandS3?.Bucket ?? f.S3?.Bucket ?? string.Empty,
+                        S3Region = brandS3?.Region ?? f.S3?.Region ?? string.Empty,
+                        S3ServiceUrl = brandS3?.ServiceUrl ?? f.S3?.ServiceUrl ?? string.Empty,
+                        S3UsePathStyle = brandS3?.UsePathStyle ?? f.S3?.UsePathStyle ?? false,
+                        S3AccessKeyId = f.S3?.AccessKeyId ?? string.Empty,
+                        S3SecretKey = decryptedS3Secret,
+                        S3Prefix = brandS3?.Prefix ?? f.S3?.Prefix ?? string.Empty,
+                        S3Channels = s3Channels is { Length: > 0 } channels
+                            ? string.Join(", ", channels)
+                            : string.Empty,
+                        ExistingS3EncryptedSecretKey = f.S3?.EncryptedSecretKey,
                         Name =
                             isWhitelabel && !string.IsNullOrWhiteSpace(brandFeed?.Name)
                                 ? brandFeed!.Name!
@@ -389,7 +439,9 @@ public partial class SettingsViewModel : ObservableObject
                             : null,
                         !string.IsNullOrWhiteSpace(f.ReportCustomerId)
                             ? f.ReportCustomerId.Trim()
-                            : null
+                            : null,
+                        f.Provider,
+                        BuildS3Settings(f)
                     );
                 })
                 .ToArray();
@@ -410,7 +462,8 @@ public partial class SettingsViewModel : ObservableObject
                 LogLevel: SelectedLogLevel,
                 CheckForStorkDropUpdates: CheckForStorkDropUpdates,
                 IncludeDevVersions: IncludeDevVersions,
-                RunInBackground: RunInBackground
+                RunInBackground: RunInBackground,
+                VisibleChannels: Branding.Current.VisibleChannels ?? ParseChannels(VisibleChannels)
             );
 
             await Task.Run(() => _configurationService.SaveAsync(config));
@@ -557,6 +610,60 @@ public partial class SettingsViewModel : ObservableObject
     /// Determines the lock password hash to persist for a feed: cleared when the lock is
     /// disabled, freshly hashed when a new password is entered, otherwise left unchanged.
     /// </summary>
+    /// <summary>
+    /// Builds the S3 settings for a feed when its provider is S3, encrypting a newly entered secret key
+    /// and otherwise preserving the previously stored one.
+    /// </summary>
+    private S3FeedSettings? BuildS3Settings(FeedViewModel feed)
+    {
+        if (feed.Provider != FeedProvider.S3)
+            return null;
+
+        string? encryptedSecret = !string.IsNullOrEmpty(feed.S3SecretKey)
+            ? _encryptionService.Encrypt(feed.S3SecretKey)
+            : feed.ExistingS3EncryptedSecretKey;
+
+        // A white-label feed's S3 coordinates are vendor-fixed; keep them from branding and only take
+        // the user-supplied access credentials.
+        bool isWhitelabel = Branding.Current.HasFeed && feed.Id == Branding.WhitelabelFeedId;
+        if (
+            isWhitelabel
+            && Branding.Current.Feed is { Provider: FeedProvider.S3, S3: not null } brandFeed
+        )
+        {
+            return BrandingFeedMapper.ToS3Settings(brandFeed, feed.S3AccessKeyId, encryptedSecret);
+        }
+
+        return new S3FeedSettings(
+            Bucket: feed.S3Bucket.Trim(),
+            Region: NullIfBlank(feed.S3Region),
+            ServiceUrl: NullIfBlank(feed.S3ServiceUrl),
+            UsePathStyle: feed.S3UsePathStyle,
+            AccessKeyId: NullIfBlank(feed.S3AccessKeyId),
+            EncryptedSecretKey: encryptedSecret,
+            Prefix: NullIfBlank(feed.S3Prefix),
+            Channels: ParseChannels(feed.S3Channels)
+        );
+    }
+
+    private static string? NullIfBlank(string value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private static string[]? ParseChannels(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        string[] channels = value
+            .Split(
+                [',', ';'],
+                StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries
+            )
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        return channels.Length > 0 ? channels : null;
+    }
+
     private static string? ResolveLockHash(FeedViewModel feed)
     {
         if (!feed.RequireLockPassword)

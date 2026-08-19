@@ -657,6 +657,8 @@ public partial class App : Application
             IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
             await feedRegistry.ReloadAsync();
 
+            // Exit code drives the parent's success check - a failed elevated operation must
+            // report non-zero so the parent does not register it as installed.
             Environment.ExitCode = await action(Services) ? 0 : 1;
         }
         catch (Exception ex)

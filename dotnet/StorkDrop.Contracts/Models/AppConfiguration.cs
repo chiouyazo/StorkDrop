@@ -14,5 +14,6 @@ public sealed record AppConfiguration(
     bool HasShownTrayToast = false,
     bool CheckForStorkDropUpdates = true,
     bool IncludeDevVersions = false,
-    bool RunInBackground = true
+    bool RunInBackground = true,
+    string[]? VisibleChannels = null
 );
