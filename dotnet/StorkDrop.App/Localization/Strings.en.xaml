@@ -49,6 +49,10 @@
     Connected. Found {0} repositories.
   </system:String
   >
+  <system:String x:Key="Status_TestSuccess_LocalFolder">
+    Folder found. {0} products.
+  </system:String
+  >
   <system:String x:Key="Settings_FeedRepo_Hint">
     Leave empty to auto-discover all repositories
   </system:String

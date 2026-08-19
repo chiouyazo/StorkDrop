@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.Extensions.Logging;
@@ -683,6 +684,12 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task TestConnectionAsync(FeedViewModel feed)
     {
+        if (feed.Provider == FeedProvider.Local)
+        {
+            await TestLocalConnectionAsync(feed);
+            return;
+        }
+
         try
         {
             feed.ConnectionTestMessage = LocalizationManager.GetString("Status_Connecting");
@@ -699,6 +706,40 @@ public partial class SettingsViewModel : ObservableObject
                     .Replace("{0}", result.RepositoryCount.ToString())
                 : LocalizationManager.GetString("Error_ConnectionFailed")
                     + $" (HTTP {result.HttpStatusCode})";
+        }
+        catch (Exception ex)
+        {
+            feed.IsConnectionValid = false;
+            feed.ConnectionTestMessage =
+                LocalizationManager.GetString("Error_ConnectionError") + ": " + ex.Message;
+        }
+    }
+
+    private async Task TestLocalConnectionAsync(FeedViewModel feed)
+    {
+        feed.ConnectionTestMessage = LocalizationManager.GetString("Status_Connecting");
+        feed.IsConnectionValid = false;
+
+        string root = feed.Url;
+        try
+        {
+            (bool exists, int products) = await Task.Run(() =>
+            {
+                if (!Directory.Exists(root))
+                    return (false, 0);
+
+                int count = new[] { root }
+                    .Concat(Directory.EnumerateDirectories(root))
+                    .Count(dir => File.Exists(Path.Combine(dir, "manifest.json")));
+                return (true, count);
+            });
+
+            feed.IsConnectionValid = exists;
+            feed.ConnectionTestMessage = exists
+                ? LocalizationManager
+                    .GetString("Status_TestSuccess_LocalFolder")
+                    .Replace("{0}", products.ToString())
+                : LocalizationManager.GetString("Error_ConnectionFailed") + $" ({root})";
         }
         catch (Exception ex)
         {

@@ -49,6 +49,10 @@
     Verbunden. {0} Repositories gefunden.
   </system:String
   >
+  <system:String x:Key="Status_TestSuccess_LocalFolder">
+    Ordner gefunden. {0} Produkte.
+  </system:String
+  >
   <system:String x:Key="Settings_FeedRepo_Hint">
     Leer lassen um alle Repositories automatisch zu erkennen
   </system:String

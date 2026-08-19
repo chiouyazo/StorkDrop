@@ -15,6 +15,7 @@ public sealed class LocalRegistryClient : IRegistryClient
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
     {
         PropertyNameCaseInsensitive = true,
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
     private readonly string _root;
