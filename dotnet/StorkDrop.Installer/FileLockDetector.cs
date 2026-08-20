@@ -204,21 +204,27 @@ public sealed class FileLockDetector : IFileLockDetector
         FileStream? stream = null;
         try
         {
+            // Probe for write access, not just read: a process that has the file loaded as a module
+            // (a running .exe, the STEPS runner processes) still allows shared reads but blocks any
+            // replace/delete. A read-only open would miss exactly the locks that make a copy fail.
             stream = File.Open(
                 filePath,
                 FileMode.Open,
-                FileAccess.Read,
+                FileAccess.ReadWrite,
                 FileShare.ReadWrite | FileShare.Delete
             );
             return false;
         }
         catch (IOException)
         {
+            // Sharing violation: another process holds it in a way that prevents replacement.
             return true;
         }
         catch (UnauthorizedAccessException)
         {
-            return true;
+            // ACL / read-only, not an in-use lock. Elevation and attribute handling deal with that
+            // elsewhere; reporting it here would false-positive when the probe runs unelevated.
+            return false;
         }
         finally
         {

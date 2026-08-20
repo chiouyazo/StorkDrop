@@ -35,6 +35,12 @@ public enum LockedFilesAction
 {
     Skip,
     Retry,
+
+    /// <summary>
+    /// Proceed without ending the processes: still-locked files are renamed aside and replaced on the
+    /// next reboot. Sticky for the rest of the operation so the engine does not re-prompt per file.
+    /// </summary>
+    RenameAndContinue,
 }
 
 public delegate LockedFilesAction LockedFilesCallback(

@@ -240,31 +240,7 @@ public partial class App : Application
                 return result;
             };
 
-            LockedFilesCallback lockedFilesHandler = (lockedFiles, detector, directory) =>
-            {
-                LockedFilesAction result = LockedFilesAction.Skip;
-                try
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        Views.LockedFilesDialog dialog = new Views.LockedFilesDialog(
-                            lockedFiles,
-                            detector,
-                            directory
-                        )
-                        {
-                            Owner = MainWindow,
-                        };
-                        if (dialog.ShowDialog() == true)
-                            result = LockedFilesAction.Retry;
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Locked files dialog failed");
-                }
-                return result;
-            };
+            LockedFilesCallback lockedFilesHandler = CreateLockedFilesHandler();
 
             engine.OnLockedFilesDetected = lockedFilesHandler;
 
@@ -476,6 +452,39 @@ public partial class App : Application
         }
     }
 
+    /// <summary>
+    /// Builds the locked-files dialog handler. Wired both in the interactive UI and in the elevated
+    /// child: the child does the actual copy to protected paths, so without this the file-lock dialog
+    /// would never appear there and locked files (e.g. STEPS runner processes) would be silently
+    /// deferred. The child runs elevated, so ending those processes actually succeeds.
+    /// </summary>
+    private LockedFilesCallback CreateLockedFilesHandler() =>
+        (lockedFiles, detector, directory) =>
+        {
+            LockedFilesAction result = LockedFilesAction.Skip;
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    Views.LockedFilesDialog dialog = new Views.LockedFilesDialog(
+                        lockedFiles,
+                        detector,
+                        directory
+                    )
+                    {
+                        Owner = MainWindow,
+                    };
+                    dialog.ShowDialog();
+                    result = dialog.Action;
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Locked files dialog failed");
+            }
+            return result;
+        };
+
     private Task RunElevatedInstallAsync(
         string productId,
         string targetPath,
@@ -492,6 +501,7 @@ public partial class App : Application
                 IFeedRegistry feedRegistry = services.GetRequiredService<IFeedRegistry>();
                 IRegistryClient registryClient = feedRegistry.GetClient(feedId);
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
+                engine.OnLockedFilesDetected = CreateLockedFilesHandler();
 
                 ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
                 if (manifest is null)
@@ -548,6 +558,7 @@ public partial class App : Application
                 IFeedRegistry feedRegistry = services.GetRequiredService<IFeedRegistry>();
                 IRegistryClient registryClient = feedRegistry.GetClient(feedId);
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
+                engine.OnLockedFilesDetected = CreateLockedFilesHandler();
                 IProductRepository productRepository =
                     services.GetRequiredService<IProductRepository>();
 

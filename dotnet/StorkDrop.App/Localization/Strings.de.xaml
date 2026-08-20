@@ -281,6 +281,25 @@ Möchten Sie weiter warten oder die Installation abbrechen?
   <system:String x:Key="LockedFiles_User">Benutzer</system:String>
   <system:String x:Key="LockedFiles_Running">Laufzeit</system:String>
   <system:String x:Key="LockedFiles_File">Datei</system:String>
+  <system:String x:Key="LockedFiles_KillAll">Alle Prozesse beenden</system:String>
+  <system:String x:Key="LockedFiles_KillAllHint">
+    Beendet alle aufgelisteten Prozesse und wartet, bis alle Dateien freigegeben sind, dann weiter.
+  </system:String
+  >
+  <system:String x:Key="LockedFiles_RenameContinue"
+    >Dateien umbenennen und fortfahren</system:String
+  >
+  <system:String x:Key="LockedFiles_RenameContinueHint">
+    Lässt die Prozesse laufen. Dateien in Benutzung werden zur Seite umbenannt und beim nächsten Neustart ersetzt.
+  </system:String
+  >
+  <system:String x:Key="LockedFiles_Killing"
+    >Beende Prozesse und warte auf Freigabe der Dateien...</system:String
+  >
+  <system:String x:Key="LockedFiles_StillLocked">
+    {0} Datei(en) weiterhin in Benutzung. Einige Prozesse konnten nicht beendet werden - erneut versuchen oder umbenennen und fortfahren.
+  </system:String
+  >
 
   <!-- Confirmation dialogs -->
   <system:String x:Key="Confirm_Uninstall">

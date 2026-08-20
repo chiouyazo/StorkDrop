@@ -53,25 +53,14 @@
             >
               <Grid>
                 <Grid.ColumnDefinitions>
-                  <ColumnDefinition Width="Auto" />
                   <ColumnDefinition Width="*" />
                   <ColumnDefinition Width="60" />
                   <ColumnDefinition Width="120" />
                   <ColumnDefinition Width="120" />
                 </Grid.ColumnDefinitions>
-                <Grid.RowDefinitions>
-                  <RowDefinition Height="Auto" />
-                  <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
 
-                <CheckBox
-                  Grid.Column="0"
-                  IsChecked="{Binding IsSelected}"
-                  VerticalAlignment="Center"
-                  Margin="0,0,8,0"
-                />
                 <TextBlock
-                  Grid.Column="1"
+                  Grid.Column="0"
                   Text="{Binding ProcessName}"
                   FontWeight="SemiBold"
                   FontSize="13"
@@ -79,7 +68,7 @@
                   TextTrimming="CharacterEllipsis"
                 />
                 <TextBlock
-                  Grid.Column="2"
+                  Grid.Column="1"
                   Text="{Binding ProcessId}"
                   FontSize="12"
                   Opacity="0.6"
@@ -87,7 +76,7 @@
                   FontFamily="{DynamicResource MonospaceFont}"
                 />
                 <TextBlock
-                  Grid.Column="3"
+                  Grid.Column="2"
                   Text="{Binding UserName}"
                   FontSize="12"
                   Opacity="0.7"
@@ -96,25 +85,13 @@
                   Margin="8,0,0,0"
                 />
                 <TextBlock
-                  Grid.Column="4"
+                  Grid.Column="3"
                   Text="{Binding StartTimeDisplay}"
                   FontSize="12"
                   Opacity="0.6"
                   VerticalAlignment="Center"
                   TextTrimming="CharacterEllipsis"
                   Margin="8,0,0,0"
-                />
-
-                <TextBlock
-                  Grid.Row="1"
-                  Grid.Column="1"
-                  Grid.ColumnSpan="4"
-                  Text="{Binding ErrorMessage}"
-                  FontSize="11"
-                  Foreground="{DynamicResource ErrorBrush}"
-                  TextWrapping="Wrap"
-                  Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}"
-                  Margin="0,2,0,0"
                 />
               </Grid>
             </Border>
@@ -149,16 +126,15 @@
       </TextBlock>
     </Grid>
 
+    <TextBlock
+      x:Name="StatusText"
+      FontSize="12"
+      Margin="4,12,0,0"
+      TextWrapping="Wrap"
+      Visibility="Collapsed"
+    />
+
     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-      <Button
-        x:Name="SkipButton"
-        Content="{DynamicResource LockedFiles_Skip}"
-        Style="{DynamicResource OutlinedButton}"
-        Padding="16,8"
-        Margin="0,0,8,0"
-        ToolTip="{DynamicResource LockedFiles_SkipHint}"
-        Click="Skip_Click"
-      />
       <Button
         x:Name="RefreshButton"
         Content="{DynamicResource LockedFiles_Refresh}"
@@ -168,12 +144,21 @@
         Click="Refresh_Click"
       />
       <Button
-        x:Name="KillButton"
-        Content="{DynamicResource LockedFiles_Kill}"
+        x:Name="RenameContinueButton"
+        Content="{DynamicResource LockedFiles_RenameContinue}"
+        Style="{DynamicResource OutlinedButton}"
+        Padding="16,8"
+        Margin="0,0,8,0"
+        ToolTip="{DynamicResource LockedFiles_RenameContinueHint}"
+        Click="RenameContinue_Click"
+      />
+      <Button
+        x:Name="KillAllButton"
+        Content="{DynamicResource LockedFiles_KillAll}"
         Style="{DynamicResource FilledAccentButton}"
         Padding="16,8"
-        Click="KillSelected_Click"
-        IsEnabled="False"
+        ToolTip="{DynamicResource LockedFiles_KillAllHint}"
+        Click="KillAll_Click"
       />
     </StackPanel>
   </StackPanel>
