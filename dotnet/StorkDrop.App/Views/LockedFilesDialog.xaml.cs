@@ -1,3 +1,4 @@
+using System.Threading;
 using System.Windows;
 using System.Windows.Data;
 using StorkDrop.App.Localization;
@@ -12,6 +13,9 @@ public partial class LockedFilesDialog : Window
     private readonly IFileLockDetector _detector;
     private readonly string _directory;
     private List<LockedProcessViewModel> _items = [];
+
+    /// <summary>How the operation should proceed. Read by the caller after the dialog closes.</summary>
+    public LockedFilesAction Action { get; private set; } = LockedFilesAction.Skip;
 
     public LockedFilesDialog(
         IReadOnlyList<LockedFileInfo> lockedFiles,
@@ -46,26 +50,11 @@ public partial class LockedFilesDialog : Window
             }
         }
 
-        foreach (LockedProcessViewModel item in _items)
-        {
-            item.PropertyChanged += (_, e) =>
-            {
-                if (e.PropertyName == nameof(LockedProcessViewModel.IsSelected))
-                    UpdateKillButtonState();
-            };
-        }
-
         CollectionViewSource viewSource = new CollectionViewSource { Source = _items };
         viewSource.GroupDescriptions.Add(
             new PropertyGroupDescription(nameof(LockedProcessViewModel.FileName))
         );
         ProcessList.ItemsSource = viewSource.View;
-        UpdateKillButtonState();
-    }
-
-    private void UpdateKillButtonState()
-    {
-        KillButton.IsEnabled = _items.Any(i => i.IsSelected);
     }
 
     private static string FormatStartTime(DateTime? startTime)
@@ -85,35 +74,14 @@ public partial class LockedFilesDialog : Window
         return $"{(int)elapsed.TotalDays}d {elapsed.Hours}h";
     }
 
-    private void Refresh_Click(object sender, RoutedEventArgs e)
-    {
-        Refresh();
-    }
-
-    private void KillSelected_Click(object sender, RoutedEventArgs e)
-    {
-        List<LockedProcessViewModel> selected = _items.Where(i => i.IsSelected).ToList();
-
-        foreach (LockedProcessViewModel item in selected)
-        {
-            bool killed = _detector.TryKillProcess(item.ProcessId);
-            if (!killed)
-            {
-                item.ErrorMessage = LocalizationManager
-                    .GetString("LockedFiles_KillFailed")
-                    .Replace("{0}", item.ProcessName);
-                item.HasError = true;
-            }
-        }
-
-        Refresh();
-    }
+    private void Refresh_Click(object sender, RoutedEventArgs e) => Refresh();
 
     private void Refresh()
     {
         IReadOnlyList<LockedFileInfo> lockedFiles = _detector.GetLockedFiles(_directory);
         if (lockedFiles.Count == 0)
         {
+            Action = LockedFilesAction.Retry;
             DialogResult = true;
             Close();
             return;
@@ -122,9 +90,66 @@ public partial class LockedFilesDialog : Window
         BuildItemList(lockedFiles);
     }
 
-    private void Skip_Click(object sender, RoutedEventArgs e)
+    private async void KillAll_Click(object sender, RoutedEventArgs e)
     {
-        DialogResult = false;
+        SetBusy(true);
+
+        int[] pids = _items.Select(i => i.ProcessId).Distinct().ToArray();
+        string directory = _directory;
+
+        // TryKillProcess already waits for each process to exit; poll the directory afterwards so we
+        // only continue once every handle is actually released, as requested.
+        int remaining = await Task.Run(() =>
+        {
+            foreach (int pid in pids)
+                _detector.TryKillProcess(pid);
+
+            for (int attempt = 0; attempt < 20; attempt++)
+            {
+                int locked = _detector.GetLockedFiles(directory).Count;
+                if (locked == 0)
+                    return 0;
+                Thread.Sleep(250);
+            }
+
+            return _detector.GetLockedFiles(directory).Count;
+        });
+
+        if (remaining == 0)
+        {
+            Action = LockedFilesAction.Retry;
+            DialogResult = true;
+            Close();
+            return;
+        }
+
+        SetBusy(false);
+        StatusText.SetResourceReference(ForegroundProperty, "ErrorBrush");
+        StatusText.Text = LocalizationManager
+            .GetString("LockedFiles_StillLocked")
+            .Replace("{0}", remaining.ToString());
+        StatusText.Visibility = Visibility.Visible;
+        BuildItemList(_detector.GetLockedFiles(directory));
+    }
+
+    private void RenameContinue_Click(object sender, RoutedEventArgs e)
+    {
+        Action = LockedFilesAction.RenameAndContinue;
+        DialogResult = true;
         Close();
+    }
+
+    private void SetBusy(bool busy)
+    {
+        KillAllButton.IsEnabled = !busy;
+        RenameContinueButton.IsEnabled = !busy;
+        RefreshButton.IsEnabled = !busy;
+
+        if (busy)
+        {
+            StatusText.ClearValue(ForegroundProperty);
+            StatusText.Text = LocalizationManager.GetString("LockedFiles_Killing");
+            StatusText.Visibility = Visibility.Visible;
+        }
     }
 }

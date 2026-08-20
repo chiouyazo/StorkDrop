@@ -528,6 +528,7 @@ public sealed class InstallationEngine : IInstallationEngine
     )
     {
         _currentProgress = progress;
+        _deferRemainingLockedFiles = false;
         string? resolvedPath = null;
         InstalledProduct? existingProduct = null;
         string instanceUniqueId = string.Empty;
@@ -3282,8 +3283,15 @@ public sealed class InstallationEngine : IInstallationEngine
         }
     }
 
+    // Set once the user chose "rename and continue" for a locked file, so the rest of the copy defers
+    // still-locked files without asking again. Reset at the start of every install.
+    private bool _deferRemainingLockedFiles;
+
     private bool TryResolveLockedFile(string filePath)
     {
+        if (_deferRemainingLockedFiles)
+            return false;
+
         if (OnLockedFilesDetected is null)
             return false;
 
@@ -3297,6 +3305,12 @@ public sealed class InstallationEngine : IInstallationEngine
             _fileLockDetector,
             Path.GetDirectoryName(filePath)!
         );
+
+        if (action == LockedFilesAction.RenameAndContinue)
+        {
+            _deferRemainingLockedFiles = true;
+            return false;
+        }
 
         return action == LockedFilesAction.Retry && !_fileLockDetector.IsFileLocked(filePath);
     }

@@ -248,6 +248,23 @@ Do you want to keep waiting, or cancel the installation?
   <system:String x:Key="LockedFiles_User">User</system:String>
   <system:String x:Key="LockedFiles_Running">Running</system:String>
   <system:String x:Key="LockedFiles_File">File</system:String>
+  <system:String x:Key="LockedFiles_KillAll">Kill All Processes</system:String>
+  <system:String x:Key="LockedFiles_KillAllHint">
+    Ends every listed process and waits until all files are released, then continues.
+  </system:String
+  >
+  <system:String x:Key="LockedFiles_RenameContinue">Rename Files and Continue</system:String>
+  <system:String x:Key="LockedFiles_RenameContinueHint">
+    Leaves the processes running. Files in use are renamed aside and replaced on the next reboot.
+  </system:String
+  >
+  <system:String x:Key="LockedFiles_Killing"
+    >Ending processes and waiting for files to be released...</system:String
+  >
+  <system:String x:Key="LockedFiles_StillLocked">
+    {0} file(s) are still in use. Some processes could not be ended - try again or rename and continue.
+  </system:String
+  >
 
   <!-- Confirmation dialogs -->
   <system:String x:Key="Confirm_Uninstall">Are you sure you want to uninstall {0}?</system:String>
