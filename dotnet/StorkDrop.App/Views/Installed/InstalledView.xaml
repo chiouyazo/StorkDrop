@@ -221,6 +221,15 @@
                 </Button>
                 <Button
                   Style="{DynamicResource OutlinedButton}"
+                  Command="{Binding DataContext.ChangeVersionCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                  CommandParameter="{Binding}"
+                  Content="{DynamicResource ChangeVersion_Button}"
+                  Padding="12,6"
+                  Margin="0,0,8,0"
+                  Visibility="{Binding HasFeed, Converter={StaticResource BoolToVisibilityConverter}}"
+                />
+                <Button
+                  Style="{DynamicResource OutlinedButton}"
                   Command="{Binding DataContext.SwitchChannelCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                   CommandParameter="{Binding}"
                   Content="{DynamicResource Installed_SwitchChannel}"

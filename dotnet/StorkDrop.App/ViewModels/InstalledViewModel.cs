@@ -406,6 +406,156 @@ public partial class InstalledViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Lets the user pick any version from this instance's installed channel and applies it like an
+    /// update - so it also covers downgrades. Multi-instance makes a marketplace-wide version switch
+    /// ambiguous, so the choice lives per installed instance here.
+    /// </summary>
+    [RelayCommand]
+    private async Task ChangeVersionAsync(InstalledProductViewModel product)
+    {
+        if (string.IsNullOrEmpty(product.FeedId))
+            return;
+
+        IReadOnlyList<string> versions;
+        try
+        {
+            versions = await Task.Run(() =>
+                _feedRegistry
+                    .GetClient(product.FeedId!)
+                    .GetAvailableVersionsAsync(product.ProductId)
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to load versions for {ProductId}", product.ProductId);
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
+            );
+            return;
+        }
+
+        if (versions.Count == 0)
+        {
+            _dialogService.ShowInfo(LocalizationManager.GetString("ChangeVersion_NoVersions"));
+            return;
+        }
+
+        string? selected = System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            Views.ChangeVersionDialog dialog = new Views.ChangeVersionDialog(
+                product.Title,
+                product.Version,
+                versions
+            )
+            {
+                Owner = System.Windows.Application.Current.MainWindow,
+            };
+            return dialog.ShowDialog() == true ? dialog.SelectedVersion : null;
+        });
+
+        if (string.IsNullOrEmpty(selected) || selected == product.Version)
+            return;
+
+        if (
+            !await _feedLock.EnsureAuthorizedAsync(
+                product.FeedId,
+                LocalizationManager.GetString("FeedLock_Op_ChangeVersion")
+            )
+        )
+            return;
+
+        TrackedInstallation? tracked = null;
+        try
+        {
+            using CancellationTokenSource cts = new CancellationTokenSource();
+            CancellationToken cancellationToken = cts.Token;
+
+            var fetchResult = await Task.Run(async () =>
+            {
+                InstalledProduct? inst = await _productRepository.GetByIdAsync(
+                    product.ProductId,
+                    product.InstanceId,
+                    cancellationToken
+                );
+                ProductManifest? man = await _feedRegistry
+                    .GetClient(product.FeedId!)
+                    .GetProductManifestAsync(product.ProductId, selected, cancellationToken);
+                return (inst, man);
+            });
+
+            if (fetchResult.inst is null || fetchResult.man is null)
+            {
+                _dialogService.ShowError(
+                    LocalizationManager.GetString("Error_ChangeVersionFailed")
+                );
+                return;
+            }
+
+            tracked = _tracker.StartInstallation(
+                product.ProductId,
+                $"Changing version: {product.DisplayName} -> v{selected}"
+            );
+            using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
+            tracked.AddLog($"Changing {product.Title} from v{product.Version} to v{selected}");
+
+            Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
+            {
+                tracked.Percentage = p.Percentage;
+                tracked.StatusMessage = p.Message;
+                if (!string.IsNullOrEmpty(p.Message))
+                    tracked.AddLog(p.Message);
+            });
+
+            InstallOptions options = new InstallOptions(
+                TargetPath: fetchResult.inst.InstalledPath,
+                InstanceId: fetchResult.inst.InstanceId,
+                FeedId: product.FeedId
+            );
+
+            InstallResult result = await Task.Run(() =>
+                _coordinator.UpdateWithIsolationAsync(
+                    fetchResult.inst,
+                    fetchResult.man,
+                    options,
+                    progress,
+                    cancellationToken
+                )
+            );
+
+            if (!result.Success)
+            {
+                tracked.Complete(false, result.ErrorMessage);
+                _tracker.NotifyChanged();
+                _dialogService.ShowError(
+                    LocalizationManager.GetString("Error_ChangeVersionFailed")
+                        + ": "
+                        + (result.ErrorMessage ?? string.Empty)
+                );
+                return;
+            }
+
+            tracked.Complete(true);
+            _tracker.NotifyChanged();
+            product.Version = selected;
+            _dialogService.ShowInfo(
+                LocalizationManager
+                    .GetString("Info_ChangeVersionSuccess")
+                    .Replace("{0}", product.Title)
+                    .Replace("{1}", selected)
+            );
+        }
+        catch (Exception ex)
+        {
+            tracked?.Complete(false, ex.Message);
+            _tracker.NotifyChanged();
+            _logger.LogError(ex, "Change version failed for {ProductId}", product.ProductId);
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
+            );
+        }
+    }
+
+    /// <summary>
     /// Verifies the product's installed files against their install-time hashes and, if any are
     /// corrupted or missing, offers a dialog to selectively repair them by re-downloading.
     /// </summary>

@@ -104,6 +104,20 @@
   <system:String x:Key="Installed_GroupProducts">Installed Products</system:String>
   <system:String x:Key="Installed_Downloaded">Downloaded</system:String>
   <system:String x:Key="Installed_SwitchChannel">Switch Channel</system:String>
+  <system:String x:Key="ChangeVersion_Button">Change Version</system:String>
+  <system:String x:Key="ChangeVersion_Title">Change Version</system:String>
+  <system:String x:Key="ChangeVersion_Message">
+    Select a version to install for {0} from its current channel. This replaces the installed version - downgrades are allowed.
+  </system:String
+  >
+  <system:String x:Key="ChangeVersion_Installed">(installed)</system:String>
+  <system:String x:Key="ChangeVersion_Apply">Apply</system:String>
+  <system:String x:Key="ChangeVersion_Cancel">Cancel</system:String>
+  <system:String x:Key="ChangeVersion_NoVersions"
+    >No versions available on this feed.</system:String
+  >
+  <system:String x:Key="Info_ChangeVersionSuccess">{0} is now on version {1}.</system:String>
+  <system:String x:Key="Error_ChangeVersionFailed">Could not change version</system:String>
 
   <!-- Re-execute -->
   <system:String x:Key="ReExecute_Run">Run</system:String>
@@ -523,6 +537,7 @@ Do you want to keep waiting, or cancel the installation?
   >
   <system:String x:Key="FeedLock_Op_Install">Install</system:String>
   <system:String x:Key="FeedLock_Op_Update">Update</system:String>
+  <system:String x:Key="FeedLock_Op_ChangeVersion">Change version</system:String>
   <system:String x:Key="FeedLock_Op_Uninstall">Uninstall</system:String>
   <system:String x:Key="FeedLock_Op_Action">Run actions</system:String>
   <system:String x:Key="FeedLock_Op_Repair">Repair files</system:String>
