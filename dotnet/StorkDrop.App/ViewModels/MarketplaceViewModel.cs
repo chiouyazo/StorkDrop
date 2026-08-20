@@ -101,7 +101,7 @@ public partial class MarketplaceViewModel : ObservableObject
     /// <summary>
     /// Event raised when the user wants to navigate to a product detail view.
     /// </summary>
-    public event Action<string>? NavigateToProductDetail;
+    public event Action<string, string?>? NavigateToProductDetail;
 
     /// <summary>
     /// Event raised when the user wants to navigate to the installed view for a product.
@@ -145,13 +145,36 @@ public partial class MarketplaceViewModel : ObservableObject
     [RelayCommand]
     private void NavigateToDetail(ProductCardViewModel product)
     {
-        NavigateToProductDetail?.Invoke(product.ProductId);
+        NavigateToProductDetail?.Invoke(product.ProductId, ResolvePreferredFeedId(product));
     }
 
     private static string ExtractBaseFeedName(string feedName)
     {
         int separatorIndex = feedName.IndexOf(" / ", StringComparison.Ordinal);
         return separatorIndex > 0 ? feedName[..separatorIndex] : feedName;
+    }
+
+    /// <summary>
+    /// The feed a card should install from / open in detail. When a feed filter is active, prefer this
+    /// product's channel on that feed so the user gets the channel they filtered to, not the globally
+    /// newest one; otherwise use the card's own feed.
+    /// </summary>
+    private string ResolvePreferredFeedId(ProductCardViewModel product)
+    {
+        if (
+            SelectedFeedFilter is not null
+            && SelectedFeedFilter != LocalizationManager.GetString("Filter_AllFeeds")
+            && _channelsByProduct.TryGetValue(product.ProductId, out List<ChannelEntry>? channels)
+        )
+        {
+            foreach (ChannelEntry channel in channels)
+            {
+                if (channel.FeedName == SelectedFeedFilter)
+                    return channel.FeedId;
+            }
+        }
+
+        return product.FeedId;
     }
 
     [RelayCommand]
@@ -170,15 +193,16 @@ public partial class MarketplaceViewModel : ObservableObject
     {
         try
         {
+            string feedId = ResolvePreferredFeedId(product);
             if (
                 !await _feedLock.EnsureAuthorizedAsync(
-                    product.FeedId,
+                    feedId,
                     LocalizationManager.GetString("FeedLock_Op_Install")
                 )
             )
                 return;
 
-            IRegistryClient feedClient = _feedRegistry.GetClient(product.FeedId);
+            IRegistryClient feedClient = _feedRegistry.GetClient(feedId);
             ProductManifest? manifest = await Task.Run(() =>
                 feedClient.GetProductManifestAsync(product.ProductId)
             );
@@ -285,10 +309,7 @@ public partial class MarketplaceViewModel : ObservableObject
             using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Installing {product.Title} v{product.Version} to {targetPath}");
 
-            InstallOptions options = new InstallOptions(
-                TargetPath: targetPath,
-                FeedId: product.FeedId
-            );
+            InstallOptions options = new InstallOptions(TargetPath: targetPath, FeedId: feedId);
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
                 product.InstallPercentage = p.Percentage;

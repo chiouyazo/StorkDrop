@@ -275,13 +275,13 @@ public partial class ProductDetailViewModel : ObservableObject
 
             ChannelInfo? selectedChannel =
                 (
-                    installed?.FeedId is not null
-                        ? channels.FirstOrDefault(c => c.FeedId == installed.FeedId)
+                    !string.IsNullOrEmpty(currentFeedId)
+                        ? channels.FirstOrDefault(c => c.FeedId == currentFeedId)
                         : null
                 )
                 ?? (
-                    !string.IsNullOrEmpty(currentFeedId)
-                        ? channels.FirstOrDefault(c => c.FeedId == currentFeedId)
+                    installed?.FeedId is not null
+                        ? channels.FirstOrDefault(c => c.FeedId == installed.FeedId)
                         : null
                 )
                 ?? channels.FirstOrDefault();

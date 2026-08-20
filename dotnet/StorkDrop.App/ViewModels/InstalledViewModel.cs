@@ -65,7 +65,7 @@ public partial class InstalledViewModel : ObservableObject
 
     private List<InstalledProductViewModel> _allProducts = [];
 
-    public event Action<string>? NavigateToProductDetail;
+    public event Action<string, string?>? NavigateToProductDetail;
 
     /// <summary>
     /// Gets a value indicating whether there are installed products.
@@ -402,7 +402,7 @@ public partial class InstalledViewModel : ObservableObject
     [RelayCommand]
     private void SwitchChannel(InstalledProductViewModel product)
     {
-        NavigateToProductDetail?.Invoke(product.ProductId);
+        NavigateToProductDetail?.Invoke(product.ProductId, product.FeedId);
     }
 
     /// <summary>

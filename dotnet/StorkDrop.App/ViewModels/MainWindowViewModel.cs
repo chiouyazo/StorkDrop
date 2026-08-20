@@ -273,11 +273,12 @@ public partial class MainWindowViewModel : ObservableObject
         NavigateTo("Plugins");
     }
 
-    private void OnNavigateToProductDetail(string productId)
+    private void OnNavigateToProductDetail(string productId, string? preferredFeedId)
     {
         ProductDetailViewModel detailVm = App.Services.GetRequiredService<ProductDetailViewModel>();
-        string feedId = FindBestFeedForProduct(productId);
-        detailVm.FeedId = feedId;
+        detailVm.FeedId = string.IsNullOrEmpty(preferredFeedId)
+            ? FindBestFeedForProduct(productId)
+            : preferredFeedId;
         detailVm.GoBackRequested += () => NavigateTo("Marketplace");
         detailVm.LoadCommand.Execute(productId);
         CurrentContent = detailVm;
