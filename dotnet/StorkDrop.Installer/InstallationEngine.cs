@@ -2467,13 +2467,17 @@ public sealed class InstallationEngine : IInstallationEngine
             new PluginPrompt
             {
                 Title = Localize("Rollback_Title"),
-                Message = Localize(
-                    "Rollback_Message",
-                    installed.Title,
-                    installed.Version,
-                    newManifest.Version,
-                    ex.Message
-                ),
+                Message =
+                    Localize(
+                        "Rollback_Message",
+                        installed.Title,
+                        installed.Version,
+                        newManifest.Version
+                    )
+                    + Environment.NewLine
+                    + Environment.NewLine
+                    + Localize("Rollback_KeepHint"),
+                Detail = ex.Message,
                 Options = [Localize("Rollback_Keep"), Localize("Rollback_Restore")],
                 DefaultOptionIndex = 1,
             }

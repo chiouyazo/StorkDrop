@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading;
 using System.Windows;
 using System.Windows.Data;
@@ -101,9 +102,6 @@ public partial class LockedFilesDialog : Window
         int[] pids = _items.Select(i => i.ProcessId).Distinct().ToArray();
         string directory = _directory;
 
-        // TryKillProcess already waits for each process to exit; poll the directory afterwards so we
-        // only continue once every handle is released. Honour cancellation so the user can bail out to
-        // "rename and continue" while it runs.
         int remaining = await Task.Run(() =>
         {
             foreach (int pid in pids)
@@ -113,7 +111,17 @@ public partial class LockedFilesDialog : Window
                 _detector.TryKillProcess(pid);
             }
 
-            for (int attempt = 0; attempt < 40; attempt++)
+            // Wait for the killed processes to actually exit (cheap PID check) rather than rescanning
+            // the whole directory every tick. Once a process is gone its mapped DLLs are released.
+            for (int attempt = 0; attempt < 50 && pids.Any(IsProcessAlive); attempt++)
+            {
+                if (ct.IsCancellationRequested)
+                    return -1;
+                Thread.Sleep(200);
+            }
+
+            // Confirm the files are free (handle release can lag a moment behind process exit).
+            for (int attempt = 0; attempt < 8; attempt++)
             {
                 if (ct.IsCancellationRequested)
                     return -1;
@@ -145,6 +153,19 @@ public partial class LockedFilesDialog : Window
             .Replace("{0}", remaining.ToString());
         StatusText.Visibility = Visibility.Visible;
         BuildItemList(_detector.GetLockedFiles(directory));
+    }
+
+    private static bool IsProcessAlive(int processId)
+    {
+        try
+        {
+            using Process process = Process.GetProcessById(processId);
+            return !process.HasExited;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private void RenameContinue_Click(object sender, RoutedEventArgs e)
