@@ -416,29 +416,28 @@ public partial class InstalledViewModel : ObservableObject
         if (string.IsNullOrEmpty(product.FeedId))
             return;
 
-        IReadOnlyList<string> versions;
+        (string FeedId, IReadOnlyList<string> Versions)? resolved;
         try
         {
-            versions = await Task.Run(() =>
-                _feedRegistry
-                    .GetClient(product.FeedId!)
-                    .GetAvailableVersionsAsync(product.ProductId)
-            );
+            resolved = await ResolveFeedForProductAsync(product.ProductId, product.FeedId);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to load versions for {ProductId}", product.ProductId);
+            _logger.LogWarning(ex, "Failed to resolve feed for {ProductId}", product.ProductId);
             _dialogService.ShowError(
                 LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
             );
             return;
         }
 
-        if (versions.Count == 0)
+        if (resolved is null)
         {
             _dialogService.ShowInfo(LocalizationManager.GetString("ChangeVersion_NoVersions"));
             return;
         }
+
+        string resolvedFeedId = resolved.Value.FeedId;
+        IReadOnlyList<string> versions = resolved.Value.Versions;
 
         string? selected = System.Windows.Application.Current.Dispatcher.Invoke(() =>
         {
@@ -458,7 +457,7 @@ public partial class InstalledViewModel : ObservableObject
 
         if (
             !await _feedLock.EnsureAuthorizedAsync(
-                product.FeedId,
+                resolvedFeedId,
                 LocalizationManager.GetString("FeedLock_Op_ChangeVersion")
             )
         )
@@ -478,7 +477,7 @@ public partial class InstalledViewModel : ObservableObject
                     cancellationToken
                 );
                 ProductManifest? man = await _feedRegistry
-                    .GetClient(product.FeedId!)
+                    .GetClient(resolvedFeedId)
                     .GetProductManifestAsync(product.ProductId, selected, cancellationToken);
                 return (inst, man);
             });
@@ -509,7 +508,7 @@ public partial class InstalledViewModel : ObservableObject
             InstallOptions options = new InstallOptions(
                 TargetPath: fetchResult.inst.InstalledPath,
                 InstanceId: fetchResult.inst.InstanceId,
-                FeedId: product.FeedId
+                FeedId: resolvedFeedId
             );
 
             InstallResult result = await Task.Run(() =>
@@ -537,6 +536,7 @@ public partial class InstalledViewModel : ObservableObject
             tracked.Complete(true);
             _tracker.NotifyChanged();
             product.Version = selected;
+            product.FeedId = resolvedFeedId;
             _dialogService.ShowInfo(
                 LocalizationManager
                     .GetString("Info_ChangeVersionSuccess")
@@ -553,6 +553,69 @@ public partial class InstalledViewModel : ObservableObject
                 LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
             );
         }
+    }
+
+    /// <summary>
+    /// Resolves the feed to change a product's version from: the exact stored feed if it still serves
+    /// the product, otherwise the same product in the same channel (the feed-id suffix after ':') on
+    /// any configured feed - so a renamed or re-added feed (new id, same repository/channel) still
+    /// works. Returns the resolved feed id and its version list, or null if no feed serves it.
+    /// </summary>
+    private async Task<(string FeedId, IReadOnlyList<string> Versions)?> ResolveFeedForProductAsync(
+        string productId,
+        string? storedFeedId
+    )
+    {
+        if (!string.IsNullOrEmpty(storedFeedId))
+        {
+            IReadOnlyList<string>? exact = await TryGetVersionsAsync(storedFeedId!, productId);
+            if (exact is { Count: > 0 })
+                return (storedFeedId!, exact);
+        }
+
+        string? channel = ChannelSuffix(storedFeedId);
+        foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+        {
+            if (feed.Id == storedFeedId)
+                continue;
+            if (
+                channel is not null
+                && !string.Equals(
+                    ChannelSuffix(feed.Id),
+                    channel,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            )
+                continue;
+
+            IReadOnlyList<string>? found = await TryGetVersionsAsync(feed.Id, productId);
+            if (found is { Count: > 0 })
+                return (feed.Id, found);
+        }
+
+        return null;
+    }
+
+    private async Task<IReadOnlyList<string>?> TryGetVersionsAsync(string feedId, string productId)
+    {
+        try
+        {
+            IRegistryClient client = _feedRegistry.GetClient(feedId);
+            return await client.GetAvailableVersionsAsync(productId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Feed {FeedId} did not serve {ProductId}", feedId, productId);
+            return null;
+        }
+    }
+
+    private static string? ChannelSuffix(string? feedId)
+    {
+        if (string.IsNullOrEmpty(feedId))
+            return null;
+        int idx = feedId.LastIndexOf(':');
+        return idx >= 0 && idx + 1 < feedId.Length ? feedId[(idx + 1)..] : null;
     }
 
     /// <summary>
