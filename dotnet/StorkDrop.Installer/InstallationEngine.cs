@@ -2354,11 +2354,31 @@ public sealed class InstallationEngine : IInstallationEngine
         }
         catch (Exception ex)
         {
-            _logger.LogError(
-                ex,
-                "Update failed for {ProductId}, restoring backup",
-                installed.ProductId
-            );
+            _logger.LogError(ex, "Update failed for {ProductId}", installed.ProductId);
+
+            if (!ShouldRollBackAfterFailure(installed, newManifest, ex))
+            {
+                _logger.LogWarning(
+                    "Rollback declined for {ProductId}; keeping the updated files.",
+                    installed.ProductId
+                );
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        $"Update failed but the new version was kept (not rolled back): {ex.Message}"
+                    )
+                );
+                await RegisterKeptUpdateAsync(
+                    installed,
+                    newManifest,
+                    options,
+                    backupPath,
+                    cancellationToken
+                );
+                return;
+            }
+
             progress.Report(
                 new InstallProgress(
                     InstallStage.Installing,
@@ -2425,6 +2445,77 @@ public sealed class InstallationEngine : IInstallationEngine
                 );
             }
             throw;
+        }
+    }
+
+    /// <summary>
+    /// After a failed update, asks whether to roll back to the previous version or keep the updated
+    /// files. Some late failures (e.g. a Windows service that starts too slowly) leave a usable
+    /// install, where a rollback would only discard already-applied files and database changes.
+    /// Headless callers (no prompt handler) keep the safe default of rolling back.
+    /// </summary>
+    private bool ShouldRollBackAfterFailure(
+        InstalledProduct installed,
+        ProductManifest newManifest,
+        Exception ex
+    )
+    {
+        if (OnPrompt is null)
+            return true;
+
+        PluginPromptResult choice = OnPrompt(
+            new PluginPrompt
+            {
+                Title = Localize("Rollback_Title"),
+                Message = Localize(
+                    "Rollback_Message",
+                    installed.Title,
+                    installed.Version,
+                    newManifest.Version,
+                    ex.Message
+                ),
+                Options = [Localize("Rollback_Keep"), Localize("Rollback_Restore")],
+                DefaultOptionIndex = 1,
+            }
+        );
+
+        // Roll back unless the user explicitly chose "keep" (index 0).
+        return choice.Cancelled || choice.ChosenIndex != 0;
+    }
+
+    private async Task RegisterKeptUpdateAsync(
+        InstalledProduct installed,
+        ProductManifest newManifest,
+        InstallOptions options,
+        string? backupPath,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            InstalledProduct? current = await _productRepository.GetByIdAsync(
+                newManifest.ProductId,
+                options.InstanceId,
+                cancellationToken
+            );
+            InstalledProduct baseRecord = current ?? installed;
+            await _productRepository.UpdateAsync(
+                baseRecord with
+                {
+                    Version = newManifest.Version,
+                    FeedId = options.FeedId ?? baseRecord.FeedId,
+                    BackupPath = backupPath,
+                },
+                cancellationToken
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not update installed record after a kept update for {ProductId}",
+                newManifest.ProductId
+            );
         }
     }
 

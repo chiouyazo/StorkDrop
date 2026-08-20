@@ -13,6 +13,8 @@ public partial class LockedFilesDialog : Window
     private readonly IFileLockDetector _detector;
     private readonly string _directory;
     private List<LockedProcessViewModel> _items = [];
+    private CancellationTokenSource? _killCts;
+    private bool _decided;
 
     /// <summary>How the operation should proceed. Read by the caller after the dialog closes.</summary>
     public LockedFilesAction Action { get; private set; } = LockedFilesAction.Skip;
@@ -92,28 +94,41 @@ public partial class LockedFilesDialog : Window
 
     private async void KillAll_Click(object sender, RoutedEventArgs e)
     {
+        _killCts = new CancellationTokenSource();
+        CancellationToken ct = _killCts.Token;
         SetBusy(true);
 
         int[] pids = _items.Select(i => i.ProcessId).Distinct().ToArray();
         string directory = _directory;
 
         // TryKillProcess already waits for each process to exit; poll the directory afterwards so we
-        // only continue once every handle is actually released, as requested.
+        // only continue once every handle is released. Honour cancellation so the user can bail out to
+        // "rename and continue" while it runs.
         int remaining = await Task.Run(() =>
         {
             foreach (int pid in pids)
-                _detector.TryKillProcess(pid);
-
-            for (int attempt = 0; attempt < 20; attempt++)
             {
-                int locked = _detector.GetLockedFiles(directory).Count;
-                if (locked == 0)
+                if (ct.IsCancellationRequested)
+                    return -1;
+                _detector.TryKillProcess(pid);
+            }
+
+            for (int attempt = 0; attempt < 40; attempt++)
+            {
+                if (ct.IsCancellationRequested)
+                    return -1;
+                if (_detector.GetLockedFiles(directory).Count == 0)
                     return 0;
                 Thread.Sleep(250);
             }
 
             return _detector.GetLockedFiles(directory).Count;
         });
+
+        // The user chose "rename and continue" while the kill was running; that path already closed
+        // the dialog, so don't touch the UI.
+        if (_decided)
+            return;
 
         if (remaining == 0)
         {
@@ -134,6 +149,8 @@ public partial class LockedFilesDialog : Window
 
     private void RenameContinue_Click(object sender, RoutedEventArgs e)
     {
+        _decided = true;
+        _killCts?.Cancel();
         Action = LockedFilesAction.RenameAndContinue;
         DialogResult = true;
         Close();
@@ -142,8 +159,9 @@ public partial class LockedFilesDialog : Window
     private void SetBusy(bool busy)
     {
         KillAllButton.IsEnabled = !busy;
-        RenameContinueButton.IsEnabled = !busy;
         RefreshButton.IsEnabled = !busy;
+        // "Rename and continue" stays enabled during the kill so it can always be used as an escape.
+        RenameContinueButton.IsEnabled = true;
 
         if (busy)
         {

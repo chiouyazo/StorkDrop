@@ -220,6 +220,12 @@
   </system:String
   >
   <system:String x:Key="Error_UpdateFailed">Update fehlgeschlagen</system:String>
+  <system:String x:Key="Rollback_Title">Update fehlgeschlagen</system:String>
+  <system:String x:Key="Rollback_Message"
+    >Das Update von {0} von v{1} auf v{2} ist fehlgeschlagen: {3}. Die neuen Dateien und DB-&#196;nderungen wurden bereits angewendet. Neue Version beibehalten oder auf die vorherige zur&#252;ckrollen?</system:String
+  >
+  <system:String x:Key="Rollback_Keep">Neue Version beibehalten</system:String>
+  <system:String x:Key="Rollback_Restore">Zur&#252;ckrollen</system:String>
   <system:String x:Key="Error_UpdateProductFailed">Update von {0} fehlgeschlagen</system:String>
   <system:String x:Key="Error_LoadSettingsFailed">
     Fehler beim Laden der Einstellungen

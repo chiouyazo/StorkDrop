@@ -194,6 +194,12 @@
   <system:String x:Key="Error_LoadProductsFailed">Products could not be loaded</system:String>
   <system:String x:Key="Error_ServerConnectionFailed">Server connection failed</system:String>
   <system:String x:Key="Error_UpdateFailed">Update failed</system:String>
+  <system:String x:Key="Rollback_Title">Update Failed</system:String>
+  <system:String x:Key="Rollback_Message"
+    >Updating {0} from v{1} to v{2} failed: {3}. The new files and database changes were already applied. Keep the updated version, or roll back to the previous one?</system:String
+  >
+  <system:String x:Key="Rollback_Keep">Keep Updated Version</system:String>
+  <system:String x:Key="Rollback_Restore">Roll Back</system:String>
   <system:String x:Key="Error_UpdateProductFailed">Update of {0} failed</system:String>
   <system:String x:Key="Error_LoadSettingsFailed">Error loading settings</system:String>
   <system:String x:Key="Error_SaveFailed">Save failed</system:String>

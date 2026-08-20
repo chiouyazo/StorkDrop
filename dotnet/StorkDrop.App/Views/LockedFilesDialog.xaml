@@ -4,27 +4,51 @@
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   Title="{DynamicResource LockedFiles_Title}"
   Width="680"
-  MaxHeight="560"
-  SizeToContent="Height"
+  Height="520"
+  MinWidth="560"
+  MinHeight="380"
   WindowStartupLocation="CenterOwner"
-  ResizeMode="NoResize"
+  ResizeMode="CanResize"
   Background="{DynamicResource BackgroundBrush}"
 >
-  <StackPanel Margin="24">
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
     <TextBlock
+      Grid.Row="0"
       Text="{DynamicResource LockedFiles_Title}"
       FontSize="18"
       FontWeight="SemiBold"
       Margin="0,0,0,12"
     />
     <TextBlock
+      Grid.Row="1"
       Text="{DynamicResource LockedFiles_Message}"
       TextWrapping="Wrap"
       FontSize="13"
-      Margin="0,0,0,16"
+      Margin="0,0,0,12"
     />
 
-    <ScrollViewer MaxHeight="320" VerticalScrollBarVisibility="Auto">
+    <TextBlock Grid.Row="2" FontSize="12" FontWeight="SemiBold" Opacity="0.5" Margin="4,0,0,4">
+      <TextBlock.Inlines>
+        <Run Text="{DynamicResource LockedFiles_ProcessName}" />
+        <Run Text=" | " />
+        <Run Text="{DynamicResource LockedFiles_PID}" />
+        <Run Text=" | " />
+        <Run Text="{DynamicResource LockedFiles_User}" />
+        <Run Text=" | " />
+        <Run Text="{DynamicResource LockedFiles_Running}" />
+      </TextBlock.Inlines>
+    </TextBlock>
+
+    <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto">
       <ItemsControl x:Name="ProcessList">
         <ItemsControl.GroupStyle>
           <GroupStyle>
@@ -100,33 +124,8 @@
       </ItemsControl>
     </ScrollViewer>
 
-    <Grid Margin="0,4,0,0">
-      <Grid.ColumnDefinitions>
-        <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="Auto" />
-        <ColumnDefinition Width="Auto" />
-      </Grid.ColumnDefinitions>
-
-      <TextBlock
-        FontSize="12"
-        FontWeight="SemiBold"
-        Opacity="0.5"
-        Margin="4,0,24,0"
-        VerticalAlignment="Center"
-      >
-        <TextBlock.Inlines>
-          <Run Text="{DynamicResource LockedFiles_ProcessName}" />
-          <Run Text=" | " />
-          <Run Text="{DynamicResource LockedFiles_PID}" />
-          <Run Text=" | " />
-          <Run Text="{DynamicResource LockedFiles_User}" />
-          <Run Text=" | " />
-          <Run Text="{DynamicResource LockedFiles_Running}" />
-        </TextBlock.Inlines>
-      </TextBlock>
-    </Grid>
-
     <TextBlock
+      Grid.Row="4"
       x:Name="StatusText"
       FontSize="12"
       Margin="4,12,0,0"
@@ -134,7 +133,7 @@
       Visibility="Collapsed"
     />
 
-    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
       <Button
         x:Name="RefreshButton"
         Content="{DynamicResource LockedFiles_Refresh}"
@@ -161,5 +160,5 @@
         Click="KillAll_Click"
       />
     </StackPanel>
-  </StackPanel>
+  </Grid>
 </Window>

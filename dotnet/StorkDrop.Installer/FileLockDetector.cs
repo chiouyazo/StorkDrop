@@ -183,12 +183,22 @@ public sealed class FileLockDetector : IFileLockDetector
 
     public bool TryKillProcess(int processId)
     {
+        // Force-kill the whole tree via taskkill and do not wait on teardown: waiting per process is
+        // too slow with many runners. The caller polls the file locks to confirm they were released.
         try
         {
-            Process process = Process.GetProcessById(processId);
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit(5000);
-            return true;
+            using Process? taskKill = Process.Start(
+                new ProcessStartInfo
+                {
+                    FileName = "taskkill.exe",
+                    Arguments = $"/F /T /PID {processId}",
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                }
+            );
+            return taskKill is not null;
         }
         catch
         {
