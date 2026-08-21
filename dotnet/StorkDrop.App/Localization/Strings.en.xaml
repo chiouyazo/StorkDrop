@@ -117,6 +117,17 @@
     >No versions available on this feed.</system:String
   >
   <system:String x:Key="Info_ChangeVersionSuccess">{0} is now on version {1}.</system:String>
+  <system:String x:Key="SwitchChannel_Title">Switch Channel</system:String>
+  <system:String x:Key="SwitchChannel_Message"
+    >Select a channel for {0}. It will be re-installed from the selected channel.</system:String
+  >
+  <system:String x:Key="SwitchChannel_Current">(current)</system:String>
+  <system:String x:Key="SwitchChannel_Apply">Switch</system:String>
+  <system:String x:Key="SwitchChannel_NoChannels"
+    >This product is not available on another feed.</system:String
+  >
+  <system:String x:Key="Info_SwitchChannelSuccess">{0} switched channel (now v{1}).</system:String>
+  <system:String x:Key="Error_SwitchChannelFailed">Could not switch channel</system:String>
   <system:String x:Key="Error_ChangeVersionFailed">Could not change version</system:String>
 
   <!-- Re-execute -->

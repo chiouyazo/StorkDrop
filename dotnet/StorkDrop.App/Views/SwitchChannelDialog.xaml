@@ -1,0 +1,101 @@
+<Window
+  x:Class="StorkDrop.App.Views.SwitchChannelDialog"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Title="{DynamicResource SwitchChannel_Title}"
+  Width="480"
+  Height="460"
+  MinWidth="380"
+  MinHeight="320"
+  WindowStartupLocation="CenterOwner"
+  ResizeMode="CanResize"
+  Background="{DynamicResource BackgroundBrush}"
+>
+  <Grid Margin="24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <TextBlock
+      Grid.Row="0"
+      Text="{DynamicResource SwitchChannel_Title}"
+      FontSize="18"
+      FontWeight="SemiBold"
+      Margin="0,0,0,12"
+    />
+    <TextBlock
+      Grid.Row="1"
+      x:Name="MessageText"
+      TextWrapping="Wrap"
+      FontSize="13"
+      Margin="0,0,0,12"
+    />
+
+    <ListBox
+      Grid.Row="2"
+      x:Name="ChannelList"
+      SelectionChanged="ChannelList_SelectionChanged"
+      Background="{DynamicResource SurfaceBrush}"
+      BorderBrush="{DynamicResource BorderBrush}"
+      BorderThickness="1"
+    >
+      <ListBox.ItemTemplate>
+        <DataTemplate>
+          <Grid Margin="4,3">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*" />
+              <ColumnDefinition Width="Auto" />
+              <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+              Grid.Column="0"
+              Text="{Binding FeedName}"
+              FontSize="13"
+              FontWeight="SemiBold"
+              VerticalAlignment="Center"
+              TextTrimming="CharacterEllipsis"
+            />
+            <TextBlock
+              Grid.Column="1"
+              Text="{Binding Version, StringFormat='v{0}'}"
+              FontSize="12"
+              Opacity="0.7"
+              VerticalAlignment="Center"
+              Margin="8,0,0,0"
+            />
+            <TextBlock
+              Grid.Column="2"
+              Text="{DynamicResource SwitchChannel_Current}"
+              FontSize="11"
+              Opacity="0.6"
+              VerticalAlignment="Center"
+              Margin="8,0,0,0"
+              Visibility="{Binding IsCurrent, Converter={StaticResource BoolToVisibilityConverter}}"
+            />
+          </Grid>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+
+    <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+      <Button
+        Content="{DynamicResource ChangeVersion_Cancel}"
+        Style="{DynamicResource OutlinedButton}"
+        Padding="16,8"
+        Margin="0,0,8,0"
+        Click="Cancel_Click"
+      />
+      <Button
+        x:Name="ApplyButton"
+        Content="{DynamicResource SwitchChannel_Apply}"
+        Style="{DynamicResource FilledAccentButton}"
+        Padding="16,8"
+        IsEnabled="False"
+        Click="Apply_Click"
+      />
+    </StackPanel>
+  </Grid>
+</Window>

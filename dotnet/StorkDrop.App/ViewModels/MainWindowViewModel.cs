@@ -61,7 +61,6 @@ public partial class MainWindowViewModel : ObservableObject
 
         _marketplaceViewModel.NavigateToProductDetail += OnNavigateToProductDetail;
         _marketplaceViewModel.NavigateToManageProduct += OnNavigateToManageProduct;
-        _installedViewModel.NavigateToProductDetail += OnNavigateToProductDetail;
 
         BuildPluginNavTabs();
         BuildPluginStatusText();

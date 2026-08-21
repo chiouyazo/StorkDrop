@@ -123,6 +123,21 @@
     >Keine Versionen auf diesem Feed verf&#252;gbar.</system:String
   >
   <system:String x:Key="Info_ChangeVersionSuccess">{0} ist jetzt auf Version {1}.</system:String>
+  <system:String x:Key="SwitchChannel_Title">Kanal wechseln</system:String>
+  <system:String x:Key="SwitchChannel_Message"
+    >W&#228;hle einen Kanal f&#252;r {0}. Es wird aus dem gew&#228;hlten Kanal neu installiert.</system:String
+  >
+  <system:String x:Key="SwitchChannel_Current">(aktuell)</system:String>
+  <system:String x:Key="SwitchChannel_Apply">Wechseln</system:String>
+  <system:String x:Key="SwitchChannel_NoChannels"
+    >Dieses Produkt ist auf keinem anderen Feed verf&#252;gbar.</system:String
+  >
+  <system:String x:Key="Info_SwitchChannelSuccess"
+    >{0} Kanal gewechselt (jetzt v{1}).</system:String
+  >
+  <system:String x:Key="Error_SwitchChannelFailed"
+    >Kanal konnte nicht gewechselt werden</system:String
+  >
   <system:String x:Key="Error_ChangeVersionFailed"
     >Version konnte nicht ge&#228;ndert werden</system:String
   >

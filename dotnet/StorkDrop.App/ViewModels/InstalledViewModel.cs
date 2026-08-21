@@ -65,8 +65,6 @@ public partial class InstalledViewModel : ObservableObject
 
     private List<InstalledProductViewModel> _allProducts = [];
 
-    public event Action<string, string?>? NavigateToProductDetail;
-
     /// <summary>
     /// Gets a value indicating whether there are installed products.
     /// </summary>
@@ -399,10 +397,119 @@ public partial class InstalledViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Lets the user re-install this instance from a different channel (a feed that carries the same
+    /// product). Applied like an update from the chosen feed, so it also switches badge and version.
+    /// </summary>
     [RelayCommand]
-    private void SwitchChannel(InstalledProductViewModel product)
+    private async Task SwitchChannelAsync(InstalledProductViewModel product)
     {
-        NavigateToProductDetail?.Invoke(product.ProductId, product.FeedId);
+        List<Views.SwitchChannelDialog.ChannelRow> channels;
+        try
+        {
+            channels = await Task.Run(async () =>
+            {
+                List<Views.SwitchChannelDialog.ChannelRow> found = [];
+                foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+                {
+                    try
+                    {
+                        ProductManifest? m = await _feedRegistry
+                            .GetClient(feed.Id)
+                            .GetProductManifestAsync(product.ProductId);
+                        if (m is not null)
+                            found.Add(
+                                new Views.SwitchChannelDialog.ChannelRow(
+                                    feed.Id,
+                                    feed.Name,
+                                    m.Version,
+                                    string.Equals(
+                                        feed.Id,
+                                        product.FeedId,
+                                        StringComparison.OrdinalIgnoreCase
+                                    )
+                                )
+                            );
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(
+                            ex,
+                            "Feed {FeedId} did not serve {ProductId}",
+                            feed.Id,
+                            product.ProductId
+                        );
+                    }
+                }
+                return found;
+            });
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Error_SwitchChannelFailed") + ": " + ex.Message
+            );
+            return;
+        }
+
+        if (channels.Count == 0)
+        {
+            _dialogService.ShowInfo(LocalizationManager.GetString("SwitchChannel_NoChannels"));
+            return;
+        }
+
+        string? selectedFeedId = System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            Views.SwitchChannelDialog dialog = new Views.SwitchChannelDialog(
+                product.Title,
+                channels
+            )
+            {
+                Owner = System.Windows.Application.Current.MainWindow,
+            };
+            return dialog.ShowDialog() == true ? dialog.SelectedFeedId : null;
+        });
+
+        if (string.IsNullOrEmpty(selectedFeedId) || selectedFeedId == product.FeedId)
+            return;
+
+        if (
+            !await _feedLock.EnsureAuthorizedAsync(
+                selectedFeedId,
+                LocalizationManager.GetString("FeedLock_Op_ChangeVersion")
+            )
+        )
+            return;
+
+        ProductManifest? manifest;
+        try
+        {
+            manifest = await Task.Run(() =>
+                _feedRegistry.GetClient(selectedFeedId).GetProductManifestAsync(product.ProductId)
+            );
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Error_SwitchChannelFailed") + ": " + ex.Message
+            );
+            return;
+        }
+
+        if (manifest is null)
+        {
+            _dialogService.ShowError(LocalizationManager.GetString("Error_SwitchChannelFailed"));
+            return;
+        }
+
+        await ApplyReinstallAsync(
+            product,
+            selectedFeedId,
+            manifest,
+            "Switching channel",
+            "Info_SwitchChannelSuccess",
+            "Error_SwitchChannelFailed"
+        );
     }
 
     /// <summary>
@@ -463,39 +570,78 @@ public partial class InstalledViewModel : ObservableObject
         )
             return;
 
+        ProductManifest? manifest;
+        try
+        {
+            manifest = await Task.Run(() =>
+                _feedRegistry
+                    .GetClient(resolvedFeedId)
+                    .GetProductManifestAsync(product.ProductId, selected)
+            );
+        }
+        catch (Exception ex)
+        {
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
+            );
+            return;
+        }
+
+        if (manifest is null)
+        {
+            _dialogService.ShowError(LocalizationManager.GetString("Error_ChangeVersionFailed"));
+            return;
+        }
+
+        await ApplyReinstallAsync(
+            product,
+            resolvedFeedId,
+            manifest,
+            "Changing version",
+            "Info_ChangeVersionSuccess",
+            "Error_ChangeVersionFailed"
+        );
+    }
+
+    /// <summary>
+    /// Re-installs an installed instance from <paramref name="feedId"/> using
+    /// <paramref name="manifest"/>, applied through the normal isolated update path (backup, elevation,
+    /// locked-file handling, rollback prompt). Shared by "change version" and "switch channel".
+    /// </summary>
+    private async Task ApplyReinstallAsync(
+        InstalledProductViewModel product,
+        string feedId,
+        ProductManifest manifest,
+        string trackVerb,
+        string successKey,
+        string errorKey
+    )
+    {
         TrackedInstallation? tracked = null;
         try
         {
             using CancellationTokenSource cts = new CancellationTokenSource();
             CancellationToken cancellationToken = cts.Token;
 
-            var fetchResult = await Task.Run(async () =>
-            {
-                InstalledProduct? inst = await _productRepository.GetByIdAsync(
+            InstalledProduct? installed = await Task.Run(() =>
+                _productRepository.GetByIdAsync(
                     product.ProductId,
                     product.InstanceId,
                     cancellationToken
-                );
-                ProductManifest? man = await _feedRegistry
-                    .GetClient(resolvedFeedId)
-                    .GetProductManifestAsync(product.ProductId, selected, cancellationToken);
-                return (inst, man);
-            });
-
-            if (fetchResult.inst is null || fetchResult.man is null)
+                )
+            );
+            if (installed is null)
             {
-                _dialogService.ShowError(
-                    LocalizationManager.GetString("Error_ChangeVersionFailed")
-                );
+                _dialogService.ShowError(LocalizationManager.GetString(errorKey));
                 return;
             }
 
             tracked = _tracker.StartInstallation(
                 product.ProductId,
-                $"Changing version: {product.DisplayName} -> v{selected}"
+                $"{trackVerb}: {product.DisplayName} -> v{manifest.Version}"
             );
             using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
-            tracked.AddLog($"Changing {product.Title} from v{product.Version} to v{selected}");
+            tracked.AddLog($"{trackVerb} {product.Title} -> v{manifest.Version}");
 
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
@@ -506,15 +652,15 @@ public partial class InstalledViewModel : ObservableObject
             });
 
             InstallOptions options = new InstallOptions(
-                TargetPath: fetchResult.inst.InstalledPath,
-                InstanceId: fetchResult.inst.InstanceId,
-                FeedId: resolvedFeedId
+                TargetPath: installed.InstalledPath,
+                InstanceId: installed.InstanceId,
+                FeedId: feedId
             );
 
             InstallResult result = await Task.Run(() =>
                 _coordinator.UpdateWithIsolationAsync(
-                    fetchResult.inst,
-                    fetchResult.man,
+                    installed,
+                    manifest,
                     options,
                     progress,
                     cancellationToken
@@ -526,7 +672,7 @@ public partial class InstalledViewModel : ObservableObject
                 tracked.Complete(false, result.ErrorMessage);
                 _tracker.NotifyChanged();
                 _dialogService.ShowError(
-                    LocalizationManager.GetString("Error_ChangeVersionFailed")
+                    LocalizationManager.GetString(errorKey)
                         + ": "
                         + (result.ErrorMessage ?? string.Empty)
                 );
@@ -535,23 +681,23 @@ public partial class InstalledViewModel : ObservableObject
 
             tracked.Complete(true);
             _tracker.NotifyChanged();
-            product.Version = selected;
-            product.FeedId = resolvedFeedId;
+            product.Version = manifest.Version;
+            product.FeedId = feedId;
+            product.BadgeText = manifest.BadgeText;
+            product.BadgeColor = manifest.BadgeColor;
             _dialogService.ShowInfo(
                 LocalizationManager
-                    .GetString("Info_ChangeVersionSuccess")
+                    .GetString(successKey)
                     .Replace("{0}", product.Title)
-                    .Replace("{1}", selected)
+                    .Replace("{1}", manifest.Version)
             );
         }
         catch (Exception ex)
         {
             tracked?.Complete(false, ex.Message);
             _tracker.NotifyChanged();
-            _logger.LogError(ex, "Change version failed for {ProductId}", product.ProductId);
-            _dialogService.ShowError(
-                LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
-            );
+            _logger.LogError(ex, "{Verb} failed for {ProductId}", trackVerb, product.ProductId);
+            _dialogService.ShowError(LocalizationManager.GetString(errorKey) + ": " + ex.Message);
         }
     }
 
