@@ -466,14 +466,20 @@ public partial class App : Application
             {
                 Dispatcher.Invoke(() =>
                 {
+                    // Capture the owner before creating the dialog: the elevated child has no shown main
+                    // window, and once the dialog is constructed WPF makes it the app's MainWindow, so
+                    // setting Owner = MainWindow would target an unshown window and throw. Only set a
+                    // real, already-shown owner (interactive UI); otherwise show it ownerless.
+                    Window? owner = MainWindow is { IsLoaded: true } shown ? shown : null;
+
                     Views.LockedFilesDialog dialog = new Views.LockedFilesDialog(
                         lockedFiles,
                         detector,
                         directory
-                    )
-                    {
-                        Owner = MainWindow,
-                    };
+                    );
+                    if (owner is not null && !ReferenceEquals(owner, dialog))
+                        dialog.Owner = owner;
+
                     dialog.ShowDialog();
                     result = dialog.Action;
                 });
