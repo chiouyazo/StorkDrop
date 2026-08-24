@@ -36,7 +36,14 @@ public partial class App : Application
         {
             string installInstanceId =
                 GetArgValue(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
-            await RunElevatedInstallAsync(args[2], args[3], args[4], installInstanceId);
+            string installVersion = GetArgValue(args, "--version") ?? "";
+            await RunElevatedInstallAsync(
+                args[2],
+                args[3],
+                args[4],
+                installInstanceId,
+                installVersion
+            );
             Shutdown();
             return;
         }
@@ -54,7 +61,14 @@ public partial class App : Application
         {
             string updateInstanceId =
                 GetArgValue(args, "--instance") ?? InstanceIdHelper.DefaultInstanceId;
-            await RunElevatedUpdateAsync(args[2], args[3], args[4], updateInstanceId);
+            string updateVersion = GetArgValue(args, "--version") ?? "";
+            await RunElevatedUpdateAsync(
+                args[2],
+                args[3],
+                args[4],
+                updateInstanceId,
+                updateVersion
+            );
             Shutdown();
             return;
         }
@@ -504,7 +518,8 @@ public partial class App : Application
         string productId,
         string targetPath,
         string feedId,
-        string instanceId
+        string instanceId,
+        string version
     )
     {
         Dictionary<string, string>? configValues = LoadElevationConfigFile();
@@ -523,7 +538,12 @@ public partial class App : Application
                         ? Localization.LocalizationManager.GetString(key, args)
                         : Localization.LocalizationManager.GetString(key);
 
-                ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
+                ProductManifest? manifest = await ResolveElevatedManifestAsync(
+                    registryClient,
+                    productId,
+                    version,
+                    feedId
+                );
                 if (manifest is null)
                     return false;
 
@@ -566,7 +586,8 @@ public partial class App : Application
         string productId,
         string targetPath,
         string feedId,
-        string instanceId
+        string instanceId,
+        string version
     )
     {
         Dictionary<string, string>? configValues = LoadElevationConfigFile();
@@ -586,7 +607,12 @@ public partial class App : Application
                     productId,
                     instanceId
                 );
-                ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
+                ProductManifest? manifest = await ResolveElevatedManifestAsync(
+                    registryClient,
+                    productId,
+                    version,
+                    feedId
+                );
 
                 if (installed is null || manifest is null)
                     return false;
@@ -717,6 +743,30 @@ public partial class App : Application
                 return args[i + 1];
         }
         return null;
+    }
+
+    private static async Task<ProductManifest?> ResolveElevatedManifestAsync(
+        IRegistryClient registryClient,
+        string productId,
+        string version,
+        string feedId
+    )
+    {
+        if (string.IsNullOrEmpty(version))
+            return await registryClient.GetProductManifestAsync(productId);
+
+        ProductManifest? manifest = await registryClient.GetProductManifestAsync(
+            productId,
+            version
+        );
+        if (manifest is null)
+            Log.Error(
+                "Elevated operation: requested version {Version} of {ProductId} not found on feed {FeedId}",
+                version,
+                productId,
+                feedId
+            );
+        return manifest;
     }
 
     private static Dictionary<string, string>? LoadElevationConfigFile()

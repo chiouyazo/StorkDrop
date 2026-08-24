@@ -94,7 +94,7 @@ public static class ElevationHelper
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments =
-                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" {pluginDirArgs} {configFileArg}".Trim(),
+                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" --version \"{version}\" {pluginDirArgs} {configFileArg}".Trim(),
             };
 
             return WaitForElevatedProcess(
@@ -166,6 +166,7 @@ public static class ElevationHelper
 
     public static ElevationResult RunElevatedUpdate(
         string productId,
+        string version,
         string targetPath,
         string feedId,
         string instanceId = InstanceIdHelper.DefaultInstanceId,
@@ -192,7 +193,7 @@ public static class ElevationHelper
                 UseShellExecute = true,
                 Verb = "runas",
                 Arguments =
-                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
+                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" --version \"{version}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
             };
 
             return WaitForElevatedProcess(
