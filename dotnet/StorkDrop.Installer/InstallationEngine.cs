@@ -1021,13 +1021,6 @@ public sealed class InstallationEngine : IInstallationEngine
         }
         catch (Exception ex)
         {
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Installing,
-                    0,
-                    $"Installation failed: {ex}. Cleaning up..."
-                )
-            );
             _logger.LogError(
                 ex,
                 "Installation failed for {ProductId}: {Error}",
@@ -1035,7 +1028,46 @@ public sealed class InstallationEngine : IInstallationEngine
                 ex.Message
             );
 
-            if (existingProduct is null && manifest.Plugins is { Length: > 0 })
+            bool freshInstall = existingProduct is null;
+            string installPath = resolvedPath ?? options.TargetPath;
+
+            // Fresh install failed late (e.g. a service that started too slowly): let the user keep the
+            // partial install or remove it, instead of silently leaving files behind while deleting the
+            // services and not listing the product. Updates go through UpdateAsync's rollback path.
+            if (freshInstall && !ShouldRemoveAfterInstallFailure(manifest, ex))
+            {
+                _logger.LogWarning(
+                    "Install of {ProductId} failed but was kept on user request.",
+                    manifest.ProductId
+                );
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        $"Installation failed but the product was kept: {ex.Message}"
+                    )
+                );
+                await RegisterElevatedInstallAsync(
+                    manifest,
+                    installPath,
+                    options.FeedId,
+                    "",
+                    cancellationToken,
+                    options.InstanceId,
+                    instanceUniqueId
+                );
+                return new InstallResult { Success = true };
+            }
+
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"Installation failed: {ex.Message}. Cleaning up..."
+                )
+            );
+
+            if (freshInstall && manifest.Plugins is { Length: > 0 })
             {
                 try
                 {
@@ -1050,7 +1082,7 @@ public sealed class InstallationEngine : IInstallationEngine
                         instanceUniqueId,
                         cancellationToken
                     );
-                    cleanupContext.InstallPath = resolvedPath ?? options.TargetPath;
+                    cleanupContext.InstallPath = installPath;
                     await RunPluginPhaseAsync(
                         manifest,
                         options,
@@ -1065,6 +1097,9 @@ public sealed class InstallationEngine : IInstallationEngine
                     _logger.LogWarning(cleanupEx, "PostUninstall cleanup failed");
                 }
             }
+
+            if (freshInstall)
+                TryRemoveInstallDir(installPath);
 
             return new InstallResult
             {
@@ -2519,6 +2554,62 @@ public sealed class InstallationEngine : IInstallationEngine
                 ex,
                 "Could not update installed record after a kept update for {ProductId}",
                 newManifest.ProductId
+            );
+        }
+    }
+
+    /// <summary>
+    /// After a failed fresh install, asks whether to remove the partial install or keep it. Late
+    /// failures (a slow-starting service) often leave a usable install where a removal would only
+    /// discard already-copied files. Headless callers (no prompt) default to removing it.
+    /// </summary>
+    private bool ShouldRemoveAfterInstallFailure(ProductManifest manifest, Exception ex)
+    {
+        if (OnPrompt is null)
+            return true;
+
+        PluginPromptResult choice = OnPrompt(
+            new PluginPrompt
+            {
+                Title = Localize("Rollback_InstallTitle"),
+                Message =
+                    Localize("Rollback_InstallMessage", manifest.Title, manifest.Version)
+                    + Environment.NewLine
+                    + Environment.NewLine
+                    + Localize("Rollback_InstallHint"),
+                Detail = ex.Message,
+                Options = [Localize("Rollback_KeepInstall"), Localize("Rollback_RemoveInstall")],
+                DefaultOptionIndex = 1,
+            }
+        );
+
+        // Remove unless the user explicitly chose "keep" (index 0).
+        return choice.Cancelled || choice.ChosenIndex != 0;
+    }
+
+    private void TryRemoveInstallDir(string? installPath)
+    {
+        if (
+            string.IsNullOrEmpty(installPath)
+            || installPath.Contains('{')
+            || !Directory.Exists(installPath)
+        )
+            return;
+
+        try
+        {
+            Directory.Delete(installPath, recursive: true);
+            _logger.LogInformation(
+                "Removed install directory {Path} after failed install",
+                installPath
+            );
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Could not remove install directory {Path} after failed install",
+                installPath
             );
         }
     }

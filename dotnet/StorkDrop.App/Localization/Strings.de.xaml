@@ -244,6 +244,15 @@
   >
   <system:String x:Key="Rollback_Keep">Neue Version beibehalten</system:String>
   <system:String x:Key="Rollback_Restore">Zur&#252;ckrollen</system:String>
+  <system:String x:Key="Rollback_InstallTitle">Installation fehlgeschlagen</system:String>
+  <system:String x:Key="Rollback_InstallMessage"
+    >Die Installation von {0} v{1} ist fehlgeschlagen.</system:String
+  >
+  <system:String x:Key="Rollback_InstallHint"
+    >Die Dateien wurden bereits kopiert und DB-&#196;nderungen angewendet. Installation behalten oder entfernen?</system:String
+  >
+  <system:String x:Key="Rollback_KeepInstall">Installation behalten</system:String>
+  <system:String x:Key="Rollback_RemoveInstall">Entfernen</system:String>
   <system:String x:Key="Error_UpdateProductFailed">Update von {0} fehlgeschlagen</system:String>
   <system:String x:Key="Error_LoadSettingsFailed">
     Fehler beim Laden der Einstellungen

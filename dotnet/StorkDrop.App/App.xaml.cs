@@ -244,27 +244,7 @@ public partial class App : Application
 
             engine.OnLockedFilesDetected = lockedFilesHandler;
 
-            engine.OnPrompt = prompt =>
-            {
-                PluginPromptResult result = new PluginPromptResult();
-                try
-                {
-                    Dispatcher.Invoke(() =>
-                    {
-                        Views.PluginPromptDialog dialog = new Views.PluginPromptDialog(prompt)
-                        {
-                            Owner = MainWindow,
-                        };
-                        if (dialog.ShowDialog() == true)
-                            result.ChosenIndex = dialog.ChosenIndex;
-                    });
-                }
-                catch (Exception ex)
-                {
-                    Log.Error(ex, "Plugin prompt dialog failed");
-                }
-                return result;
-            };
+            engine.OnPrompt = CreatePromptHandler();
 
             engine.OnLocalize = (key, args) =>
                 args.Length > 0
@@ -491,6 +471,35 @@ public partial class App : Application
             return result;
         };
 
+    /// <summary>
+    /// Builds the plugin-prompt handler. Wired both in the interactive UI and in the elevated child so
+    /// prompts (e.g. "install failed, keep or remove?") can appear during the elevated install. The
+    /// owner is captured before the dialog exists: the child has no shown main window, and setting
+    /// Owner to an unshown window throws.
+    /// </summary>
+    private Func<PluginPrompt, PluginPromptResult> CreatePromptHandler() =>
+        prompt =>
+        {
+            PluginPromptResult result = new PluginPromptResult();
+            try
+            {
+                Dispatcher.Invoke(() =>
+                {
+                    Window? owner = MainWindow is { IsLoaded: true } shown ? shown : null;
+                    Views.PluginPromptDialog dialog = new Views.PluginPromptDialog(prompt);
+                    if (owner is not null && !ReferenceEquals(owner, dialog))
+                        dialog.Owner = owner;
+                    if (dialog.ShowDialog() == true)
+                        result.ChosenIndex = dialog.ChosenIndex;
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Plugin prompt dialog failed");
+            }
+            return result;
+        };
+
     private Task RunElevatedInstallAsync(
         string productId,
         string targetPath,
@@ -508,6 +517,11 @@ public partial class App : Application
                 IRegistryClient registryClient = feedRegistry.GetClient(feedId);
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
                 engine.OnLockedFilesDetected = CreateLockedFilesHandler();
+                engine.OnPrompt = CreatePromptHandler();
+                engine.OnLocalize = (key, args) =>
+                    args.Length > 0
+                        ? Localization.LocalizationManager.GetString(key, args)
+                        : Localization.LocalizationManager.GetString(key);
 
                 ProductManifest? manifest = await registryClient.GetProductManifestAsync(productId);
                 if (manifest is null)

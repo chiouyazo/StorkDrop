@@ -212,6 +212,13 @@
   >
   <system:String x:Key="Rollback_Keep">Keep Updated Version</system:String>
   <system:String x:Key="Rollback_Restore">Roll Back</system:String>
+  <system:String x:Key="Rollback_InstallTitle">Installation Failed</system:String>
+  <system:String x:Key="Rollback_InstallMessage">Installing {0} v{1} failed.</system:String>
+  <system:String x:Key="Rollback_InstallHint"
+    >The files were already copied and database changes applied. Keep the installation, or remove it?</system:String
+  >
+  <system:String x:Key="Rollback_KeepInstall">Keep Installation</system:String>
+  <system:String x:Key="Rollback_RemoveInstall">Remove</system:String>
   <system:String x:Key="Error_UpdateProductFailed">Update of {0} failed</system:String>
   <system:String x:Key="Error_LoadSettingsFailed">Error loading settings</system:String>
   <system:String x:Key="Error_SaveFailed">Save failed</system:String>
