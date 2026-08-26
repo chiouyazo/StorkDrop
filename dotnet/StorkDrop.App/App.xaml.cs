@@ -753,7 +753,14 @@ public partial class App : Application
     )
     {
         if (string.IsNullOrEmpty(version))
-            return await registryClient.GetProductManifestAsync(productId);
+        {
+            Log.Error(
+                "Elevated operation aborted: no version passed for {ProductId} on feed {FeedId}",
+                productId,
+                feedId
+            );
+            return null;
+        }
 
         ProductManifest? manifest = await registryClient.GetProductManifestAsync(
             productId,
@@ -761,7 +768,7 @@ public partial class App : Application
         );
         if (manifest is null)
             Log.Error(
-                "Elevated operation: requested version {Version} of {ProductId} not found on feed {FeedId}",
+                "Elevated operation aborted: version {Version} of {ProductId} not found on feed {FeedId}",
                 version,
                 productId,
                 feedId

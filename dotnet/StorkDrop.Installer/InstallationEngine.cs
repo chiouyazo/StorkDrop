@@ -1598,6 +1598,41 @@ public sealed class InstallationEngine : IInstallationEngine
             );
         }
 
+        // Safety net for non-interactive paths (CLI): the UI resolves {ProductPath:<id>} up front by
+        // asking the user which instance to target, but if an unresolved token reaches here, anchor it
+        // to the single installed instance or fail cleanly rather than copying into a literal path.
+        string? referencedProductId = ProductPathToken.GetReferencedProductId(resolvedTargetPath);
+        if (referencedProductId is not null)
+        {
+            IReadOnlyList<InstalledProduct> refInstances =
+                await _productRepository.GetInstancesAsync(referencedProductId, cancellationToken);
+            if (refInstances.Count != 1)
+            {
+                string reason =
+                    refInstances.Count == 0
+                        ? $"no instance of '{referencedProductId}' is installed"
+                        : $"multiple instances of '{referencedProductId}' are installed; select one before installing";
+                return (
+                    resolvedTargetPath,
+                    new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = $"Cannot resolve install path: {reason}.",
+                        FailedStep = "ResolveInstallPath",
+                    }
+                );
+            }
+            resolvedTargetPath = ProductPathToken.Resolve(
+                resolvedTargetPath,
+                refInstances[0].InstalledPath
+            );
+            _logger.LogInformation(
+                "Resolved ProductPath token for {ProductId} in install path: {Resolved}",
+                referencedProductId,
+                resolvedTargetPath
+            );
+        }
+
         if (OnResolveInstallPath is not null)
         {
             string? resolved = OnResolveInstallPath(resolvedTargetPath, fileHandlerContext);

@@ -214,8 +214,18 @@ public partial class MarketplaceViewModel : ObservableObject
                 return;
             }
 
+            (bool proceed, string? resolvedPath, string? resolveError) =
+                await Services.InstanceTargetResolver.ResolveAsync(manifest, _productRepository);
+            if (!proceed)
+            {
+                if (resolveError is not null)
+                    ErrorMessage = resolveError;
+                return;
+            }
+
             string defaultPath =
-                manifest.RecommendedInstallPath
+                resolvedPath
+                ?? manifest.RecommendedInstallPath
                 ?? Path.Combine(StorkPaths.DefaultInstallRoot, product.Title);
 
             bool hasFileTypeHandlers = App
@@ -503,8 +513,18 @@ public partial class MarketplaceViewModel : ObservableObject
     {
         ProductManifest manifest = postProduct.Manifest;
 
+        (bool proceed, string? resolvedPath, string? resolveError) =
+            await Services.InstanceTargetResolver.ResolveAsync(manifest, _productRepository);
+        if (!proceed)
+        {
+            if (resolveError is not null)
+                ErrorMessage = resolveError;
+            return false;
+        }
+
         string defaultPath =
-            manifest.RecommendedInstallPath
+            resolvedPath
+            ?? manifest.RecommendedInstallPath
             ?? Path.Combine(StorkPaths.DefaultInstallRoot, manifest.Title);
 
         bool hasFileTypeHandlers = App

@@ -388,8 +388,18 @@ public partial class ProductDetailViewModel : ObservableObject
             if (manifest is null)
                 return;
 
+            (bool proceed, string? resolvedPath, string? error) =
+                await Services.InstanceTargetResolver.ResolveAsync(manifest, _productRepository);
+            if (!proceed)
+            {
+                if (error is not null)
+                    _notificationService.ShowError(manifest.Title, error);
+                return;
+            }
+
             string defaultPath =
-                manifest.RecommendedInstallPath
+                resolvedPath
+                ?? manifest.RecommendedInstallPath
                 ?? Path.Combine(StorkPaths.DefaultInstallRoot, manifest.Title);
 
             bool hasFileTypeHandlers = App

@@ -132,6 +132,14 @@
   <system:String x:Key="SwitchChannel_NoChannels"
     >Dieses Produkt ist auf keinem anderen Feed verf&#252;gbar.</system:String
   >
+  <system:String x:Key="SelectInstance_Title">Instanz ausw&#228;hlen</system:String>
+  <system:String x:Key="SelectInstance_Message"
+    >F&#252;r {0} muss eine Instanz von '{1}' ausgew&#228;hlt werden, in die installiert wird:</system:String
+  >
+  <system:String x:Key="SelectInstance_Apply">Ausw&#228;hlen</system:String>
+  <system:String x:Key="SelectInstance_NoInstances"
+    >Es ist keine Instanz von '{0}' installiert. Bitte installiere zuerst dieses Produkt.</system:String
+  >
   <system:String x:Key="Info_SwitchChannelSuccess"
     >{0} Kanal gewechselt (jetzt v{1}).</system:String
   >

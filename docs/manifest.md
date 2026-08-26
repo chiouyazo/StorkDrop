@@ -131,6 +131,22 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
 }
 ```
 
+## Install path templates
+
+`recommendedInstallPath` may contain a `{ProductPath:<productId>}` token to anchor this product inside an already-installed product's instance directory. This is meant for add-ons that must live next to a host product (e.g. dropping a plugin into a host's plugin folder) without making the user hunt for the path.
+
+| Token | Resolves to |
+|-------|-------------|
+| `{ProductPath:<productId>}` | The install path of a user-selected installed instance of `<productId>` |
+
+When StorkDrop sees this token it asks, before anything else, which installed instance of `<productId>` to install into (a dropdown of all installed instances), then substitutes that instance's install path.
+
+```jsonc
+{ "recommendedInstallPath": "{ProductPath:acme.suite}/addons/plugins" }
+```
+
+If no instance of `<productId>` is installed, the install is aborted with a message asking to install that product first.
+
 ## Channels (badges)
 
 Products can be published to multiple Nexus repositories with different badges. StorkDrop merges them into a single card in the marketplace:
