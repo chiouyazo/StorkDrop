@@ -140,6 +140,17 @@
   <system:String x:Key="SelectInstance_NoInstances"
     >Es ist keine Instanz von '{0}' installiert. Bitte installiere zuerst dieses Produkt.</system:String
   >
+  <system:String x:Key="DependentUpdates_Title"
+    >Abh&#228;ngige Produkte aktualisieren</system:String
+  >
+  <system:String x:Key="DependentUpdates_Message"
+    >'{0}' wurde aktualisiert. Folgende installierte Produkte h&#228;ngen davon ab und haben ebenfalls ein Update. W&#228;hle, welche mit aktualisiert werden sollen:</system:String
+  >
+  <system:String x:Key="DependentUpdates_Apply">Ausgew&#228;hlte aktualisieren</system:String>
+  <system:String x:Key="DependentUpdates_Skip">&#220;berspringen</system:String>
+  <system:String x:Key="DependentUpdates_ContinuePrompt"
+    >Das Update von '{0}' ist fehlgeschlagen oder wurde abgebrochen. Mit den &#252;brigen fortfahren?</system:String
+  >
   <system:String x:Key="Info_SwitchChannelSuccess"
     >{0} Kanal gewechselt (jetzt v{1}).</system:String
   >

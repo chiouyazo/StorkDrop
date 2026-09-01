@@ -134,6 +134,15 @@
   <system:String x:Key="SelectInstance_NoInstances"
     >No instance of '{0}' is installed. Please install that product first.</system:String
   >
+  <system:String x:Key="DependentUpdates_Title">Update dependent products</system:String>
+  <system:String x:Key="DependentUpdates_Message"
+    >'{0}' was updated. The following installed products depend on it and also have an update. Choose which ones to update as well:</system:String
+  >
+  <system:String x:Key="DependentUpdates_Apply">Update selected</system:String>
+  <system:String x:Key="DependentUpdates_Skip">Skip</system:String>
+  <system:String x:Key="DependentUpdates_ContinuePrompt"
+    >Updating '{0}' failed or was cancelled. Continue with the rest?</system:String
+  >
   <system:String x:Key="Info_SwitchChannelSuccess">{0} switched channel (now v{1}).</system:String>
   <system:String x:Key="Error_SwitchChannelFailed">Could not switch channel</system:String>
   <system:String x:Key="Error_ChangeVersionFailed">Could not change version</system:String>

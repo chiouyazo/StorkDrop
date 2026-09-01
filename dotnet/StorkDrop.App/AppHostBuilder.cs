@@ -89,6 +89,7 @@ public static class AppHostBuilder
                 services.AddSingleton(pluginLoadStatus);
 
                 services.AddSingleton<PostProductResolver>();
+                services.AddSingleton<DependentUpdateService>();
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddTransient<SetupWizardViewModel>();
                 services.AddSingleton<MarketplaceViewModel>();

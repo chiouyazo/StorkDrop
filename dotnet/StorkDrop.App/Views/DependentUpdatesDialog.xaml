@@ -1,0 +1,57 @@
+<Window
+  x:Class="StorkDrop.App.Views.DependentUpdatesDialog"
+  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  Title="{DynamicResource DependentUpdates_Title}"
+  Width="520"
+  SizeToContent="Height"
+  MaxHeight="600"
+  WindowStartupLocation="CenterOwner"
+  ResizeMode="NoResize"
+  Background="{DynamicResource BackgroundBrush}"
+>
+  <StackPanel Margin="24">
+    <TextBlock
+      Text="{DynamicResource DependentUpdates_Title}"
+      FontSize="18"
+      FontWeight="SemiBold"
+      Margin="0,0,0,12"
+    />
+    <TextBlock x:Name="MessageText" TextWrapping="Wrap" FontSize="13" Margin="0,0,0,16" />
+
+    <ItemsControl x:Name="ProductList" Margin="0,0,0,16">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate>
+          <CheckBox IsChecked="{Binding IsSelected}" Margin="4,4" FontSize="13">
+            <StackPanel Orientation="Horizontal">
+              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <TextBlock
+                Text="{Binding VersionChange}"
+                FontSize="12"
+                Opacity="0.7"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+              />
+            </StackPanel>
+          </CheckBox>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button
+        Content="{DynamicResource DependentUpdates_Skip}"
+        Style="{DynamicResource OutlinedButton}"
+        Padding="16,8"
+        Margin="0,0,8,0"
+        Click="Skip_Click"
+      />
+      <Button
+        Content="{DynamicResource DependentUpdates_Apply}"
+        Style="{DynamicResource FilledAccentButton}"
+        Padding="16,8"
+        Click="Apply_Click"
+      />
+    </StackPanel>
+  </StackPanel>
+</Window>

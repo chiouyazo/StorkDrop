@@ -26,6 +26,7 @@ public partial class InstalledViewModel : ObservableObject
     private readonly DialogService _dialogService;
     private readonly IFeedLockService _feedLock;
     private readonly IIntegrityService _integrity;
+    private readonly DependentUpdateService _dependentUpdates;
     private readonly ILogger<InstalledViewModel> _logger;
 
     public InstalledViewModel(
@@ -38,6 +39,7 @@ public partial class InstalledViewModel : ObservableObject
         DialogService dialogService,
         IFeedLockService feedLock,
         IIntegrityService integrity,
+        DependentUpdateService dependentUpdates,
         ILogger<InstalledViewModel> logger
     )
     {
@@ -50,6 +52,7 @@ public partial class InstalledViewModel : ObservableObject
         _dialogService = dialogService;
         _feedLock = feedLock;
         _integrity = integrity;
+        _dependentUpdates = dependentUpdates;
         _logger = logger;
     }
 
@@ -690,6 +693,12 @@ public partial class InstalledViewModel : ObservableObject
                     .GetString(successKey)
                     .Replace("{0}", product.Title)
                     .Replace("{1}", manifest.Version)
+            );
+
+            await _dependentUpdates.OfferDependentUpdatesAsync(
+                product.ProductId,
+                product.Title,
+                cancellationToken
             );
         }
         catch (Exception ex)

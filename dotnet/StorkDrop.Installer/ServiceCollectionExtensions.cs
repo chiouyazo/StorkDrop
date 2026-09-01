@@ -19,6 +19,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<UninstallService>();
         services.AddSingleton<EnvironmentVariableService>();
         services.AddSingleton<InstallationCoordinator>();
+        services.AddSingleton<DependentUpdateResolver>();
         services.AddSingleton<IPluginSettingsStore, PluginSettingsStore>();
         services.AddSingleton<ISelfUpdateChecker, GitHubUpdateChecker>();
         services.AddSingleton<IFeedReportService, FeedReportService>();

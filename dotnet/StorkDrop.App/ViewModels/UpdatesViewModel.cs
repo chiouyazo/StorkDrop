@@ -19,6 +19,7 @@ public partial class UpdatesViewModel : ObservableObject
     private readonly InstallationCoordinator _coordinator;
     private readonly InstallationTracker _tracker;
     private readonly IFeedLockService _feedLock;
+    private readonly DependentUpdateService _dependentUpdates;
     private readonly ILogger<UpdatesViewModel> _logger;
 
     public UpdatesViewModel(
@@ -27,6 +28,7 @@ public partial class UpdatesViewModel : ObservableObject
         InstallationCoordinator coordinator,
         InstallationTracker tracker,
         IFeedLockService feedLock,
+        DependentUpdateService dependentUpdates,
         ILogger<UpdatesViewModel> logger
     )
     {
@@ -35,6 +37,7 @@ public partial class UpdatesViewModel : ObservableObject
         _coordinator = coordinator;
         _tracker = tracker;
         _feedLock = feedLock;
+        _dependentUpdates = dependentUpdates;
         _logger = logger;
     }
 
@@ -176,10 +179,18 @@ public partial class UpdatesViewModel : ObservableObject
         )
             return;
 
-        await UpdateOneAsync(update);
+        if (await UpdateOneAsync(update))
+        {
+            await _dependentUpdates.OfferDependentUpdatesAsync(
+                update.ProductId,
+                update.Title,
+                CancellationToken.None
+            );
+            await LoadAsync();
+        }
     }
 
-    private async Task UpdateOneAsync(UpdateItemViewModel update)
+    private async Task<bool> UpdateOneAsync(UpdateItemViewModel update)
     {
         try
         {
@@ -205,7 +216,7 @@ public partial class UpdatesViewModel : ObservableObject
             ProductManifest? manifest = fetchResult.man;
 
             if (installed is null || manifest is null)
-                return;
+                return false;
 
             update.IsUpdating = true;
             update.UpdatePercentage = 0;
@@ -256,7 +267,7 @@ public partial class UpdatesViewModel : ObservableObject
                         .Replace("{0}", update.Title)
                     + ": "
                     + (updateResult.ErrorMessage ?? string.Empty);
-                return;
+                return false;
             }
 
             tracked.Complete(true);
@@ -293,6 +304,8 @@ public partial class UpdatesViewModel : ObservableObject
                     System.Windows.Application.Current.Shutdown();
                 }
             }
+
+            return true;
         }
         catch (Exception ex)
         {
@@ -303,6 +316,7 @@ public partial class UpdatesViewModel : ObservableObject
                     .Replace("{0}", update.Title)
                 + ": "
                 + ex.Message;
+            return false;
         }
     }
 }
