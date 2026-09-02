@@ -85,6 +85,13 @@
   >
   <system:String x:Key="Install_Cancel">Cancel</system:String>
   <system:String x:Key="Install_Directory">Install directory</system:String>
+  <system:String x:Key="Install_InstanceId">Instance ID</system:String>
+  <system:String x:Key="Install_InstanceIdHint"
+    >Distinguishes parallel installations of this product, e.g. live and test. Leave empty for the default instance.</system:String
+  >
+  <system:String x:Key="Install_InstanceIdInvalid"
+    >Invalid instance ID. Allowed: letters, digits, hyphen and underscore (max. 64 characters).</system:String
+  >
   <system:String x:Key="Install_Installing">Installing...</system:String>
   <system:String x:Key="Install_Installed">Installed</system:String>
   <system:String x:Key="Install_Update">Update</system:String>

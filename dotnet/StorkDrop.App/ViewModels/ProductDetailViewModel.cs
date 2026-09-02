@@ -411,7 +411,8 @@ public partial class ProductDetailViewModel : ObservableObject
                 manifest.Version,
                 defaultPath,
                 manifest,
-                hasFileTypeHandlers
+                hasFileTypeHandlers,
+                allowInstanceSelection: AllowMultipleInstances
             );
             dialog.Owner = System.Windows.Application.Current.MainWindow;
 
@@ -490,11 +491,7 @@ public partial class ProductDetailViewModel : ObservableObject
             using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
 
-            // Multi-instance + already installed -> new instance (fresh InstanceId), not overwrite.
-            string instanceId =
-                AllowMultipleInstances && IsInstalled
-                    ? InstanceIdHelper.GenerateUniqueId()
-                    : InstanceIdHelper.DefaultInstanceId;
+            string instanceId = dialog.SelectedInstanceId;
             InstallOptions options = new InstallOptions(
                 TargetPath: targetPath,
                 FeedId: FeedId,

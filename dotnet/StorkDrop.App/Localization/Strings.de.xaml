@@ -91,6 +91,13 @@
   >
   <system:String x:Key="Install_Cancel">Abbrechen</system:String>
   <system:String x:Key="Install_Directory">Installationsverzeichnis</system:String>
+  <system:String x:Key="Install_InstanceId">Instanz-ID</system:String>
+  <system:String x:Key="Install_InstanceIdHint"
+    >Unterscheidet parallele Installationen dieses Produkts, z. B. live und test. Leer lassen für die Standardinstanz.</system:String
+  >
+  <system:String x:Key="Install_InstanceIdInvalid"
+    >Ungültige Instanz-ID. Erlaubt sind Buchstaben, Ziffern, Bindestrich und Unterstrich (max. 64 Zeichen).</system:String
+  >
   <system:String x:Key="Install_Installing">Wird installiert...</system:String>
   <system:String x:Key="Install_Installed">Installiert</system:String>
   <system:String x:Key="Install_Update">Aktualisieren</system:String>

@@ -563,6 +563,17 @@ public sealed class InstallationEngine : IInstallationEngine
             instanceUniqueId = passedId;
             uniqueIdSource = "from elevation config";
         }
+        else if (
+            !string.Equals(
+                options.InstanceId,
+                InstanceIdHelper.DefaultInstanceId,
+                StringComparison.Ordinal
+            )
+        )
+        {
+            instanceUniqueId = InstanceIdHelper.Sanitize(options.InstanceId);
+            uniqueIdSource = "from instance id";
+        }
         else
         {
             instanceUniqueId = InstanceIdHelper.GenerateUniqueId();

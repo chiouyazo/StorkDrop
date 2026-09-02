@@ -237,7 +237,8 @@ public partial class MarketplaceViewModel : ObservableObject
                 product.Version,
                 defaultPath,
                 manifest,
-                hasFileTypeHandlers
+                hasFileTypeHandlers,
+                allowInstanceSelection: manifest.AllowMultipleInstances
             );
             dialog.Owner = System.Windows.Application.Current.MainWindow;
             bool? result = dialog.ShowDialog();
@@ -246,6 +247,7 @@ public partial class MarketplaceViewModel : ObservableObject
                 return;
 
             string targetPath = dialog.SelectedPath;
+            string instanceId = dialog.SelectedInstanceId;
 
             // Check required components
             if (manifest.RequiredProductIds is { Length: > 0 })
@@ -319,7 +321,11 @@ public partial class MarketplaceViewModel : ObservableObject
             using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Installing {product.Title} v{product.Version} to {targetPath}");
 
-            InstallOptions options = new InstallOptions(TargetPath: targetPath, FeedId: feedId);
+            InstallOptions options = new InstallOptions(
+                TargetPath: targetPath,
+                InstanceId: instanceId,
+                FeedId: feedId
+            );
             Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
             {
                 product.InstallPercentage = p.Percentage;

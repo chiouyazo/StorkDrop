@@ -12,20 +12,35 @@ public partial class InstallDialog : Window
     public bool Confirmed { get; private set; }
 
     private readonly ProductManifest? _manifest;
+    private readonly bool _allowInstanceSelection;
+
+    public string SelectedInstanceId =>
+        _allowInstanceSelection && !string.IsNullOrWhiteSpace(InstanceBox.Text)
+            ? InstanceIdHelper.Sanitize(InstanceBox.Text)
+            : InstanceIdHelper.DefaultInstanceId;
 
     public InstallDialog(
         string productTitle,
         string version,
         string defaultPath,
         ProductManifest? manifest = null,
-        bool hasFileTypeHandlers = false
+        bool hasFileTypeHandlers = false,
+        bool allowInstanceSelection = false,
+        string? defaultInstanceId = null
     )
     {
         InitializeComponent();
         _manifest = manifest;
+        _allowInstanceSelection = allowInstanceSelection;
         TitleText.Text = productTitle;
         VersionText.Text = $"Version {version}";
         PathBox.Text = defaultPath;
+
+        if (allowInstanceSelection)
+        {
+            InstancePanel.Visibility = Visibility.Visible;
+            InstanceBox.Text = defaultInstanceId ?? InstanceIdHelper.DefaultInstanceId;
+        }
         PathBox.TextChanged += (_, _) =>
         {
             UpdateAdminHint();
@@ -117,6 +132,17 @@ public partial class InstallDialog : Window
 
     private void OnInstallClick(object sender, RoutedEventArgs e)
     {
+        if (
+            _allowInstanceSelection
+            && !string.IsNullOrWhiteSpace(InstanceBox.Text)
+            && !InstanceIdHelper.IsValid(InstanceBox.Text.Trim())
+        )
+        {
+            InstanceError.Text = LocalizationManager.GetString("Install_InstanceIdInvalid");
+            InstanceError.Visibility = Visibility.Visible;
+            return;
+        }
+
         Confirmed = true;
         DialogResult = true;
         Close();
