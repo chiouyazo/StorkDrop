@@ -22,7 +22,7 @@ public partial class PluginConfigDialog : Window
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Config dialog load failed: {ex}");
+            Serilog.Log.Error(ex, "Config dialog load failed");
         }
     }
 

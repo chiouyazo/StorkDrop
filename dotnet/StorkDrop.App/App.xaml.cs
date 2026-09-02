@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using Microsoft.Extensions.DependencyInjection;
@@ -434,7 +433,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Self-update check failed: {ex}");
+            Log.Error(ex, "Self-update check failed");
             try
             {
                 var logger = Services
@@ -600,6 +599,11 @@ public partial class App : Application
                 IRegistryClient registryClient = feedRegistry.GetClient(feedId);
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
                 engine.OnLockedFilesDetected = CreateLockedFilesHandler();
+                engine.OnPrompt = CreatePromptHandler();
+                engine.OnLocalize = (key, args) =>
+                    args.Length > 0
+                        ? Localization.LocalizationManager.GetString(key, args)
+                        : Localization.LocalizationManager.GetString(key);
                 IProductRepository productRepository =
                     services.GetRequiredService<IProductRepository>();
 
@@ -642,6 +646,12 @@ public partial class App : Application
             async services =>
             {
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
+                engine.OnLockedFilesDetected = CreateLockedFilesHandler();
+                engine.OnPrompt = CreatePromptHandler();
+                engine.OnLocalize = (key, args) =>
+                    args.Length > 0
+                        ? Localization.LocalizationManager.GetString(key, args)
+                        : Localization.LocalizationManager.GetString(key);
                 IProductRepository productRepository =
                     services.GetRequiredService<IProductRepository>();
 
@@ -720,7 +730,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            Debug.WriteLine($"Elevated {operation} failed: {ex.Message}");
+            Log.Error(ex, "Elevated {Operation} failed", operation);
             Environment.ExitCode = 1;
         }
         finally
