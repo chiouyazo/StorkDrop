@@ -503,7 +503,10 @@ public partial class App : Application
                     if (owner is not null && !ReferenceEquals(owner, dialog))
                         dialog.Owner = owner;
                     if (dialog.ShowDialog() == true)
+                    {
                         result.ChosenIndex = dialog.ChosenIndex;
+                        result.FieldValues = dialog.FieldValues;
+                    }
                 });
             }
             catch (Exception ex)

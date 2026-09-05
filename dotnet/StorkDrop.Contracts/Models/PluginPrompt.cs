@@ -33,4 +33,11 @@ public sealed class PluginPrompt
     /// -1 for no default.
     /// </summary>
     public int DefaultOptionIndex { get; set; } = -1;
+
+    /// <summary>
+    /// Optional input fields shown between the message and the option buttons, so the plugin can
+    /// collect checkbox/selection/text input alongside the button choice. Entered values are returned
+    /// in <see cref="PluginPromptResult.FieldValues"/>. Empty for a plain button prompt.
+    /// </summary>
+    public List<PluginPromptField> Fields { get; set; } = [];
 }

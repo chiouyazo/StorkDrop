@@ -19,6 +19,15 @@ public sealed class PluginContext
     public string Version { get; set; } = string.Empty;
 
     /// <summary>
+    /// The version that was installed before this operation, or null on a fresh install. Mirrors
+    /// <see cref="PluginEnvironment.PreviousVersion"/> so update logic that must run in
+    /// <see cref="Interfaces.IStorkPlugin.PreInstallAsync"/>/<c>PostInstallAsync</c> (e.g. after a
+    /// runtime check) can tell an update from a fresh install without stashing it during the config
+    /// phase.
+    /// </summary>
+    public string? PreviousVersion { get; set; }
+
+    /// <summary>
     /// Gets or sets the target installation path on disk.
     /// </summary>
     public string InstallPath { get; set; } = string.Empty;

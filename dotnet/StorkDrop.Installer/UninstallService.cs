@@ -344,6 +344,7 @@ public sealed class UninstallService
                 InstanceId = product.InstanceId,
                 InstanceUniqueId = product.InstanceUniqueId ?? string.Empty,
                 Version = product.Version,
+                PreviousVersion = product.Version,
                 InstallPath = product.InstalledPath,
                 StorkConfigDirectory = StorkPaths.ConfigDir,
                 ConfigValues = savedConfigValues,

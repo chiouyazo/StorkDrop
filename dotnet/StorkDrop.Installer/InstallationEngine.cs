@@ -2875,6 +2875,7 @@ public sealed class InstallationEngine : IInstallationEngine
                             InstanceId = product.InstanceId,
                             InstanceUniqueId = product.InstanceUniqueId ?? string.Empty,
                             Version = product.Version,
+                            PreviousVersion = product.Version,
                             InstallPath = product.InstalledPath,
                             StorkConfigDirectory = GetStorkConfigDir(),
                         };
@@ -3027,6 +3028,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     InstanceId = product.InstanceId,
                     InstanceUniqueId = product.InstanceUniqueId ?? string.Empty,
                     Version = product.Version,
+                    PreviousVersion = product.Version,
                     InstallPath = product.InstalledPath,
                     StorkConfigDirectory = GetStorkConfigDir(),
                     ConfigValues = effectiveConfig,
@@ -3878,12 +3880,19 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
+        InstalledProduct? previousInstall = await _productRepository.GetByIdAsync(
+            manifest.ProductId,
+            options.InstanceId,
+            cancellationToken: cancellationToken
+        );
+
         return new PluginContext
         {
             ProductId = manifest.ProductId,
             InstanceId = options.InstanceId,
             InstanceUniqueId = instanceUniqueId,
             Version = manifest.Version,
+            PreviousVersion = previousInstall?.Version,
             InstallPath = options.TargetPath,
             StorkConfigDirectory = GetStorkConfigDir(),
             ConfigValues = options.PluginConfigValues ?? new Dictionary<string, string>(),
