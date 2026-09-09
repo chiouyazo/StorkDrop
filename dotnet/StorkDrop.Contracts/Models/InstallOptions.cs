@@ -11,5 +11,6 @@ public sealed record InstallOptions(
     bool CreateBackup = true,
     Dictionary<string, string>? PluginConfigValues = null,
     string? FeedId = null,
-    bool SkipFileHandlers = false
+    bool SkipFileHandlers = false,
+    bool RemovePreviousFiles = false
 );

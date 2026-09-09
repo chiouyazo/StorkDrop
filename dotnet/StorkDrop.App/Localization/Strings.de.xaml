@@ -102,6 +102,9 @@
   <system:String x:Key="Install_Installed">Installiert</system:String>
   <system:String x:Key="Install_Update">Aktualisieren</system:String>
   <system:String x:Key="Install_SwitchChannel">Kanal wechseln</system:String>
+  <system:String x:Key="HostVersion_TooOld"
+    >„{0}“ {1} benötigt StorkDrop ≥ {2} (installiert: {3}). Bitte StorkDrop zuerst aktualisieren.</system:String
+  >
 
   <!-- Marketplace -->
   <system:String x:Key="Marketplace_Search">Suchen...</system:String>

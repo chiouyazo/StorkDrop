@@ -86,6 +86,8 @@ public sealed class BackupService : IBackupService
         Directory.CreateDirectory(targetPath);
         string targetRoot = Path.GetFullPath(targetPath);
 
+        List<string> unresolved = [];
+
         await Task.Run(
             () =>
             {
@@ -117,11 +119,58 @@ public sealed class BackupService : IBackupService
                         continue;
 
                     Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
-                    entry.ExtractToFile(destination, overwrite: true);
+
+                    try
+                    {
+                        entry.ExtractToFile(destination, overwrite: true);
+                    }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                    {
+                        if (!TryRestoreDeferred(entry, destination))
+                            unresolved.Add(entry.FullName);
+                    }
                 }
             },
             cancellationToken
         );
+
+        if (unresolved.Count > 0)
+        {
+            string sample = string.Join(", ", unresolved.Take(5));
+            throw new IOException(
+                $"{unresolved.Count} file(s) could not be restored because they are locked by a "
+                    + $"running process (e.g. {sample}). Please stop the product's services/programs "
+                    + "and try again."
+            );
+        }
+    }
+
+    private static bool TryRestoreDeferred(ZipArchiveEntry entry, string destination)
+    {
+        string pending = $"{destination}.pending-restore-{Guid.NewGuid():N}";
+        try
+        {
+            entry.ExtractToFile(pending, overwrite: true);
+            if (new DeferredFileOps().ScheduleMoveOnReboot(pending, destination))
+                return true;
+
+            if (File.Exists(pending))
+                File.Delete(pending);
+            return false;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            try
+            {
+                if (File.Exists(pending))
+                    File.Delete(pending);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+                // Leftover pending file is harmless; it never replaces the target.
+            }
+            return false;
+        }
     }
 
     public Task<IReadOnlyList<string>> ListBackupsAsync(

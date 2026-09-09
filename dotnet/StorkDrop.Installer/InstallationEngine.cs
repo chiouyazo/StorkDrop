@@ -48,6 +48,53 @@ public sealed class InstallationEngine : IInstallationEngine
         OnLocalize?.Invoke(key, args) ?? key;
 
     /// <summary>
+    /// Guards against running a product whose plugins were built against a newer StorkDrop contract
+    /// surface than this host provides. Returns a user-facing error when the manifest declares a
+    /// <see cref="ProductManifest.MinHostVersion"/> the running host is below, otherwise null.
+    /// Checked before any destructive step so a version mismatch aborts cleanly instead of failing
+    /// deep inside a plugin with a MissingMethodException.
+    /// </summary>
+    private string? CheckMinHostVersion(ProductManifest manifest)
+    {
+        if (string.IsNullOrWhiteSpace(manifest.MinHostVersion))
+            return null;
+
+        if (
+            !StorkDrop.Contracts.PluginVersion.TryParse(
+                manifest.MinHostVersion,
+                out StorkDrop.Contracts.PluginVersion required
+            )
+            || !StorkDrop.Contracts.PluginVersion.TryParse(
+                StorkDrop.Contracts.Services.HostVersion.Current,
+                out StorkDrop.Contracts.PluginVersion current
+            )
+        )
+            return null;
+
+        if (current >= required)
+            return null;
+
+        _logger.LogError(
+            "Host version {Host} is below the required {Required} for {ProductId} v{Version}",
+            StorkDrop.Contracts.Services.HostVersion.Current,
+            manifest.MinHostVersion,
+            manifest.ProductId,
+            manifest.Version
+        );
+
+        string localized = Localize(
+            "HostVersion_TooOld",
+            manifest.Title,
+            manifest.Version,
+            manifest.MinHostVersion,
+            StorkDrop.Contracts.Services.HostVersion.Current
+        );
+        return localized == "HostVersion_TooOld"
+            ? $"„{manifest.Title}“ {manifest.Version} benötigt StorkDrop ≥ {manifest.MinHostVersion} (installiert: {StorkDrop.Contracts.Services.HostVersion.Current}). Bitte StorkDrop zuerst aktualisieren."
+            : localized;
+    }
+
+    /// <summary>
     /// Initializes a new instance of the <see cref="InstallationEngine"/> class.
     /// </summary>
     public InstallationEngine(
@@ -507,6 +554,15 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
+        string? hostVersionError = CheckMinHostVersion(manifest);
+        if (hostVersionError is not null)
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = hostVersionError,
+                FailedStep = "HostVersion",
+            };
+
         InstallResult result = await InstallInternalAsync(
             manifest,
             options,
@@ -785,6 +841,29 @@ public sealed class InstallationEngine : IInstallationEngine
                     ErrorMessage = preInstallResult.ErrorMessage,
                     FailedStep = "PreInstall",
                 };
+            }
+
+            // Update only: now that PreInstall succeeded (and stopped the product's own services),
+            // remove the previous install's files. Doing this after PreInstall means a failed PreInstall
+            // leaves the existing install untouched, and the services are no longer holding their files.
+            bool removePreviousFiles =
+                options.RemovePreviousFiles
+                || (
+                    options.PluginConfigValues is not null
+                    && options.PluginConfigValues.TryGetValue(
+                        "__removePreviousFiles",
+                        out string? removePreviousFlag
+                    )
+                    && removePreviousFlag == "true"
+                );
+            if (removePreviousFiles && existingProduct is not null)
+            {
+                await RemoveOldTrackedFilesAsync(
+                    existingProduct,
+                    manifest,
+                    progress,
+                    cancellationToken
+                );
             }
 
             InstallResult? pathError;
@@ -1160,6 +1239,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 ? new Dictionary<string, string>(options.PluginConfigValues)
                 : new Dictionary<string, string>();
             elevationConfig["__instanceUniqueId"] = instanceUniqueId;
+            if (options.RemovePreviousFiles)
+                elevationConfig["__removePreviousFiles"] = "true";
 
             configFilePath = Path.Combine(
                 StorkPaths.TempDir,
@@ -1689,6 +1770,8 @@ public sealed class InstallationEngine : IInstallationEngine
                     ? new Dictionary<string, string>(options.PluginConfigValues)
                     : new Dictionary<string, string>();
                 elevationConfig["__instanceUniqueId"] = instanceUniqueId;
+                if (options.RemovePreviousFiles)
+                    elevationConfig["__removePreviousFiles"] = "true";
 
                 configFilePath = Path.Combine(
                     StorkPaths.TempDir,
@@ -2195,6 +2278,11 @@ public sealed class InstallationEngine : IInstallationEngine
             installed.Version,
             newManifest.Version
         );
+
+        string? hostVersionError = CheckMinHostVersion(newManifest);
+        if (hostVersionError is not null)
+            throw new InvalidOperationException(hostVersionError);
+
         List<string>? lockCheckManifest = await LoadFileManifest(
             installed.ProductId,
             installed.InstanceUniqueId ?? string.Empty,
@@ -2319,83 +2407,20 @@ public sealed class InstallationEngine : IInstallationEngine
                 // Best-effort
             }
 
-            if (Directory.Exists(installed.InstalledPath))
-            {
-                _logger.LogDebug(
-                    "Removing tracked files from old installation at {InstalledPath}",
-                    installed.InstalledPath
-                );
-
-                List<string>? trackedFiles = await LoadFileManifest(
-                    installed.ProductId,
-                    installed.InstanceUniqueId ?? string.Empty,
-                    cancellationToken
-                );
-
-                if (newManifest.SharedInstallLocation)
-                {
-                    _logger.LogInformation(
-                        "Shared install location for {ProductId}; overwriting in place without "
-                            + "deleting existing files.",
-                        installed.ProductId
-                    );
-                }
-                else if (trackedFiles is not null)
-                {
-                    HashSet<string> excluded = ResolveExcludedFiles(
-                        installed.InstalledPath,
-                        newManifest.ExcludeFiles
-                    );
-
-                    foreach (string relativePath in trackedFiles)
-                    {
-                        string fullPath = Path.Combine(installed.InstalledPath, relativePath);
-                        if (excluded.Contains(fullPath))
-                        {
-                            continue;
-                        }
-
-                        try
-                        {
-                            if (File.Exists(fullPath))
-                                File.Delete(fullPath);
-                        }
-                        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-                        {
-                            _logger.LogDebug("Could not delete {File}, will overwrite", fullPath);
-                        }
-                    }
-                }
-
-                string oldStorkDir = StorkPaths.ProductMetadataDir(
-                    installed.ProductId,
-                    installed.InstanceUniqueId ?? string.Empty
-                );
-                try
-                {
-                    if (Directory.Exists(oldStorkDir))
-                        Directory.Delete(oldStorkDir, true);
-                }
-                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
-                {
-                    _logger.LogWarning(ex, "Could not delete old .stork directory");
-                    progress.Report(
-                        new InstallProgress(
-                            InstallStage.Installing,
-                            0,
-                            $"Warning: Could not fully delete old installation at {installed.InstalledPath}, will overwrite in place"
-                        )
-                    );
-                }
-            }
-
+            // The old files are removed inside InstallInternalAsync, after the plugin's PreInstall
+            // succeeds (see RemovePreviousFiles) - so a failing PreInstall leaves the existing install
+            // untouched and there is nothing to roll back. PreInstall is also where a product stops its
+            // own services, which unlocks their files for the delete.
             _logger.LogDebug(
                 "Running InstallAsync for new version {NewVersion}",
                 newManifest.Version
             );
             InstallResult result = await InstallInternalAsync(
                 newManifest,
-                options,
+                options with
+                {
+                    RemovePreviousFiles = true,
+                },
                 progress,
                 cancellationToken
             );
@@ -3871,6 +3896,90 @@ public sealed class InstallationEngine : IInstallationEngine
         };
         PluginPromptResult response = OnPrompt(prompt);
         return response.ChosenIndex == 0;
+    }
+
+    /// <summary>
+    /// Removes the previous install's tracked files and old .stork metadata during an update. Called
+    /// from InstallInternalAsync after the plugin's PreInstall succeeds (not before), so a failed
+    /// PreInstall leaves the existing install intact and there is nothing to roll back. Best-effort per
+    /// file: a still-locked file is skipped and simply overwritten by the copy that follows.
+    /// </summary>
+    private async Task RemoveOldTrackedFilesAsync(
+        InstalledProduct installed,
+        ProductManifest newManifest,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        if (!Directory.Exists(installed.InstalledPath))
+            return;
+
+        _logger.LogDebug(
+            "Removing tracked files from old installation at {InstalledPath}",
+            installed.InstalledPath
+        );
+
+        List<string>? trackedFiles = await LoadFileManifest(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty,
+            cancellationToken
+        );
+
+        if (newManifest.SharedInstallLocation)
+        {
+            _logger.LogInformation(
+                "Shared install location for {ProductId}; overwriting in place without "
+                    + "deleting existing files.",
+                installed.ProductId
+            );
+        }
+        else if (trackedFiles is not null)
+        {
+            HashSet<string> excluded = ResolveExcludedFiles(
+                installed.InstalledPath,
+                newManifest.ExcludeFiles
+            );
+
+            foreach (string relativePath in trackedFiles)
+            {
+                string fullPath = Path.Combine(installed.InstalledPath, relativePath);
+                if (excluded.Contains(fullPath))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    if (File.Exists(fullPath))
+                        File.Delete(fullPath);
+                }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+                {
+                    _logger.LogDebug("Could not delete {File}, will overwrite", fullPath);
+                }
+            }
+        }
+
+        string oldStorkDir = StorkPaths.ProductMetadataDir(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty
+        );
+        try
+        {
+            if (Directory.Exists(oldStorkDir))
+                Directory.Delete(oldStorkDir, true);
+        }
+        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException)
+        {
+            _logger.LogWarning(ex, "Could not delete old .stork directory");
+            progress.Report(
+                new InstallProgress(
+                    InstallStage.Installing,
+                    0,
+                    $"Warning: Could not fully delete old installation at {installed.InstalledPath}, will overwrite in place"
+                )
+            );
+        }
     }
 
     private async Task<PluginContext> BuildPluginContextAsync(

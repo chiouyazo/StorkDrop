@@ -96,6 +96,9 @@
   <system:String x:Key="Install_Installed">Installed</system:String>
   <system:String x:Key="Install_Update">Update</system:String>
   <system:String x:Key="Install_SwitchChannel">Switch Channel</system:String>
+  <system:String x:Key="HostVersion_TooOld"
+    >“{0}” {1} requires StorkDrop ≥ {2} (installed: {3}). Please update StorkDrop first.</system:String
+  >
 
   <!-- Marketplace -->
   <system:String x:Key="Marketplace_Search">Search...</system:String>
