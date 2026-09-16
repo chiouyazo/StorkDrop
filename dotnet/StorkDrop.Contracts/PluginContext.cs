@@ -79,4 +79,20 @@ public sealed class PluginContext
     /// Returns the user's choice. Returns a cancelled result if the callback is null.
     /// </summary>
     public Func<Models.PluginPrompt, Models.PluginPromptResult>? Prompt { get; set; }
+
+    /// <summary>
+    /// Optional callback that returns all installed instances of the given product id (no UI). Null when
+    /// the host did not provide it (e.g. headless).
+    /// </summary>
+    public Func<string, IReadOnlyList<Models.InstalledProduct>>? GetInstalledInstances { get; set; }
+
+    /// <summary>
+    /// Optional callback that shows StorkDrop's instance picker for the requested product and returns the
+    /// chosen installed instance (with its <see cref="Models.InstalledProduct.InstalledPath"/> etc.), or
+    /// null if the operator cancelled, nothing is installed, or the host did not provide it.
+    /// </summary>
+    public Func<
+        Models.InstancePickRequest,
+        Models.InstalledProduct?
+    >? PickInstalledInstance { get; set; }
 }

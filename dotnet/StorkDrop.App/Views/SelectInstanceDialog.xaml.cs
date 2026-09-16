@@ -13,15 +13,18 @@ public partial class SelectInstanceDialog : Window
     public SelectInstanceDialog(
         string productTitle,
         string referencedProductId,
-        IReadOnlyList<InstalledProduct> instances
+        IReadOnlyList<InstalledProduct> instances,
+        string? message = null
     )
     {
         InitializeComponent();
 
-        MessageText.Text = LocalizationManager
-            .GetString("SelectInstance_Message")
-            .Replace("{0}", productTitle)
-            .Replace("{1}", referencedProductId);
+        MessageText.Text =
+            message
+            ?? LocalizationManager
+                .GetString("SelectInstance_Message")
+                .Replace("{0}", productTitle)
+                .Replace("{1}", referencedProductId);
 
         InstanceBox.ItemsSource = instances;
         InstanceBox.SelectedItem = instances.FirstOrDefault();

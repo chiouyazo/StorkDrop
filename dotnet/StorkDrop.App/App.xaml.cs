@@ -258,6 +258,7 @@ public partial class App : Application
             engine.OnLockedFilesDetected = lockedFilesHandler;
 
             engine.OnPrompt = CreatePromptHandler();
+            engine.OnPickInstalledInstance = CreateInstancePickerHandler();
 
             engine.OnLocalize = (key, args) =>
                 args.Length > 0
@@ -516,6 +517,43 @@ public partial class App : Application
             return result;
         };
 
+    private Func<InstancePickRequest, InstalledProduct?> CreateInstancePickerHandler() =>
+        request =>
+        {
+            InstalledProduct? result = null;
+            try
+            {
+                IProductRepository repository = Services.GetRequiredService<IProductRepository>();
+                IReadOnlyList<InstalledProduct> instances = Task.Run(() =>
+                        repository.GetInstancesAsync(request.ProductId)
+                    )
+                    .GetAwaiter()
+                    .GetResult();
+                if (instances.Count == 0)
+                    return null;
+
+                Dispatcher.Invoke(() =>
+                {
+                    Window? owner = MainWindow is { IsLoaded: true } shown ? shown : null;
+                    Views.SelectInstanceDialog dialog = new Views.SelectInstanceDialog(
+                        request.ProductId,
+                        request.ProductId,
+                        instances,
+                        request.Message
+                    );
+                    if (owner is not null && !ReferenceEquals(owner, dialog))
+                        dialog.Owner = owner;
+                    if (dialog.ShowDialog() == true)
+                        result = dialog.SelectedInstance;
+                });
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Instance picker failed");
+            }
+            return result;
+        };
+
     private Task RunElevatedInstallAsync(
         string productId,
         string targetPath,
@@ -535,6 +573,7 @@ public partial class App : Application
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
                 engine.OnLockedFilesDetected = CreateLockedFilesHandler();
                 engine.OnPrompt = CreatePromptHandler();
+                engine.OnPickInstalledInstance = CreateInstancePickerHandler();
                 engine.OnLocalize = (key, args) =>
                     args.Length > 0
                         ? Localization.LocalizationManager.GetString(key, args)
@@ -603,6 +642,7 @@ public partial class App : Application
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
                 engine.OnLockedFilesDetected = CreateLockedFilesHandler();
                 engine.OnPrompt = CreatePromptHandler();
+                engine.OnPickInstalledInstance = CreateInstancePickerHandler();
                 engine.OnLocalize = (key, args) =>
                     args.Length > 0
                         ? Localization.LocalizationManager.GetString(key, args)
@@ -651,6 +691,7 @@ public partial class App : Application
                 IInstallationEngine engine = services.GetRequiredService<IInstallationEngine>();
                 engine.OnLockedFilesDetected = CreateLockedFilesHandler();
                 engine.OnPrompt = CreatePromptHandler();
+                engine.OnPickInstalledInstance = CreateInstancePickerHandler();
                 engine.OnLocalize = (key, args) =>
                     args.Length > 0
                         ? Localization.LocalizationManager.GetString(key, args)

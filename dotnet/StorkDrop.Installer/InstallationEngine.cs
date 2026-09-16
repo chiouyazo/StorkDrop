@@ -41,7 +41,14 @@ public sealed class InstallationEngine : IInstallationEngine
     public ActionGroupConfigCallback? OnActionGroupConfigNeeded { get; set; }
     public LockedFilesCallback? OnLockedFilesDetected { get; set; }
     public Func<PluginPrompt, PluginPromptResult>? OnPrompt { get; set; }
+    public Func<InstancePickRequest, InstalledProduct?>? OnPickInstalledInstance { get; set; }
     public Func<string, object[], string>? OnLocalize { get; set; }
+
+    private IReadOnlyList<InstalledProduct> GetInstalledInstances(string productId) =>
+        Task.Run(() => _productRepository.GetInstancesAsync(productId, CancellationToken.None))
+            .GetAwaiter()
+            .GetResult();
+
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
 
     private string Localize(string key, params object[] args) =>
@@ -871,6 +878,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 manifest,
                 options,
                 fileHandlerContext,
+                pluginContext,
+                extractPath,
                 instanceUniqueId,
                 progress,
                 cancellationToken
@@ -1661,6 +1670,8 @@ public sealed class InstallationEngine : IInstallationEngine
         ProductManifest manifest,
         InstallOptions options,
         PluginContext? fileHandlerContext,
+        PluginContext productContext,
+        string extractPath,
         string instanceUniqueId,
         IProgress<InstallProgress> progress,
         CancellationToken cancellationToken
@@ -1723,6 +1734,64 @@ public sealed class InstallationEngine : IInstallationEngine
                 referencedProductId,
                 resolvedTargetPath
             );
+        }
+
+        // The installing product's own resolvers run first, with the product's config - so a product
+        // resolves the tokens in its own install path from its own selection, not from another plugin's
+        // (e.g. the SID dropdown) or a first-entry fallback. The host-wide chain below is only a fallback.
+        if (resolvedTargetPath.Contains('{') && manifest.Plugins is { Length: > 0 })
+        {
+            List<ProductPluginLoadContext> resolverContexts = [];
+            try
+            {
+                List<IInstallPathResolver> productResolvers = [];
+                foreach (StorkPluginInfo pluginInfo in manifest.Plugins)
+                {
+                    try
+                    {
+                        if (
+                            LoadPlugin(extractPath, pluginInfo, resolverContexts)
+                            is IInstallPathResolver resolver
+                        )
+                            productResolvers.Add(resolver);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(
+                            ex,
+                            "Could not load {TypeName} as an install-path resolver",
+                            pluginInfo.TypeName
+                        );
+                    }
+                }
+
+                string beforeProduct = resolvedTargetPath;
+                resolvedTargetPath = InstallPathResolution.Apply(
+                    resolvedTargetPath,
+                    productResolvers,
+                    productContext
+                );
+                if (resolvedTargetPath != beforeProduct)
+                    _logger.LogInformation(
+                        "Product resolved install path from {Original} to {Resolved}",
+                        beforeProduct,
+                        resolvedTargetPath
+                    );
+            }
+            finally
+            {
+                foreach (ProductPluginLoadContext resolverContext in resolverContexts)
+                {
+                    try
+                    {
+                        resolverContext.Unload();
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Install-path resolver context unload failed");
+                    }
+                }
+            }
         }
 
         if (OnResolveInstallPath is not null)
@@ -2493,6 +2562,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 )
             );
 
+            await StopProductServicesForRollbackAsync(installed, newManifest, cancellationToken);
+
             if (backupPath is not null && Directory.Exists(installed.InstalledPath))
             {
                 try
@@ -2551,6 +2622,78 @@ public sealed class InstallationEngine : IInstallationEngine
                 );
             }
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Before restoring a backup, lets each product plugin release its file locks (typically by stopping
+    /// its own services) via <see cref="IRollbackAwarePlugin"/>, so the restore does not fail on files
+    /// held open by a still-running service. Loads the plugins from the persistent metadata directory
+    /// (they are unloaded by then) and is fully best-effort - any failure (e.g. no admin rights) is
+    /// logged and the rollback proceeds.
+    /// </summary>
+    private async Task StopProductServicesForRollbackAsync(
+        InstalledProduct installed,
+        ProductManifest newManifest,
+        CancellationToken cancellationToken
+    )
+    {
+        if (newManifest.Plugins is not { Length: > 0 })
+            return;
+
+        string pluginsDir = StorkPaths.ProductPluginsDir(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty
+        );
+        if (!Directory.Exists(pluginsDir))
+            return;
+
+        PluginContext context = new PluginContext
+        {
+            ProductId = installed.ProductId,
+            InstanceId = installed.InstanceId,
+            InstanceUniqueId = installed.InstanceUniqueId ?? string.Empty,
+            Version = installed.Version,
+            InstallPath = installed.InstalledPath,
+            StorkConfigDirectory = GetStorkConfigDir(),
+            Log = message => _logger.LogInformation("[Rollback] {Message}", message),
+        };
+
+        List<ProductPluginLoadContext> contexts = [];
+        try
+        {
+            foreach (StorkPluginInfo pluginInfo in newManifest.Plugins)
+            {
+                try
+                {
+                    IStorkPlugin? plugin = LoadPlugin(pluginsDir, pluginInfo, contexts);
+                    if (plugin is IRollbackAwarePlugin rollbackAware)
+                        await rollbackAware.PrepareForRollbackAsync(context, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(
+                        ex,
+                        "PrepareForRollback failed for {TypeName} on {ProductId}; continuing rollback",
+                        pluginInfo.TypeName,
+                        installed.ProductId
+                    );
+                }
+            }
+        }
+        finally
+        {
+            foreach (ProductPluginLoadContext pluginContext in contexts)
+            {
+                try
+                {
+                    pluginContext.Unload();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Rollback plugin context unload failed");
+                }
+            }
         }
     }
 
@@ -3062,6 +3205,8 @@ public sealed class InstallationEngine : IInstallationEngine
                         : new Dictionary<string, string>(),
                     Log = message => _logger.LogInformation("[Plugin] {Message}", message),
                     Prompt = OnPrompt,
+                    PickInstalledInstance = OnPickInstalledInstance,
+                    GetInstalledInstances = GetInstalledInstances,
                 };
 
                 bool preEnabled = manifest!.Plugins!.Any(p =>
@@ -4016,6 +4161,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 );
             },
             Prompt = OnPrompt,
+            PickInstalledInstance = OnPickInstalledInstance,
+            GetInstalledInstances = GetInstalledInstances,
         };
     }
 

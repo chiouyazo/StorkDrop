@@ -90,6 +90,15 @@ public interface IInstallationEngine
     Func<Models.PluginPrompt, Models.PluginPromptResult>? OnPrompt { get; set; }
 
     /// <summary>
+    /// Set by the UI layer to handle a plugin's request to pick an installed product instance.
+    /// Routed to <see cref="PluginContext.PickInstalledInstance"/>.
+    /// </summary>
+    Func<
+        Models.InstancePickRequest,
+        Models.InstalledProduct?
+    >? OnPickInstalledInstance { get; set; }
+
+    /// <summary>
     /// Set by the UI layer to resolve a localization key (with optional format arguments) to a
     /// display string. When null, keys are returned verbatim.
     /// </summary>
