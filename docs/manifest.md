@@ -124,6 +124,15 @@ When uninstalling, StorkDrop only deletes the files it originally installed (lis
   "badgeColor": "#2E7D32",
   "allowMultipleInstances": false,
   "preserveOnSwitch": ["config.json", "secret.key"],
+  "versionSchema": {
+    "separator": "-",
+    "parts": [
+      { "label": "Release" },
+      { "label": "Build" },
+      { "label": "Date", "format": "date:yyyyMMdd" },
+      { "label": "Revision" },
+    ],
+  },
   "cleanup": {
     "registryKeys": [],
     "dataLocations": ["%APPDATA%\\MyProduct"],
@@ -191,6 +200,51 @@ When switching between channels, files matching `preserveOnSwitch` patterns are 
 | `preserveOnSwitch` | string[] | Glob patterns for files to preserve (e.g. `["config.json", "data/**"]`) |
 
 Without this field, all files are replaced during a channel switch.
+
+## Version grouping
+
+The "Change Version" picker can show a channel's versions either as a flat list or as a dependent
+**cascade** (pick the release, then the build, then the date, then the revision, etc.). This is fully
+automatic and needs no manifest changes — `versionSchema` is optional and only adds labels and formatting.
+
+**Automatic grouping (no manifest needed).** StorkDrop splits each version of a channel on `-` (the SemVer
+core `2.34.7` stays the first segment) and, when *every* version of that channel splits into the same
+number of segments (at least two), presents them as a cascade. Segments that never vary are skipped as a
+choice. If the versions are irregular (different segment counts) or there is only a single segment, the
+picker falls back to the flat list. StorkDrop never has to know what the parts mean.
+
+**Optional `versionSchema`.** A product may describe its version layout so the cascade levels get proper
+names and parts can be formatted (e.g. a date). It is purely additive and backward compatible: omit it and
+grouping still works automatically; include it and it is applied only when it matches.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `versionSchema.separator` | string | Delimiter between parts. Default `-`. The first part keeps its dots (the SemVer core). |
+| `versionSchema.parts` | array | One entry per version part, in order. |
+| `versionSchema.parts[].label` | string | Column/level name shown in the picker (e.g. "Build", "Date"). |
+| `versionSchema.parts[].format` | string? | Optional display format. Supported: `date:<pattern>` — parses the raw segment with the .NET date pattern (invariant culture) and shows it as an ISO date (`2026-09-15`). The stored/installed version keeps the raw value. |
+
+```jsonc
+{
+  "versionSchema": {
+    "separator": "-",
+    "parts": [
+      { "label": "Release" }, // 2.34.7
+      { "label": "Build" }, // 2386
+      { "label": "Date", "format": "date:yyyyMMdd" }, // 20260915 -> shown as 2026-09-15
+      { "label": "Revision" }, // 2438
+    ],
+  },
+}
+```
+
+For a version like `2.34.7-2386-20260915-2438` this yields levels **Release → Build → Date → Revision**,
+with the date segment displayed as `2026-09-15`.
+
+**Graceful fallback.** The schema is applied only when it fits. If the part count does not match a
+channel's versions, or a `date:` part fails to parse, StorkDrop drops the schema and falls back to generic
+grouping; if the versions are not groupable at all, it falls back to the flat list. A malformed or
+unexpected `versionSchema` therefore never breaks the picker — it just degrades to the plain list.
 
 ## Custom metadata
 

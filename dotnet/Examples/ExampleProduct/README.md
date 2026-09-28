@@ -28,3 +28,11 @@ The included `manifest.json` shows every supported manifest field for a product 
 The `environmentVariables` section demonstrates both actions:
 - `ACME_HOME` is **set** to the install path (created on install, deleted on uninstall)
 - `PATH` is **appended** with the `bin` subdirectory (only the added value is removed on uninstall)
+
+The `versionSchema` section demonstrates the optional version layout description used by the "Change
+Version" picker. This product's version is a compound string, `2.1.0-4821-20260324-1530`, and the schema
+labels its parts as **Release / Build / Date / Revision** with the date part formatted from `20260324` to
+`2026-03-24`. When a channel offers several such versions the picker shows them as a dependent cascade
+instead of one flat list. `versionSchema` is optional and purely additive: omit it and the picker still
+groups regular compound versions automatically, and falls back to the flat list when they are irregular.
+See [`docs/manifest.md`](../../../docs/manifest.md#version-grouping) for the full reference.

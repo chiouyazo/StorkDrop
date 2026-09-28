@@ -47,7 +47,16 @@ internal static class DemoProducts
         ],
         CleanupInfo: new CleanupInfo([], []),
         BadgeText: "RC",
-        BadgeColor: "#FF9800"
+        BadgeColor: "#FF9800",
+        VersionSchema: new VersionSchema(
+            "-",
+            [
+                new VersionPart("Release"),
+                new VersionPart("Build"),
+                new VersionPart("Date", "date:yyyyMMdd"),
+                new VersionPart("Revision"),
+            ]
+        )
     );
 
     public static readonly ProductManifest NovaReporting = new(

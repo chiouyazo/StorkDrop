@@ -3,7 +3,7 @@ using StorkDrop.Contracts;
 PluginContext context = new PluginContext
 {
     ProductId = "acme-dashboard",
-    Version = "2.1.0",
+    Version = "2.1.0-4821-20260324-1530",
     InstallPath = Path.Combine(Path.GetTempPath(), "StorkDropExample"),
 };
 

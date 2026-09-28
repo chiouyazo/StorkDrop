@@ -1,7 +1,7 @@
 {
   "productId": "acme-dashboard",
   "title": "Acme Dashboard",
-  "version": "2.1.0",
+  "version": "2.1.0-4821-20260324-1530",
   "releaseDate": "2026-03-24",
   "installType": "Suite",
   "description": "Web-based monitoring dashboard with reporting, API, and admin panel.",
@@ -32,6 +32,15 @@
   "plugins": [
     { "assembly": "ExampleProduct.dll", "typeName": "ExampleProduct.Installer" }
   ],
+  "versionSchema": {
+    "separator": "-",
+    "parts": [
+      { "label": "Release" },
+      { "label": "Build" },
+      { "label": "Date", "format": "date:yyyyMMdd" },
+      { "label": "Revision" }
+    ]
+  },
   "cleanup": {
     "registryKeys": [],
     "dataLocations": ["%APPDATA%\\Acme\\Dashboard"]

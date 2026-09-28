@@ -401,18 +401,23 @@ public partial class InstalledViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Lets the user re-install this instance from a different channel (a feed that carries the same
-    /// product). Applied like an update from the chosen feed, so it also switches badge and version.
+    /// Opens the combined channel + version picker for this installed instance and re-installs it from the
+    /// chosen channel/version. Covers both a same-channel version change (incl. downgrade) and a
+    /// cross-channel switch through the single "Change Version" action; the apply goes through the normal
+    /// isolated update path so badge and feed are updated too.
     /// </summary>
     [RelayCommand]
-    private async Task SwitchChannelAsync(InstalledProductViewModel product)
+    private async Task ChangeVersionAsync(InstalledProductViewModel product)
     {
-        List<Views.SwitchChannelDialog.ChannelRow> channels;
+        if (string.IsNullOrEmpty(product.FeedId))
+            return;
+
+        List<Views.ChangeVersionDialog.ChannelRow> channels;
         try
         {
             channels = await Task.Run(async () =>
             {
-                List<Views.SwitchChannelDialog.ChannelRow> found = [];
+                List<Views.ChangeVersionDialog.ChannelRow> found = [];
                 foreach (FeedInfo feed in _feedRegistry.GetFeeds())
                 {
                     try
@@ -422,15 +427,12 @@ public partial class InstalledViewModel : ObservableObject
                             .GetProductManifestAsync(product.ProductId);
                         if (m is not null)
                             found.Add(
-                                new Views.SwitchChannelDialog.ChannelRow(
+                                new Views.ChangeVersionDialog.ChannelRow(
                                     feed.Id,
                                     feed.Name,
+                                    m.BadgeColor,
                                     m.Version,
-                                    string.Equals(
-                                        feed.Id,
-                                        product.FeedId,
-                                        StringComparison.OrdinalIgnoreCase
-                                    )
+                                    m.VersionSchema
                                 )
                             );
                     }
@@ -450,124 +452,74 @@ public partial class InstalledViewModel : ObservableObject
         catch (Exception ex)
         {
             _dialogService.ShowError(
-                LocalizationManager.GetString("Error_SwitchChannelFailed") + ": " + ex.Message
+                LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
             );
             return;
         }
 
         if (channels.Count == 0)
         {
-            _dialogService.ShowInfo(LocalizationManager.GetString("SwitchChannel_NoChannels"));
-            return;
-        }
-
-        string? selectedFeedId = System.Windows.Application.Current.Dispatcher.Invoke(() =>
-        {
-            Views.SwitchChannelDialog dialog = new Views.SwitchChannelDialog(
-                product.Title,
-                channels
-            )
-            {
-                Owner = System.Windows.Application.Current.MainWindow,
-            };
-            return dialog.ShowDialog() == true ? dialog.SelectedFeedId : null;
-        });
-
-        if (string.IsNullOrEmpty(selectedFeedId) || selectedFeedId == product.FeedId)
-            return;
-
-        if (
-            !await _feedLock.EnsureAuthorizedAsync(
-                selectedFeedId,
-                LocalizationManager.GetString("FeedLock_Op_ChangeVersion")
-            )
-        )
-            return;
-
-        ProductManifest? manifest;
-        try
-        {
-            manifest = await Task.Run(() =>
-                _feedRegistry.GetClient(selectedFeedId).GetProductManifestAsync(product.ProductId)
-            );
-        }
-        catch (Exception ex)
-        {
-            _dialogService.ShowError(
-                LocalizationManager.GetString("Error_SwitchChannelFailed") + ": " + ex.Message
-            );
-            return;
-        }
-
-        if (manifest is null)
-        {
-            _dialogService.ShowError(LocalizationManager.GetString("Error_SwitchChannelFailed"));
-            return;
-        }
-
-        await ApplyReinstallAsync(
-            product,
-            selectedFeedId,
-            manifest,
-            "Switching channel",
-            "Info_SwitchChannelSuccess",
-            "Error_SwitchChannelFailed"
-        );
-    }
-
-    /// <summary>
-    /// Lets the user pick any version from this instance's installed channel and applies it like an
-    /// update - so it also covers downgrades. Multi-instance makes a marketplace-wide version switch
-    /// ambiguous, so the choice lives per installed instance here.
-    /// </summary>
-    [RelayCommand]
-    private async Task ChangeVersionAsync(InstalledProductViewModel product)
-    {
-        if (string.IsNullOrEmpty(product.FeedId))
-            return;
-
-        (string FeedId, IReadOnlyList<string> Versions)? resolved;
-        try
-        {
-            resolved = await ResolveFeedForProductAsync(product.ProductId, product.FeedId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to resolve feed for {ProductId}", product.ProductId);
-            _dialogService.ShowError(
-                LocalizationManager.GetString("Error_ChangeVersionFailed") + ": " + ex.Message
-            );
-            return;
-        }
-
-        if (resolved is null)
-        {
             _dialogService.ShowInfo(LocalizationManager.GetString("ChangeVersion_NoVersions"));
             return;
         }
 
-        string resolvedFeedId = resolved.Value.FeedId;
-        IReadOnlyList<string> versions = resolved.Value.Versions;
-
-        string? selected = System.Windows.Application.Current.Dispatcher.Invoke(() =>
-        {
-            Views.ChangeVersionDialog dialog = new Views.ChangeVersionDialog(
-                product.Title,
-                product.Version,
-                versions
+        // The stored feed may have been renamed/re-added (new id, same channel): treat the same-channel
+        // feed as the current one so its versions are pre-selected and a real switch is still detected.
+        string currentFeedId = product.FeedId!;
+        if (
+            !channels.Any(c =>
+                string.Equals(c.FeedId, currentFeedId, StringComparison.OrdinalIgnoreCase)
             )
-            {
-                Owner = System.Windows.Application.Current.MainWindow,
-            };
-            return dialog.ShowDialog() == true ? dialog.SelectedVersion : null;
-        });
+        )
+        {
+            string? channel = ChannelSuffix(currentFeedId);
+            Views.ChangeVersionDialog.ChannelRow? equivalent = channel is null
+                ? null
+                : channels.FirstOrDefault(c =>
+                    string.Equals(
+                        ChannelSuffix(c.FeedId),
+                        channel,
+                        StringComparison.OrdinalIgnoreCase
+                    )
+                );
+            if (equivalent is not null)
+                currentFeedId = equivalent.FeedId;
+        }
 
-        if (string.IsNullOrEmpty(selected) || selected == product.Version)
+        (string FeedId, string Version)? choice =
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                Views.ChangeVersionDialog dialog = new Views.ChangeVersionDialog(
+                    product.Title,
+                    currentFeedId,
+                    product.Version,
+                    channels,
+                    (feedId, ct) => LoadChannelVersionsAsync(feedId, product.ProductId, ct)
+                )
+                {
+                    Owner = System.Windows.Application.Current.MainWindow,
+                };
+                return
+                    dialog.ShowDialog() == true
+                    && dialog.SelectedFeedId is { } fid
+                    && dialog.SelectedVersion is { } ver
+                    ? ((string, string)?)(fid, ver)
+                    : null;
+            });
+
+        if (choice is null)
+            return;
+
+        (string feedId, string version) = choice.Value;
+        if (
+            string.Equals(feedId, currentFeedId, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(version, product.Version, StringComparison.OrdinalIgnoreCase)
+        )
             return;
 
         if (
             !await _feedLock.EnsureAuthorizedAsync(
-                resolvedFeedId,
+                feedId,
                 LocalizationManager.GetString("FeedLock_Op_ChangeVersion")
             )
         )
@@ -577,9 +529,7 @@ public partial class InstalledViewModel : ObservableObject
         try
         {
             manifest = await Task.Run(() =>
-                _feedRegistry
-                    .GetClient(resolvedFeedId)
-                    .GetProductManifestAsync(product.ProductId, selected)
+                _feedRegistry.GetClient(feedId).GetProductManifestAsync(product.ProductId, version)
             );
         }
         catch (Exception ex)
@@ -598,12 +548,40 @@ public partial class InstalledViewModel : ObservableObject
 
         await ApplyReinstallAsync(
             product,
-            resolvedFeedId,
+            feedId,
             manifest,
             "Changing version",
             "Info_ChangeVersionSuccess",
             "Error_ChangeVersionFailed"
         );
+    }
+
+    private async Task<IReadOnlyList<string>> LoadChannelVersionsAsync(
+        string feedId,
+        string productId,
+        CancellationToken cancellationToken
+    )
+    {
+        try
+        {
+            return await _feedRegistry
+                .GetClient(feedId)
+                .GetAvailableVersionsAsync(productId, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(
+                ex,
+                "Feed {FeedId} versions fetch failed for {ProductId}",
+                feedId,
+                productId
+            );
+            return [];
+        }
     }
 
     /// <summary>
@@ -707,61 +685,6 @@ public partial class InstalledViewModel : ObservableObject
             _tracker.NotifyChanged();
             _logger.LogError(ex, "{Verb} failed for {ProductId}", trackVerb, product.ProductId);
             _dialogService.ShowError(LocalizationManager.GetString(errorKey) + ": " + ex.Message);
-        }
-    }
-
-    /// <summary>
-    /// Resolves the feed to change a product's version from: the exact stored feed if it still serves
-    /// the product, otherwise the same product in the same channel (the feed-id suffix after ':') on
-    /// any configured feed - so a renamed or re-added feed (new id, same repository/channel) still
-    /// works. Returns the resolved feed id and its version list, or null if no feed serves it.
-    /// </summary>
-    private async Task<(string FeedId, IReadOnlyList<string> Versions)?> ResolveFeedForProductAsync(
-        string productId,
-        string? storedFeedId
-    )
-    {
-        if (!string.IsNullOrEmpty(storedFeedId))
-        {
-            IReadOnlyList<string>? exact = await TryGetVersionsAsync(storedFeedId!, productId);
-            if (exact is { Count: > 0 })
-                return (storedFeedId!, exact);
-        }
-
-        string? channel = ChannelSuffix(storedFeedId);
-        foreach (FeedInfo feed in _feedRegistry.GetFeeds())
-        {
-            if (feed.Id == storedFeedId)
-                continue;
-            if (
-                channel is not null
-                && !string.Equals(
-                    ChannelSuffix(feed.Id),
-                    channel,
-                    StringComparison.OrdinalIgnoreCase
-                )
-            )
-                continue;
-
-            IReadOnlyList<string>? found = await TryGetVersionsAsync(feed.Id, productId);
-            if (found is { Count: > 0 })
-                return (feed.Id, found);
-        }
-
-        return null;
-    }
-
-    private async Task<IReadOnlyList<string>?> TryGetVersionsAsync(string feedId, string productId)
-    {
-        try
-        {
-            IRegistryClient client = _feedRegistry.GetClient(feedId);
-            return await client.GetAvailableVersionsAsync(productId);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Feed {FeedId} did not serve {ProductId}", feedId, productId);
-            return null;
         }
     }
 

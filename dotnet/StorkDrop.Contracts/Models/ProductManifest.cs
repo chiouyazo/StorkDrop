@@ -32,5 +32,6 @@ public sealed record ProductManifest(
     Dictionary<string, string>? Metadata = null,
     bool SharedInstallLocation = false,
     string? ContentSha256 = null,
-    string? MinHostVersion = null
+    string? MinHostVersion = null,
+    VersionSchema? VersionSchema = null
 );
