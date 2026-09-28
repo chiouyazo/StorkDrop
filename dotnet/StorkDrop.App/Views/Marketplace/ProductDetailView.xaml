@@ -3,6 +3,7 @@
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
   xmlns:converters="clr-namespace:StorkDrop.App.Converters"
+  xmlns:controls="clr-namespace:StorkDrop.App.Views.Controls"
 >
   <UserControl.Resources>
     <converters:BadgeColorConverter x:Key="BadgeColorConverter" />
@@ -117,10 +118,13 @@
             Style="{DynamicResource HeadingSmall}"
             Margin="0,0,0,8"
           />
-          <ComboBox
+          <controls:VersionPicker
             ItemsSource="{Binding AvailableVersions}"
-            SelectedItem="{Binding SelectedVersion}"
-            Margin="0,0,0,8"
+            Schema="{Binding SelectedChannelVersionSchema}"
+            CurrentVersion="{Binding InstalledVersion}"
+            SelectedVersion="{Binding SelectedVersion, Mode=TwoWay}"
+            MinHeight="120"
+            MaxHeight="260"
           />
         </StackPanel>
       </Border>

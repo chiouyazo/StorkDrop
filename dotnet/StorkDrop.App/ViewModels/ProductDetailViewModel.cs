@@ -73,6 +73,9 @@ public partial class ProductDetailViewModel : ObservableObject
     private string _selectedVersion = string.Empty;
 
     [ObservableProperty]
+    private VersionSchema? _selectedChannelVersionSchema;
+
+    [ObservableProperty]
     private bool _isInstalling;
 
     [ObservableProperty]
@@ -153,6 +156,7 @@ public partial class ProductDetailViewModel : ObservableObject
                 return;
 
             Manifest = result.manifest;
+            SelectedChannelVersionSchema = result.manifest.VersionSchema;
             AvailableVersions = new ObservableCollection<string>(result.versions!);
             SelectedVersion = result.manifest.Version;
             SelectedVersionReleaseNotes = result.manifest.ReleaseNotes ?? string.Empty;
@@ -317,6 +321,7 @@ public partial class ProductDetailViewModel : ObservableObject
         if (Manifest is null)
             return;
 
+        SelectedChannelVersionSchema = Manifest.VersionSchema;
         AvailableVersions = new ObservableCollection<string>(loadResult.versions!);
         SelectedVersion = Manifest.Version;
         SelectedVersionReleaseNotes = Manifest.ReleaseNotes ?? string.Empty;
