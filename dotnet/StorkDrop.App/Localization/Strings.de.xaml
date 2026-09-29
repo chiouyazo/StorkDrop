@@ -138,6 +138,14 @@
   <system:String x:Key="ChangeVersion_Newest">neueste</system:String>
   <system:String x:Key="ChangeVersion_ViewList">Liste</system:String>
   <system:String x:Key="ChangeVersion_ViewGrouped">Gruppiert</system:String>
+  <system:String x:Key="Notes_Button">Notizen</system:String>
+  <system:String x:Key="Notes_Title">Notizen</system:String>
+  <system:String x:Key="Notes_Message"
+    >Freitext-Notizen f&#252;r {0}. Wird mit dieser Installation gespeichert.</system:String
+  >
+  <system:String x:Key="Notes_Save">Speichern</system:String>
+  <system:String x:Key="Notes_Cancel">Abbrechen</system:String>
+  <system:String x:Key="Notes_SaveFailed">Notizen konnten nicht gespeichert werden</system:String>
   <system:String x:Key="Info_ChangeVersionSuccess">{0} ist jetzt auf Version {1}.</system:String>
   <system:String x:Key="SwitchChannel_Title">Kanal wechseln</system:String>
   <system:String x:Key="SwitchChannel_Message"

@@ -48,6 +48,13 @@ public partial class InstalledProductViewModel : ObservableObject
     [ObservableProperty]
     private string? _badgeColor;
 
+    [ObservableProperty]
+    private string? _notes;
+
+    public bool HasNotes => !string.IsNullOrWhiteSpace(Notes);
+
+    partial void OnNotesChanged(string? value) => OnPropertyChanged(nameof(HasNotes));
+
     public bool IsExecutable => InstallType == InstallType.Executable;
     public bool HasActions => HasPlugins || HasFileHandlerData;
     public bool HasBadge => !string.IsNullOrEmpty(BadgeText);

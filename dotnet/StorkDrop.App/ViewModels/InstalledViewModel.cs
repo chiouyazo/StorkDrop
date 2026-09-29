@@ -186,6 +186,7 @@ public partial class InstalledViewModel : ObservableObject
                             BadgeText = p.BadgeText,
                             BadgeColor = p.BadgeColor,
                             InstanceUniqueId = p.InstanceUniqueId ?? string.Empty,
+                            Notes = p.Notes,
                         }
                     );
                 }
@@ -694,6 +695,49 @@ public partial class InstalledViewModel : ObservableObject
             return null;
         int idx = feedId.LastIndexOf(':');
         return idx >= 0 && idx + 1 < feedId.Length ? feedId[(idx + 1)..] : null;
+    }
+
+    /// <summary>
+    /// Opens a free-text notes editor for this installed instance and persists the note on the instance
+    /// record. An empty note clears it.
+    /// </summary>
+    [RelayCommand]
+    private async Task EditNotesAsync(InstalledProductViewModel product)
+    {
+        string? edited = System.Windows.Application.Current.Dispatcher.Invoke(() =>
+        {
+            Views.NotesDialog dialog = new Views.NotesDialog(product.DisplayName, product.Notes)
+            {
+                Owner = System.Windows.Application.Current.MainWindow,
+            };
+            return dialog.ShowDialog() == true ? dialog.Notes : null;
+        });
+
+        if (edited is null)
+            return;
+
+        string? normalized = string.IsNullOrWhiteSpace(edited) ? null : edited;
+
+        try
+        {
+            InstalledProduct? installed = await Task.Run(() =>
+                _productRepository.GetByIdAsync(product.ProductId, product.InstanceId)
+            );
+            if (installed is null)
+                return;
+
+            await Task.Run(() =>
+                _productRepository.UpdateAsync(installed with { Notes = normalized })
+            );
+            product.Notes = normalized;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save notes for {ProductId}", product.ProductId);
+            _dialogService.ShowError(
+                LocalizationManager.GetString("Notes_SaveFailed") + ": " + ex.Message
+            );
+        }
     }
 
     /// <summary>
