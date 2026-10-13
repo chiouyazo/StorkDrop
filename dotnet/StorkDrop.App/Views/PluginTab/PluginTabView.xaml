@@ -165,7 +165,7 @@
           <Button
             Content="{Binding Label}"
             Style="{DynamicResource OutlinedButton}"
-            Padding="16,8"
+            Padding="16,4"
             MinWidth="150"
             Tag="{Binding}"
             Click="OnPluginButton"
