@@ -3,7 +3,11 @@ using StorkDrop.Contracts.Interfaces;
 
 namespace StorkDrop.Demo.Plugins;
 
-internal sealed class DemoStorkDropPlugin : IStorkDropPlugin, IFileTypeHandler, IInstallPathResolver
+internal sealed class DemoStorkDropPlugin
+    : IStorkDropPlugin,
+        IFileTypeHandler,
+        IInstallPathResolver,
+        IInteractiveStorkPlugin
 {
     public string PluginId => "demo-sql-tools";
     public string DisplayName => "SQL Deploy Tools";
@@ -44,8 +48,16 @@ internal sealed class DemoStorkDropPlugin : IStorkDropPlugin, IFileTypeHandler, 
                             {
                                 Key = "database",
                                 Label = "Database",
-                                FieldType = PluginFieldType.Text,
+                                FieldType = PluginFieldType.Dropdown,
                                 Required = true,
+                                Description =
+                                    "Click \"Load databases\" to populate from the server.",
+                            },
+                            new PluginConfigField
+                            {
+                                Key = "load-databases",
+                                Label = "Load databases",
+                                FieldType = PluginFieldType.Button,
                             },
                             new PluginConfigField
                             {
@@ -70,6 +82,42 @@ internal sealed class DemoStorkDropPlugin : IStorkDropPlugin, IFileTypeHandler, 
         ];
 
     public void OnNavigationTabSelected(string tabId) { }
+
+    public PluginButtonResult OnButtonClicked(
+        string fieldKey,
+        Dictionary<string, string> currentValues
+    )
+    {
+        if (fieldKey != "load-databases")
+            return new PluginButtonResult { StatusText = "Unknown button.", IsError = true };
+
+        string server = currentValues.GetValueOrDefault("server", string.Empty);
+        if (string.IsNullOrWhiteSpace(server))
+            return new PluginButtonResult { StatusText = "Enter a server first.", IsError = true };
+
+        List<PluginOptionItem> databases =
+        [
+            new PluginOptionItem { Value = "master", Label = "master" },
+            new PluginOptionItem { Value = "Steps_Basis_2025_05", Label = "Steps_Basis_2025_05" },
+            new PluginOptionItem { Value = "Steps_Test", Label = "Steps_Test" },
+        ];
+
+        return new PluginButtonResult
+        {
+            StatusText = $"Loaded {databases.Count} databases from {server}.",
+            UpdatedSchema =
+            [
+                new PluginConfigField
+                {
+                    Key = "database",
+                    Label = "Database",
+                    FieldType = PluginFieldType.Dropdown,
+                    Options = databases,
+                    DefaultValue = databases[0].Value,
+                },
+            ],
+        };
+    }
 
     public Task OnProductInstalledAsync(
         PluginInstallContext context,

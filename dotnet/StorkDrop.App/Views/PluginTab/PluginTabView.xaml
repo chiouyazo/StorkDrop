@@ -8,12 +8,21 @@
     <!-- Template for rendering a single field (reused in sections and group instances) -->
     <DataTemplate x:Key="FieldTemplate" DataType="{x:Type vm:PluginConfigFieldViewModel}">
       <StackPanel Margin="0,0,0,8" IsEnabled="{Binding IsEnabled}">
-        <TextBlock
-          Text="{Binding Label}"
-          Style="{DynamicResource CaptionText}"
-          FontWeight="SemiBold"
-          Margin="0,0,0,4"
-        />
+        <TextBlock Text="{Binding Label}" FontWeight="SemiBold" Margin="0,0,0,4">
+          <TextBlock.Style>
+            <Style TargetType="TextBlock" BasedOn="{StaticResource CaptionText}">
+              <Style.Triggers>
+                <!-- Button and Checkbox carry their own label, so drop the redundant caption. -->
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Button">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Checkbox">
+                  <Setter Property="Visibility" Value="Collapsed" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </TextBlock.Style>
+        </TextBlock>
 
         <!-- Text / Number -->
         <TextBox Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}">
@@ -111,6 +120,74 @@
             CommandParameter="{Binding}"
           />
         </Grid>
+
+        <!-- Dropdown -->
+        <Border>
+          <Border.Style>
+            <Style TargetType="Border">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Setter Property="BorderBrush" Value="#E0E0E0" />
+              <Setter Property="BorderThickness" Value="1" />
+              <Setter Property="CornerRadius" Value="4" />
+              <Setter Property="Background" Value="White" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Dropdown">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </Border.Style>
+          <ComboBox
+            SelectedValue="{Binding Value, UpdateSourceTrigger=PropertyChanged}"
+            SelectedValuePath="Value"
+            DisplayMemberPath="Label"
+            ItemsSource="{Binding Options}"
+            Padding="8,6"
+            FontSize="13"
+            Background="White"
+            BorderThickness="0"
+            MinHeight="36"
+          />
+        </Border>
+
+        <!-- Button -->
+        <StackPanel Orientation="Horizontal">
+          <StackPanel.Style>
+            <Style TargetType="StackPanel">
+              <Setter Property="Visibility" Value="Collapsed" />
+              <Style.Triggers>
+                <DataTrigger Binding="{Binding FieldTypeName}" Value="Button">
+                  <Setter Property="Visibility" Value="Visible" />
+                </DataTrigger>
+              </Style.Triggers>
+            </Style>
+          </StackPanel.Style>
+          <Button
+            Content="{Binding Label}"
+            Style="{DynamicResource OutlinedButton}"
+            Padding="16,8"
+            MinWidth="150"
+            Tag="{Binding}"
+            Click="OnPluginButton"
+          />
+          <TextBlock
+            Text="{Binding StatusText}"
+            VerticalAlignment="Center"
+            Margin="12,0,0,0"
+            FontSize="12"
+          >
+            <TextBlock.Style>
+              <Style TargetType="TextBlock">
+                <Setter Property="Foreground" Value="#2E7D32" />
+                <Style.Triggers>
+                  <DataTrigger Binding="{Binding IsStatusError}" Value="True">
+                    <Setter Property="Foreground" Value="#D32F2F" />
+                  </DataTrigger>
+                </Style.Triggers>
+              </Style>
+            </TextBlock.Style>
+          </TextBlock>
+        </StackPanel>
 
         <!-- Description -->
         <TextBlock

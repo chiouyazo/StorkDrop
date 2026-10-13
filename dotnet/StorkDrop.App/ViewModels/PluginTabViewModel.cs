@@ -221,6 +221,87 @@ public partial class PluginTabViewModel : ObservableObject
             field.Value = folder;
     }
 
+    /// <summary>
+    /// Runs a Button field's action via <see cref="IInteractiveStorkPlugin.OnButtonClicked"/> and applies
+    /// the result: status text plus any <see cref="PluginButtonResult.UpdatedSchema"/> (used e.g. to fill a
+    /// dropdown's options). When the button sits inside a group instance, only that instance's values are
+    /// passed and only its fields are updated, so the action is scoped to the row it was clicked in.
+    /// </summary>
+    public async Task HandleButtonClickAsync(
+        PluginConfigFieldViewModel field,
+        GroupInstanceViewModel? instance
+    )
+    {
+        if (_plugin is not IInteractiveStorkPlugin interactive)
+        {
+            field.StatusText = LocalizationManager.GetString("Plugin_Settings_ButtonUnsupported");
+            field.IsStatusError = true;
+            return;
+        }
+
+        try
+        {
+            Dictionary<string, string> values = instance is not null
+                ? instance.Fields.ToDictionary(f => f.Key, f => f.Value)
+                : CollectValues();
+
+            PluginButtonResult result = await Task.Run(() =>
+                interactive.OnButtonClicked(field.Key, values)
+            );
+
+            field.StatusText = result.StatusText ?? string.Empty;
+            field.IsStatusError = result.IsError;
+
+            if (result.UpdatedSchema is not null)
+                ApplyUpdatedSchema(result.UpdatedSchema, instance);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Plugin button {Key} failed for {PluginId}",
+                field.Key,
+                PluginId
+            );
+            field.StatusText = ex.Message;
+            field.IsStatusError = true;
+        }
+    }
+
+    /// <summary>
+    /// Merges an updated schema into the live fields by key: refreshes options (and the value, when the
+    /// schema provides a default). Structural changes are not applied - the settings tab keeps its section
+    /// layout; this covers the common "populate a dropdown" case.
+    /// </summary>
+    private void ApplyUpdatedSchema(
+        IReadOnlyList<PluginConfigField> schema,
+        GroupInstanceViewModel? instance
+    )
+    {
+        IEnumerable<PluginConfigFieldViewModel> targets = instance is not null
+            ? instance.Fields
+            : Sections
+                .SelectMany(s => s.Fields)
+                .Concat(
+                    Sections
+                        .SelectMany(s => s.GroupFields)
+                        .SelectMany(g => g.Instances)
+                        .SelectMany(i => i.Fields)
+                );
+        List<PluginConfigFieldViewModel> targetList = targets.ToList();
+
+        foreach (PluginConfigField updated in schema)
+        {
+            PluginConfigFieldViewModel? vm = targetList.FirstOrDefault(f => f.Key == updated.Key);
+            if (vm is null)
+                continue;
+
+            vm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
+            if (!string.IsNullOrEmpty(updated.DefaultValue))
+                vm.Value = updated.DefaultValue;
+        }
+    }
+
     [RelayCommand]
     private async Task SaveAsync()
     {
