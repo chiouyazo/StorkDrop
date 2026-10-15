@@ -129,6 +129,7 @@ public partial class PluginTabViewModel : ObservableObject
                     else if (!string.IsNullOrEmpty(field.DefaultValue))
                         fieldVm.Value = field.DefaultValue;
 
+                    EnsureSelectedValueIsAnOption(fieldVm);
                     sectionVm.Fields.Add(fieldVm);
                 }
             }
@@ -166,6 +167,7 @@ public partial class PluginTabViewModel : ObservableObject
             else if (!string.IsNullOrEmpty(tmpl.DefaultValue))
                 fieldVm.Value = tmpl.DefaultValue;
 
+            EnsureSelectedValueIsAnOption(fieldVm);
             instance.Fields.Add(fieldVm);
         }
 
@@ -297,9 +299,32 @@ public partial class PluginTabViewModel : ObservableObject
                 continue;
 
             vm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
-            if (!string.IsNullOrEmpty(updated.DefaultValue))
+
+            // Keep the saved selection if it is still a valid option; only fall back to the default when it
+            // is gone, so repopulating a dropdown does not silently reset the user's existing choice.
+            bool currentStillValid =
+                !string.IsNullOrEmpty(vm.Value)
+                && vm.Options.Any(o => string.Equals(o.Value, vm.Value, StringComparison.Ordinal));
+            if (!currentStillValid && !string.IsNullOrEmpty(updated.DefaultValue))
                 vm.Value = updated.DefaultValue;
         }
+    }
+
+    /// <summary>
+    /// Makes a dropdown's currently-selected value a selectable option when it is not already one - e.g. a
+    /// database chosen in an earlier session whose option list has not been (re)loaded yet. Without this the
+    /// ComboBox shows blank and clears the value on save, silently dropping the existing configuration.
+    /// </summary>
+    private static void EnsureSelectedValueIsAnOption(PluginConfigFieldViewModel field)
+    {
+        if (
+            field.FieldType != PluginFieldType.Dropdown
+            || string.IsNullOrEmpty(field.Value)
+            || field.Options.Any(o => string.Equals(o.Value, field.Value, StringComparison.Ordinal))
+        )
+            return;
+
+        field.Options.Insert(0, new PluginOptionItem { Value = field.Value, Label = field.Value });
     }
 
     [RelayCommand]
