@@ -38,9 +38,17 @@ Name: "{commondesktop}\{code:GetAppName}"; Filename: "{app}\{code:GetExeName}"; 
 [Tasks]
 Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription: "Additional shortcuts:"
 Name: "addtopath"; Description: "Add to PATH (enables CLI usage from any terminal)"; GroupDescription: "Additional options:"; Flags: checkedonce
+Name: "machinedata"; Description: "Store application data for all users (machine-wide - recommended for terminal servers and shared PCs)"; GroupDescription: "Additional options:"; Flags: unchecked
+
+[Dirs]
+; Machine-wide data: create %ProgramData%\<AppFolder> and grant Users modify so non-elevated sessions can
+; write config/state there (StorkPaths reads the location from the DataLocation registry value below).
+Name: "{commonappdata}\{code:GetAppName}"; Permissions: users-modify; Check: IsMachineDataLocation
 
 [Registry]
 Root: HKLM; Subkey: "SYSTEM\CurrentControlSet\Control\Session Manager\Environment"; ValueType: expandsz; ValueName: "Path"; ValueData: "{olddata};{app}"; Tasks: addtopath; Check: NeedsAddPath('{app}')
+; Where StorkPaths stores state: "Machine" (%ProgramData%) or "User" (%AppData%). Read by StorkPaths at runtime.
+Root: HKLM; Subkey: "SOFTWARE\{code:GetAppName}"; ValueType: string; ValueName: "DataLocation"; ValueData: "{code:GetDataLocation}"; Flags: uninsdeletekey
 
 [Run]
 Filename: "{app}\{code:GetExeName}"; Description: "Launch {code:GetAppName}"; Flags: nowait postinstall skipifsilent
@@ -136,6 +144,26 @@ end;
 function GetAppId(Param: String): String;
 begin
   Result := 'StorkDrop-' + AppFolder();
+end;
+
+// "Machine" when the machine-wide task is selected, or when a previous install already chose it (so a
+// silent self-update preserves the choice); otherwise "User". StorkPaths reads this value at runtime.
+function GetDataLocation(Param: String): String;
+var
+  existing: String;
+begin
+  if IsTaskSelected('machinedata') then
+    Result := 'Machine'
+  else if RegQueryStringValue(HKEY_LOCAL_MACHINE, 'SOFTWARE\' + AppFolder(), 'DataLocation', existing)
+          and (CompareText(existing, 'Machine') = 0) then
+    Result := 'Machine'
+  else
+    Result := 'User';
+end;
+
+function IsMachineDataLocation(): Boolean;
+begin
+  Result := CompareText(GetDataLocation(''), 'Machine') = 0;
 end;
 
 function HasWhitelabel(): Boolean;

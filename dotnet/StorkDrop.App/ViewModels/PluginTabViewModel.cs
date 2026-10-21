@@ -298,15 +298,31 @@ public partial class PluginTabViewModel : ObservableObject
             if (vm is null)
                 continue;
 
+            string previousValue = vm.Value;
             vm.Options = new ObservableCollection<PluginOptionItem>(updated.Options);
 
-            // Keep the saved selection if it is still a valid option; only fall back to the default when it
-            // is gone, so repopulating a dropdown does not silently reset the user's existing choice.
-            bool currentStillValid =
-                !string.IsNullOrEmpty(vm.Value)
-                && vm.Options.Any(o => string.Equals(o.Value, vm.Value, StringComparison.Ordinal));
-            if (!currentStillValid && !string.IsNullOrEmpty(updated.DefaultValue))
-                vm.Value = updated.DefaultValue;
+            // Keep the previous selection when it still exists in the refreshed list; otherwise fall back to
+            // the schema default.
+            bool previousStillValid =
+                !string.IsNullOrEmpty(previousValue)
+                && vm.Options.Any(o =>
+                    string.Equals(o.Value, previousValue, StringComparison.Ordinal)
+                );
+            string desired = previousStillValid
+                ? previousValue
+                : updated.DefaultValue ?? previousValue;
+
+            vm.Value = desired;
+
+            PluginConfigFieldViewModel targetVm = vm;
+            System.Windows.Application.Current?.Dispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background,
+                new Action(() =>
+                {
+                    if (!string.Equals(targetVm.Value, desired, StringComparison.Ordinal))
+                        targetVm.Value = desired;
+                })
+            );
         }
     }
 

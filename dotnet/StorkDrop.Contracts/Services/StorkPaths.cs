@@ -1,26 +1,61 @@
+using Microsoft.Win32;
+
 namespace StorkDrop.Contracts.Services;
 
 public static class StorkPaths
 {
-    private static readonly string AppData = Environment.GetFolderPath(
-        Environment.SpecialFolder.ApplicationData
-    );
-
-    private static readonly string LocalAppData = Environment.GetFolderPath(
-        Environment.SpecialFolder.LocalApplicationData
-    );
-
     /// <summary>
     /// The installation's folder name, e.g. "StorkDrop" or a white-labelled "acme-StorkDrop". Read at
     /// access time so it reflects the branding initialized during startup regardless of type-load order.
     /// </summary>
     private static string AppFolder => Branding.Current.AppFolderName;
 
-    public static string ConfigDir => Path.Combine(AppData, AppFolder, "Config");
+    /// <summary>
+    /// Whether StorkDrop's state (config, installed products, logs, backups, ...) is stored machine-wide
+    /// (%ProgramData%) rather than per-user (%AppData%/%LocalAppData%). This is an install-time choice the
+    /// installer persists in <c>HKLM\SOFTWARE\{AppFolder}\DataLocation = "Machine"</c>, so a system-wide
+    /// install on a terminal server can share one state across all users. Resolved lazily (after branding
+    /// is initialized) and cached; any failure falls back to the safe per-user default.
+    /// </summary>
+    private static readonly Lazy<bool> MachineWide = new Lazy<bool>(ResolveMachineWide);
 
-    public static string StorkConfigDir => Path.Combine(AppData, AppFolder, "Stork", "Config");
+    private static bool ResolveMachineWide()
+    {
+        try
+        {
+            if (!OperatingSystem.IsWindows())
+                return false;
 
-    public static string LogDir => Path.Combine(AppData, AppFolder, "Logs");
+            using RegistryKey? key = Registry.LocalMachine.OpenSubKey($@"SOFTWARE\{AppFolder}");
+            return key?.GetValue("DataLocation") is string value
+                && string.Equals(value, "Machine", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>True when StorkDrop stores its state machine-wide (%ProgramData%) rather than per-user.</summary>
+    public static bool IsMachineWideStorage => MachineWide.Value;
+
+    /// <summary>Roaming-equivalent base: %ProgramData% when machine-wide, otherwise %AppData%.</summary>
+    private static string DataRoot =>
+        MachineWide.Value
+            ? Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)
+            : Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+
+    /// <summary>Local (non-roaming) base: %ProgramData% when machine-wide, otherwise %LocalAppData%.</summary>
+    private static string LocalDataRoot =>
+        MachineWide.Value
+            ? Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData)
+            : Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+
+    public static string ConfigDir => Path.Combine(DataRoot, AppFolder, "Config");
+
+    public static string StorkConfigDir => Path.Combine(DataRoot, AppFolder, "Stork", "Config");
+
+    public static string LogDir => Path.Combine(DataRoot, AppFolder, "Logs");
 
     public static string LogFile => Path.Combine(LogDir, "storkdrop-.log");
 
@@ -29,13 +64,14 @@ public static class StorkPaths
 
     public static string ActivityLogFile => Path.Combine(StorkConfigDir, "activity-log.json");
 
-    public static string BackupRoot => Path.Combine(LocalAppData, AppFolder, "Backups");
+    public static string BackupRoot => Path.Combine(LocalDataRoot, AppFolder, "Backups");
 
     /// <summary>Stable, per-machine identifier used in outbound feed status reports.</summary>
     public static string MachineIdFile => Path.Combine(StorkConfigDir, "machine-id");
 
     /// <summary>On-disk queue of pending feed status reports awaiting delivery.</summary>
-    public static string FeedReportSpoolDir => Path.Combine(LocalAppData, AppFolder, "ReportSpool");
+    public static string FeedReportSpoolDir =>
+        Path.Combine(LocalDataRoot, AppFolder, "ReportSpool");
 
     public static string TempDir => Path.Combine(Path.GetTempPath(), AppFolder);
 
