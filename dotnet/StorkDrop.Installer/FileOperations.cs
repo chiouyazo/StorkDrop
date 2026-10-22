@@ -136,10 +136,4 @@ public sealed class FileOperations
         if (!Directory.Exists(path))
             Directory.CreateDirectory(path);
     }
-
-    public void DeleteDirectoryRecursive(string path)
-    {
-        if (Directory.Exists(path))
-            Directory.Delete(path, recursive: true);
-    }
 }

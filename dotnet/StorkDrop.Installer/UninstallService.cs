@@ -212,18 +212,10 @@ public sealed class UninstallService
             else
             {
                 _logger.LogWarning(
-                    "No file manifest found for {ProductId}, deleting entire directory",
-                    product.ProductId
+                    "No file manifest for {ProductId}; Remove any leftover files manually if needed.",
+                    product.ProductId,
+                    product.InstalledPath
                 );
-
-                progress?.Report(
-                    new InstallProgress(
-                        InstallStage.Uninstalling,
-                        40,
-                        "Deleting installation directory..."
-                    )
-                );
-                await DeleteDirectoryWithRetryAsync(product.InstalledPath, cancellationToken);
             }
 
             DeleteFileManifest(product.ProductId, product.InstanceUniqueId ?? string.Empty);
@@ -791,37 +783,6 @@ public sealed class UninstallService
         catch
         {
             // Best effort
-        }
-    }
-
-    private async Task DeleteDirectoryWithRetryAsync(
-        string path,
-        CancellationToken cancellationToken
-    )
-    {
-        // Delete files individually (with deferred fallback for locked ones)
-        if (Directory.Exists(path))
-        {
-            foreach (string file in Directory.GetFiles(path, "*", SearchOption.AllDirectories))
-            {
-                await DeleteFileWithRetryAsync(file, cancellationToken);
-            }
-
-            CleanupEmptyDirectories(path);
-        }
-
-        // Try to remove the root directory if it's now empty
-        try
-        {
-            if (Directory.Exists(path))
-                Directory.Delete(path, recursive: true);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            _logger.LogWarning(
-                "Directory {Path} could not be fully removed (locked files deferred to reboot)",
-                path
-            );
         }
     }
 }
