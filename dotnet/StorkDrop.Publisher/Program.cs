@@ -74,11 +74,27 @@ internal static class Program
 
         S3Publisher publisher = new S3Publisher(s3, bucket, settings.Prefix);
         await using FileStream package = File.OpenRead(packagePath);
-        ProductManifest stored = await publisher.PublishAsync(channel, manifest, package);
+        PublishResult result = await publisher.PublishAsync(
+            channel,
+            manifest,
+            package,
+            options.ContainsKey("force-latest")
+        );
+        ProductManifest stored = result.Manifest;
 
         Console.WriteLine(
             $"Published {stored.ProductId} {stored.Version} to channel '{channel}' (sha256 {stored.ContentSha256})."
         );
+        if (result.LatestUpdated)
+        {
+            Console.WriteLine($"'latest' now points to {stored.Version}.");
+        }
+        else
+        {
+            Console.WriteLine(
+                $"'latest' was left at {result.PreviousLatestVersion} (use --force-latest to replace it)."
+            );
+        }
         return 0;
     }
 
@@ -141,6 +157,7 @@ internal static class Program
               publish     --bucket <b> --manifest <manifest.json> --package <pkg.zip>
                           [--channel prod] [--region <r>] [--service-url <url>] [--path-style]
                           [--access-key <k>] [--secret-key <s>] [--prefix <p>]
+                          [--force-latest]
 
               iam-policy  --bucket <b> [--channel prod] [--prefix <p>]
             """

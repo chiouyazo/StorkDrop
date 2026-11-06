@@ -78,6 +78,7 @@ public partial class UpdatesViewModel : ObservableObject
                     cancellationToken
                 );
 
+                IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
                 List<UpdateItemViewModel> items = [];
                 foreach (InstalledProduct product in installed)
                 {
@@ -108,6 +109,12 @@ public partial class UpdatesViewModel : ObservableObject
                                     InstalledPath = product.InstalledPath,
                                     FeedId = product.FeedId,
                                     InstanceId = product.InstanceId,
+                                    FeedName =
+                                        feeds.FirstOrDefault(f => f.Id == product.FeedId)?.Name
+                                        ?? string.Empty,
+                                    BadgeText = latest.BadgeText,
+                                    BadgeColor = latest.BadgeColor,
+                                    CurrentBadgeText = product.BadgeText,
                                 }
                             );
                         }

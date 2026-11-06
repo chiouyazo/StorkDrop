@@ -197,6 +197,8 @@
   <!-- Updates -->
   <system:String x:Key="Updates_Title">Updates</system:String>
   <system:String x:Key="Updates_UpdateAll">Alle aktualisieren</system:String>
+  <system:String x:Key="Updates_Feed">Feed:</system:String>
+  <system:String x:Key="Updates_BadgeChange">Build-Kennzeichnung wechselt:</system:String>
 
   <!-- Activity log -->
   <system:String x:Key="ActivityLog_Title">Aktivit&#228;tslog</system:String>

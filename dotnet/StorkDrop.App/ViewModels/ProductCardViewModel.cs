@@ -77,7 +77,7 @@ public partial class ProductCardViewModel : ObservableObject
 
     public bool IsExecutable => InstallType == InstallType.Executable;
 
-    public bool HasBadge => false;
+    public bool HasBadge => !string.IsNullOrEmpty(BadgeText);
 
     public bool HasInstances => InstanceCount > 0;
 
@@ -90,6 +90,8 @@ public partial class ProductCardViewModel : ObservableObject
     public string FeedDisplay => FeedName ?? string.Empty;
 
     public string VersionDisplay => $"v{Version}";
+
+    partial void OnBadgeTextChanged(string? value) => OnPropertyChanged(nameof(HasBadge));
 
     partial void OnInstanceCountChanged(int value)
     {

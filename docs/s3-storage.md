@@ -22,7 +22,7 @@ Identical in spirit to the Nexus raw layout, with the channel as the leading pre
 ```
 
 - **No `catalog.json`, `index.json`, or `latest.json`.** Products are discovered by listing `{channel}/` (with a `/` delimiter → the product ids), versions by listing `{productId}/versions/`. This is the S3 equivalent of how the Nexus client uses the components API.
-- The root `{productId}/manifest.json` is a copy of the newest version's manifest — the same convention the Nexus layout uses — and the publisher keeps it current automatically. `GetProductManifestAsync(productId)` reads it in one GET.
+- The root `{productId}/manifest.json` is a copy of the highest published version's manifest — the same convention the Nexus layout uses — and the publisher keeps it current automatically. `GetProductManifestAsync(productId)` reads it in one GET.
 - The ZIP filename is `{productId}-{version}.zip`.
 
 ## Integrity
@@ -99,7 +99,7 @@ storkdrop-publish publish \
   --access-key AKIA... --secret-key ...
 ```
 
-This uploads the version manifest (with `contentSha256` embedded) and the package, then sets the product's root `manifest.json` to the version you just published. As in a Nexus raw repo, **"latest" is simply the version you publish last** — there is no auto-highest-version logic. Publish the version you want as latest, last. It is idempotent.
+This validates the manifest, uploads the version manifest (with `contentSha256` embedded) and the package, then sets the product's root `manifest.json` ("latest") to the version you just published, but only if that version is not lower than the current root version. Publishing an older version (for example a hotfix for a previous release) leaves "latest" untouched; pass `--force-latest` to replace it anyway. The root manifest is written conditionally on its ETag (`If-Match` / `If-None-Match`), so concurrent publishers cannot overwrite each other; the publisher retries a few times and then fails. The publishing identity needs `s3:GetObject` on the root manifest in addition to `s3:PutObject`. It is idempotent.
 
 ## Testing
 

@@ -2,8 +2,12 @@
   x:Class="StorkDrop.App.Views.Marketplace.ProductCard"
   xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
   xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+  xmlns:converters="clr-namespace:StorkDrop.App.Converters"
   Width="260"
 >
+  <UserControl.Resources>
+    <converters:BadgeColorConverter x:Key="BadgeColorConverter" />
+  </UserControl.Resources>
   <Border Style="{DynamicResource CardBorder}" Cursor="Hand" MouseLeftButtonDown="OnCardClick">
     <Grid>
       <Grid.RowDefinitions>
@@ -124,7 +128,29 @@
         Stretch="Uniform"
         Margin="0,0,0,8"
       >
-        <TextBlock Text="{Binding VersionDisplay}" FontSize="12" Foreground="#999999" />
+        <StackPanel Orientation="Horizontal">
+          <TextBlock
+            Text="{Binding VersionDisplay}"
+            FontSize="12"
+            Foreground="#999999"
+            VerticalAlignment="Center"
+          />
+          <Border
+            Background="{Binding BadgeColor, Converter={StaticResource BadgeColorConverter}}"
+            Visibility="{Binding HasBadge, Converter={StaticResource BoolToVisibilityConverter}}"
+            CornerRadius="4"
+            Padding="6,2"
+            Margin="8,0,0,0"
+            VerticalAlignment="Center"
+          >
+            <TextBlock
+              Text="{Binding BadgeText}"
+              FontSize="10"
+              FontWeight="SemiBold"
+              Foreground="{Binding BadgeColor, Converter={StaticResource BadgeColorConverter}, ConverterParameter=foreground}"
+            />
+          </Border>
+        </StackPanel>
       </Viewbox>
 
       <TextBlock

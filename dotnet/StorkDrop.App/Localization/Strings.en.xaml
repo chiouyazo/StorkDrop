@@ -183,6 +183,8 @@
   <!-- Updates -->
   <system:String x:Key="Updates_Title">Updates</system:String>
   <system:String x:Key="Updates_UpdateAll">Update All</system:String>
+  <system:String x:Key="Updates_Feed">Feed:</system:String>
+  <system:String x:Key="Updates_BadgeChange">Build label changes:</system:String>
 
   <!-- Activity log -->
   <system:String x:Key="ActivityLog_Title">Activity Log</system:String>

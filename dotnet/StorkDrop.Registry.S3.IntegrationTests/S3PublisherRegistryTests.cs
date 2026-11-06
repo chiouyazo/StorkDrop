@@ -22,11 +22,12 @@ public sealed class S3PublisherRegistryTests
         using IAmazonS3 s3 = _fixture.CreateAdminClient();
         S3Publisher publisher = new S3Publisher(s3, bucket);
 
-        ProductManifest stored = await publisher.PublishAsync(
+        PublishResult result = await publisher.PublishAsync(
             "prod",
             TestData.Manifest("acme.app", "1.0.0", "STABLE"),
             new MemoryStream(TestData.Zip("payload"))
         );
+        ProductManifest stored = result.Manifest;
 
         stored.ContentSha256.Should().NotBeNullOrWhiteSpace();
 
@@ -96,13 +97,12 @@ public sealed class S3PublisherRegistryTests
     }
 
     [Fact]
-    public async Task Versions_are_listed_sorted_and_latest_follows_publish_order()
+    public async Task Versions_are_listed_sorted_and_latest_is_the_highest_published_version()
     {
         string bucket = await _fixture.CreateBucketAsync();
         using IAmazonS3 s3 = _fixture.CreateAdminClient();
         S3Publisher publisher = new S3Publisher(s3, bucket);
 
-        // Nexus parity: "latest" is whatever was published last, not the highest number.
         await publisher.PublishAsync(
             "prod",
             TestData.Manifest("acme.app", "1.2.0"),
@@ -125,14 +125,90 @@ public sealed class S3PublisherRegistryTests
         IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync("acme.app");
         versions.Should().Equal("1.0.0", "1.1.0", "1.2.0");
 
-        // "latest" = the last version published (1.1.0), exactly like a manually maintained Nexus root.
         ProductManifest? latest = await client.GetProductManifestAsync("acme.app");
         latest.Should().NotBeNull();
-        latest!.Version.Should().Be("1.1.0");
+        latest!.Version.Should().Be("1.2.0");
 
         ProductManifest? specific = await client.GetProductManifestAsync("acme.app", "1.2.0");
         specific.Should().NotBeNull();
         specific!.Version.Should().Be("1.2.0");
+    }
+
+    [Fact]
+    public async Task Lower_version_does_not_replace_latest_unless_forced()
+    {
+        string bucket = await _fixture.CreateBucketAsync();
+        using IAmazonS3 s3 = _fixture.CreateAdminClient();
+        S3Publisher publisher = new S3Publisher(s3, bucket);
+        S3RegistryClient client = TestData.Client(s3, bucket, "prod");
+
+        await publisher.PublishAsync(
+            "prod",
+            TestData.Manifest("acme.app", "2.0.0"),
+            new MemoryStream(TestData.Zip("v200"))
+        );
+        PublishResult hotfix = await publisher.PublishAsync(
+            "prod",
+            TestData.Manifest("acme.app", "1.9.1"),
+            new MemoryStream(TestData.Zip("v191"))
+        );
+
+        hotfix.LatestUpdated.Should().BeFalse();
+        hotfix.PreviousLatestVersion.Should().Be("2.0.0");
+        (await client.GetProductManifestAsync("acme.app"))!.Version.Should().Be("2.0.0");
+
+        PublishResult forced = await publisher.PublishAsync(
+            "prod",
+            TestData.Manifest("acme.app", "1.9.2"),
+            new MemoryStream(TestData.Zip("v192")),
+            forceLatest: true
+        );
+
+        forced.LatestUpdated.Should().BeTrue();
+        (await client.GetProductManifestAsync("acme.app"))!.Version.Should().Be("1.9.2");
+    }
+
+    [Fact]
+    public async Task Concurrent_publishes_end_with_the_highest_version_as_latest()
+    {
+        string bucket = await _fixture.CreateBucketAsync();
+        using IAmazonS3 s3 = _fixture.CreateAdminClient();
+        S3Publisher publisher = new S3Publisher(s3, bucket);
+
+        string[] versions = ["1.0.0", "1.1.0", "1.2.0", "1.3.0"];
+        await Task.WhenAll(
+            versions.Select(version =>
+                publisher.PublishAsync(
+                    "prod",
+                    TestData.Manifest("acme.app", version),
+                    new MemoryStream(TestData.Zip(version))
+                )
+            )
+        );
+
+        S3RegistryClient client = TestData.Client(s3, bucket, "prod");
+        (await client.GetProductManifestAsync("acme.app"))!.Version.Should().Be("1.3.0");
+    }
+
+    [Fact]
+    public async Task Invalid_manifest_is_rejected_before_anything_is_uploaded()
+    {
+        string bucket = await _fixture.CreateBucketAsync();
+        using IAmazonS3 s3 = _fixture.CreateAdminClient();
+        S3Publisher publisher = new S3Publisher(s3, bucket);
+
+        Func<Task> act = () =>
+            publisher.PublishAsync(
+                "prod",
+                TestData.Manifest("acme.app", "1.0.0") with
+                {
+                    Title = "",
+                },
+                new MemoryStream(TestData.Zip("x"))
+            );
+
+        await act.Should().ThrowAsync<ArgumentException>().WithMessage("*Title*");
+        (await TestData.Client(s3, bucket, "prod").GetAllProductsAsync()).Should().BeEmpty();
     }
 
     [Fact]
