@@ -25,6 +25,8 @@ public sealed class FeedReportService : IFeedReportService
     private const string EventType = "com.storkdrop.inventory.report";
     private const string SignatureHeader = "X-Signature";
     private const string CloudEventContentType = "application/json";
+    private const string SpoolFlushLockName = "flush";
+    private static readonly TimeSpan OrphanedTempAge = TimeSpan.FromDays(1);
 
     private static readonly HttpClient Http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -39,17 +41,35 @@ public sealed class FeedReportService : IFeedReportService
     private readonly ILogger<FeedReportService> _logger;
     private readonly SemaphoreSlim _flushLock = new SemaphoreSlim(1, 1);
 
+    private readonly string _spoolDirectory;
+
     public FeedReportService(
         IConfigurationService configurationService,
         IProductRepository productRepository,
         IEncryptionService encryptionService,
         ILogger<FeedReportService> logger
     )
+        : this(
+            configurationService,
+            productRepository,
+            encryptionService,
+            logger,
+            StorkPaths.FeedReportSpoolDir
+        ) { }
+
+    internal FeedReportService(
+        IConfigurationService configurationService,
+        IProductRepository productRepository,
+        IEncryptionService encryptionService,
+        ILogger<FeedReportService> logger,
+        string spoolDirectory
+    )
     {
         _configurationService = configurationService;
         _productRepository = productRepository;
         _encryptionService = encryptionService;
         _logger = logger;
+        _spoolDirectory = spoolDirectory;
     }
 
     public async Task NotifyFeedChangedAsync(
@@ -111,14 +131,27 @@ public sealed class FeedReportService : IFeedReportService
 
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
-        if (!Directory.Exists(StorkPaths.FeedReportSpoolDir))
+        if (!Directory.Exists(_spoolDirectory))
             return;
 
         await _flushLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            using IDisposable? processLock = CrossProcessFileLock.TryAcquire(
+                Path.Combine(_spoolDirectory, SpoolFlushLockName)
+            );
+            if (processLock is null)
+            {
+                _logger.LogDebug(
+                    "Another StorkDrop process is flushing the report spool; skipping"
+                );
+                return;
+            }
+
+            DeleteOrphanedTempFiles();
+
             string[] files = Directory
-                .GetFiles(StorkPaths.FeedReportSpoolDir, "*.json")
+                .GetFiles(_spoolDirectory, "*.json")
                 .OrderBy(f => f, StringComparer.Ordinal)
                 .ToArray();
 
@@ -272,10 +305,19 @@ public sealed class FeedReportService : IFeedReportService
 
     private void Enqueue(SpooledReport report)
     {
-        Directory.CreateDirectory(StorkPaths.FeedReportSpoolDir);
+        Directory.CreateDirectory(_spoolDirectory);
         string fileName = $"{DateTime.UtcNow:yyyyMMddHHmmssfff}-{Guid.NewGuid():N}.json";
-        string path = Path.Combine(StorkPaths.FeedReportSpoolDir, fileName);
-        File.WriteAllText(path, JsonSerializer.Serialize(report));
+        string path = Path.Combine(_spoolDirectory, fileName);
+        AtomicFile.WriteAllText(path, JsonSerializer.Serialize(report));
+    }
+
+    private void DeleteOrphanedTempFiles()
+    {
+        foreach (string temp in Directory.GetFiles(_spoolDirectory, "*.tmp"))
+        {
+            if (DateTime.UtcNow - File.GetLastWriteTimeUtc(temp) > OrphanedTempAge)
+                TryDelete(temp);
+        }
     }
 
     private void TryDelete(string file)

@@ -14,11 +14,20 @@ public sealed class IntegrityService : IIntegrityService
 {
     private readonly IFeedRegistry _feedRegistry;
     private readonly ILogger<IntegrityService> _logger;
+    private readonly PackageDownloader _downloader;
 
     public IntegrityService(IFeedRegistry feedRegistry, ILogger<IntegrityService> logger)
+        : this(feedRegistry, logger, new PackageDownloader(logger)) { }
+
+    internal IntegrityService(
+        IFeedRegistry feedRegistry,
+        ILogger<IntegrityService> logger,
+        PackageDownloader downloader
+    )
     {
         _feedRegistry = feedRegistry;
         _logger = logger;
+        _downloader = downloader;
     }
 
     public async Task<IntegrityReport> VerifyAsync(
@@ -178,19 +187,28 @@ public sealed class IntegrityService : IIntegrityService
     {
         IRegistryClient client = _feedRegistry.GetClient(product.FeedId!);
 
-        string zipPath = Path.Combine(workRoot, "package.zip");
-        await using (
-            Stream downloadStream = await client.DownloadProductAsync(
-                product.ProductId,
-                product.Version,
-                cancellationToken
-            )
-        )
-        await using (FileStream fileStream = File.Create(zipPath))
-        {
-            await downloadStream.CopyToAsync(fileStream, cancellationToken);
-        }
+        ProductManifest? manifest = await client.GetProductManifestAsync(
+            product.ProductId,
+            product.Version,
+            cancellationToken
+        );
 
+        string zipPath = Path.Combine(workRoot, "package.zip");
+        await _downloader.DownloadAsync(
+            token => client.DownloadProductAsync(product.ProductId, product.Version, token),
+            zipPath,
+            $"{product.Title} v{product.Version}",
+            manifest?.ContentSha256,
+            manifest?.DownloadSizeBytes,
+            onProgress: null,
+            cancellationToken
+        );
+
+        DiskSpaceGuard.EnsureFreeSpace(
+            workRoot,
+            DiskSpaceGuard.UncompressedSize(zipPath),
+            "extracting the repair package"
+        );
         string extractPath = Path.Combine(workRoot, "extracted");
         ZipFile.ExtractToDirectory(zipPath, extractPath);
 

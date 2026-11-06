@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
@@ -6,7 +5,7 @@ using StorkDrop.Contracts.Models;
 namespace StorkDrop.Installer;
 
 /// <summary>
-/// Wraps IInstallationEngine with per-product locking and guaranteed cleanup.
+/// Wraps IInstallationEngine with a cross-process lock per product instance and guaranteed cleanup.
 /// Each installation is isolated - failures never affect other installs.
 /// </summary>
 public sealed class InstallationCoordinator
@@ -14,8 +13,6 @@ public sealed class InstallationCoordinator
     private readonly IInstallationEngine _engine;
     private readonly UninstallService _uninstallService;
     private readonly ILogger<InstallationCoordinator> _logger;
-    private readonly ConcurrentDictionary<string, SemaphoreSlim> _productLocks =
-        new ConcurrentDictionary<string, SemaphoreSlim>();
 
     public InstallationCoordinator(
         IInstallationEngine engine,
@@ -41,18 +38,22 @@ public sealed class InstallationCoordinator
         CancellationToken cancellationToken
     )
     {
-        SemaphoreSlim productLock = GetProductLock(manifest.ProductId);
+        using ProductLockAcquisition productLock = ProductOperationLock.TryAcquire(
+            manifest.ProductId,
+            options.InstanceId,
+            "install"
+        );
 
-        if (!await productLock.WaitAsync(TimeSpan.Zero, cancellationToken))
+        if (!productLock.Acquired)
         {
             _logger.LogWarning(
-                "Install of {ProductId} blocked - another installation is already in progress",
+                "Install of {ProductId} blocked - another operation is already in progress",
                 manifest.ProductId
             );
             return new InstallResult
             {
                 Success = false,
-                ErrorMessage = $"Another installation of {manifest.Title} is already in progress.",
+                ErrorMessage = productLock.DescribeConflict(manifest.Title),
                 FailedStep = "Coordination",
             };
         }
@@ -90,11 +91,6 @@ public sealed class InstallationCoordinator
                 Exception = ex,
             };
         }
-        finally
-        {
-            productLock.Release();
-            _logger.LogInformation("Install lock released for {ProductId}", manifest.ProductId);
-        }
     }
 
     public async Task<InstallResult> UpdateWithIsolationAsync(
@@ -105,9 +101,13 @@ public sealed class InstallationCoordinator
         CancellationToken cancellationToken
     )
     {
-        SemaphoreSlim productLock = GetProductLock(installed.ProductId);
+        using ProductLockAcquisition productLock = ProductOperationLock.TryAcquire(
+            installed.ProductId,
+            installed.InstanceId,
+            "update"
+        );
 
-        if (!await productLock.WaitAsync(TimeSpan.Zero, cancellationToken))
+        if (!productLock.Acquired)
         {
             _logger.LogWarning(
                 "Update of {ProductId} blocked - another operation is already in progress",
@@ -116,7 +116,7 @@ public sealed class InstallationCoordinator
             return new InstallResult
             {
                 Success = false,
-                ErrorMessage = $"Another operation on {installed.Title} is already in progress.",
+                ErrorMessage = productLock.DescribeConflict(installed.Title),
                 FailedStep = "Coordination",
             };
         }
@@ -152,11 +152,6 @@ public sealed class InstallationCoordinator
                 Exception = ex,
             };
         }
-        finally
-        {
-            productLock.Release();
-            _logger.LogInformation("Update lock released for {ProductId}", installed.ProductId);
-        }
     }
 
     public async Task UninstallWithIsolationAsync(
@@ -165,25 +160,17 @@ public sealed class InstallationCoordinator
         CancellationToken cancellationToken
     )
     {
-        SemaphoreSlim productLock = GetProductLock($"{product.ProductId}_{product.InstanceId}");
+        using ProductLockAcquisition productLock = ProductOperationLock.TryAcquire(
+            product.ProductId,
+            product.InstanceId,
+            "uninstall"
+        );
 
-        if (!await productLock.WaitAsync(TimeSpan.Zero, cancellationToken))
-        {
-            throw new InvalidOperationException(
-                $"Another operation on {product.Title} is already in progress."
-            );
-        }
+        if (!productLock.Acquired)
+            throw new InvalidOperationException(productLock.DescribeConflict(product.Title));
 
-        try
-        {
-            _logger.LogInformation("Uninstall lock acquired for {ProductId}", product.ProductId);
-            await _uninstallService.UninstallAsync(product, progress, cancellationToken);
-        }
-        finally
-        {
-            productLock.Release();
-            _logger.LogInformation("Uninstall lock released for {ProductId}", product.ProductId);
-        }
+        _logger.LogInformation("Uninstall lock acquired for {ProductId}", product.ProductId);
+        await _uninstallService.UninstallAsync(product, progress, cancellationToken);
     }
 
     public Task UninstallWithIsolationAsync(
@@ -201,9 +188,13 @@ public sealed class InstallationCoordinator
         CancellationToken cancellationToken
     )
     {
-        SemaphoreSlim productLock = GetProductLock(product.ProductId);
+        using ProductLockAcquisition productLock = ProductOperationLock.TryAcquire(
+            product.ProductId,
+            product.InstanceId,
+            "re-execute"
+        );
 
-        if (!await productLock.WaitAsync(TimeSpan.Zero, cancellationToken))
+        if (!productLock.Acquired)
         {
             _logger.LogWarning(
                 "Re-execute of {ProductId} blocked - another operation is already in progress",
@@ -212,7 +203,7 @@ public sealed class InstallationCoordinator
             return new InstallResult
             {
                 Success = false,
-                ErrorMessage = $"Another operation on {product.Title} is already in progress.",
+                ErrorMessage = productLock.DescribeConflict(product.Title),
                 FailedStep = "Coordination",
             };
         }
@@ -252,13 +243,5 @@ public sealed class InstallationCoordinator
                 Exception = ex,
             };
         }
-        finally
-        {
-            productLock.Release();
-            _logger.LogInformation("Re-execute lock released for {ProductId}", product.ProductId);
-        }
     }
-
-    private SemaphoreSlim GetProductLock(string productId) =>
-        _productLocks.GetOrAdd(productId, _ => new SemaphoreSlim(1, 1));
 }

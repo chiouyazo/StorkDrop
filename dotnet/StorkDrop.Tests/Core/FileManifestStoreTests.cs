@@ -114,4 +114,50 @@ public sealed class FileManifestStoreTests
         );
         (await FileManifestStore.ReadAsync(path)).Should().BeNull();
     }
+
+    [Fact]
+    public async Task ReadAsync_FallsBackToBackup_WhenManifestIsCorrupt()
+    {
+        using TestDirectory dir = new TestDirectory();
+        string path = dir.File("m.files.json");
+        await FileManifestStore.WriteAsync(path, [new TrackedFile("old.dll", "h", 1)]);
+        await FileManifestStore.WriteAsync(path, [new TrackedFile("new.dll", "h", 1)]);
+        await File.WriteAllTextAsync(path, "[{\"Path\":");
+
+        List<TrackedFile>? read = await FileManifestStore.ReadAsync(path);
+
+        read.Should().ContainSingle().Which.Path.Should().Be("old.dll");
+    }
+
+    [Fact]
+    public async Task ReadAsync_DoesNotResurrectDeletedManifestFromBackup()
+    {
+        using TestDirectory dir = new TestDirectory();
+        string path = dir.File("m.files.json");
+        await FileManifestStore.WriteAsync(path, [new TrackedFile("a.dll", "h", 1)]);
+        await FileManifestStore.WriteAsync(path, [new TrackedFile("b.dll", "h", 1)]);
+        File.Delete(path);
+
+        (await FileManifestStore.ReadAsync(path)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task WriteAsync_ParallelWriters_LeaveAValidManifestAndNoTempFiles()
+    {
+        using TestDirectory dir = new TestDirectory();
+        string path = dir.File("m.files.json");
+
+        await Task.WhenAll(
+            Enumerable
+                .Range(0, 20)
+                .Select(i =>
+                    Task.Run(() =>
+                        FileManifestStore.WriteAsync(path, [new TrackedFile($"f{i}.dll", "h", i)])
+                    )
+                )
+        );
+
+        (await FileManifestStore.ReadAsync(path)).Should().ContainSingle();
+        Directory.GetFiles(dir.Path, "*.tmp").Should().BeEmpty();
+    }
 }

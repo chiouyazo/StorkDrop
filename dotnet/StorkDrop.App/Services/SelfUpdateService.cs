@@ -4,6 +4,7 @@ using System.Net.Http;
 using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
+using StorkDrop.Installer;
 
 namespace StorkDrop.App.Services;
 
@@ -48,11 +49,29 @@ public sealed class SelfUpdateService
             totalBytes?.ToString() ?? "unknown"
         );
 
-        await using Stream downloadStream = await response.Content.ReadAsStreamAsync(
-            cancellationToken
-        );
-        await using FileStream fileStream = File.Create(installerPath);
-        await downloadStream.CopyToAsync(fileStream, cancellationToken);
+        await using (
+            Stream downloadStream = await response.Content.ReadAsStreamAsync(cancellationToken)
+        )
+        await using (FileStream fileStream = File.Create(installerPath))
+        {
+            await downloadStream.CopyToAsync(fileStream, cancellationToken);
+        }
+
+        try
+        {
+            await PublishedChecksumVerifier.VerifyAsync(
+                client,
+                new Uri(update.DownloadUrl),
+                installerPath,
+                _logger,
+                cancellationToken
+            );
+        }
+        catch (PackageIntegrityException)
+        {
+            File.Delete(installerPath);
+            throw;
+        }
 
         _logger.LogInformation(
             "Download complete ({Bytes} bytes), launching installer: {Path}",

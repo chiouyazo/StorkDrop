@@ -10,4 +10,8 @@
     <Description>Contracts, models, and interfaces for StorkDrop. Reference this package to build plugins or custom StorkDrop apps.</Description>
     <PackageTags>storkdrop;plugin;deployment</PackageTags>
   </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="StorkDrop.Installer" />
+    <InternalsVisibleTo Include="StorkDrop.Tests" />
+  </ItemGroup>
 </Project>

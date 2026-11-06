@@ -152,7 +152,9 @@ public sealed class S3RegistryClient : IRegistryClient
             .ConfigureAwait(false);
         string? expected = manifest?.ContentSha256?.Trim().ToLowerInvariant();
 
-        string tempFile = Path.Combine(Path.GetTempPath(), $"storkdrop-s3-{Guid.NewGuid():N}.zip");
+        string downloadDirectory = Path.Combine(StorkPaths.TempDir, "downloads");
+        Directory.CreateDirectory(downloadDirectory);
+        string tempFile = Path.Combine(downloadDirectory, $"s3-{Guid.NewGuid():N}.zip");
         string actual;
 
         try

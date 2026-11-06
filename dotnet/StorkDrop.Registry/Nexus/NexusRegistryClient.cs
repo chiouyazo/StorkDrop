@@ -236,12 +236,7 @@ public sealed class NexusRegistryClient(
     {
         string url = $"{RawContentBase}/{productId}/versions/{version}/{productId}-{version}.zip";
 
-        HttpResponseMessage response = await httpClient
-            .GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
-            .ConfigureAwait(false);
-        response.EnsureSuccessStatusCode();
-
-        return await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
+        return await ResumableHttpStream.OpenAsync(httpClient, url, logger, cancellationToken);
     }
 
     public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)

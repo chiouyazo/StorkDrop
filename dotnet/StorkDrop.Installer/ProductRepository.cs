@@ -14,6 +14,7 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
     private readonly ILogger<ProductRepository> _logger;
     private List<InstalledProduct> _products = [];
     private volatile IReadOnlyList<InstalledProduct>? _snapshot;
+    private FileStamp _loadedStamp;
     private bool _initialized;
 
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
@@ -37,10 +38,10 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+            await LoadFromDiskAsync(holdsFileLock: false, cancellationToken);
         }
         finally
         {
@@ -54,11 +55,11 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
     /// </summary>
     public async Task ReloadAsync(CancellationToken cancellationToken = default)
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
             _initialized = false;
-            await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+            await LoadFromDiskAsync(holdsFileLock: false, cancellationToken);
         }
         finally
         {
@@ -66,52 +67,66 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
         }
     }
 
-    private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
+    private async Task EnsureCurrentAsync(CancellationToken cancellationToken)
     {
-        if (_initialized)
+        if (_initialized && _loadedStamp == FileStamp.Of(_filePath))
             return;
-        await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+        await LoadFromDiskAsync(holdsFileLock: false, cancellationToken);
     }
 
-    private async Task LoadFromDiskAsync(CancellationToken cancellationToken)
+    private async Task LoadFromDiskAsync(bool holdsFileLock, CancellationToken cancellationToken)
     {
         _logger.LogDebug("Loading product repository from {FilePath}", _filePath);
-        if (File.Exists(_filePath))
-        {
-            string json = await File.ReadAllTextAsync(_filePath, cancellationToken)
-                .ConfigureAwait(false);
-            List<InstalledProduct>? deserialized = JsonSerializer.Deserialize<
-                List<InstalledProduct>
-            >(json, JsonOptions);
-            _products = deserialized ?? [];
+        FileStamp stampBeforeRead = FileStamp.Of(_filePath);
+        string? json = await AtomicFile.ReadAllTextAsync(
+            _filePath,
+            cancellationToken: cancellationToken
+        );
 
-            bool migrated = MigrateInstanceIds(_products);
-            ValidateNoDuplicateProducts(_products);
-
-            if (migrated)
-            {
-                _logger.LogInformation("Migrated legacy products to include InstanceId, saving");
-                string migratedJson = JsonSerializer.Serialize(_products, JsonOptions);
-                await SafeFileWriter
-                    .WriteAtomicAsync(_filePath, migratedJson, cancellationToken)
-                    .ConfigureAwait(false);
-            }
-
-            _logger.LogInformation(
-                "Loaded {Count} installed products from repository",
-                _products.Count
-            );
-        }
-        else
+        if (json is null)
         {
             _products = [];
+            _snapshot = _products.ToList();
             _logger.LogDebug(
                 "Product repository file not found at {FilePath}, starting empty",
                 _filePath
             );
+            _loadedStamp = stampBeforeRead;
+            _initialized = true;
+            return;
+        }
+
+        List<InstalledProduct> loaded =
+            JsonSerializer.Deserialize<List<InstalledProduct>>(json, JsonOptions) ?? [];
+        bool migrated = MigrateInstanceIds(loaded);
+        ValidateNoDuplicateProducts(loaded);
+
+        if (migrated && !holdsFileLock)
+        {
+            using IDisposable fileLock = await CrossProcessFileLock.AcquireAsync(
+                _filePath,
+                cancellationToken: cancellationToken
+            );
+            await LoadFromDiskAsync(holdsFileLock: true, cancellationToken);
+            return;
+        }
+
+        _products = loaded;
+        if (migrated)
+        {
+            _logger.LogInformation("Migrated legacy products to include InstanceId, saving");
+            await SaveAsync(cancellationToken);
+        }
+        else
+        {
+            _loadedStamp = stampBeforeRead;
         }
 
         _snapshot = _products.ToList();
+        _logger.LogInformation(
+            "Loaded {Count} installed products from repository",
+            _products.Count
+        );
         _initialized = true;
     }
 
@@ -134,10 +149,10 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureCurrentAsync(cancellationToken);
             return _products.ToList();
         }
         finally
@@ -152,10 +167,10 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureCurrentAsync(cancellationToken);
             return _products.FirstOrDefault(p =>
                 p.ProductId == productId && p.InstanceId == instanceId
             );
@@ -171,10 +186,10 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureCurrentAsync(cancellationToken);
             return _products.Where(p => p.ProductId == productId).ToList();
         }
         finally
@@ -194,21 +209,17 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
             product.InstanceId,
             product.Version
         );
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            _products.RemoveAll(p =>
-                p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
-            );
-            _products.Add(product);
-            _snapshot = _products.ToList();
-            await SaveAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _lock.Release();
-        }
+        await MutateAsync(
+            () =>
+            {
+                _products.RemoveAll(p =>
+                    p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
+                );
+                _products.Add(product);
+                return true;
+            },
+            cancellationToken
+        );
     }
 
     public async Task UpdateAsync(
@@ -216,24 +227,20 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            int index = _products.FindIndex(p =>
-                p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
-            );
-            if (index >= 0)
+        await MutateAsync(
+            () =>
             {
+                int index = _products.FindIndex(p =>
+                    p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
+                );
+                if (index < 0)
+                    return false;
+
                 _products[index] = product;
-                _snapshot = _products.ToList();
-                await SaveAsync(cancellationToken).ConfigureAwait(false);
-            }
-        }
-        finally
-        {
-            _lock.Release();
-        }
+                return true;
+            },
+            cancellationToken
+        );
     }
 
     public async Task RemoveAsync(
@@ -247,18 +254,27 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
             productId,
             instanceId
         );
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await MutateAsync(
+            () =>
+                _products.RemoveAll(p => p.ProductId == productId && p.InstanceId == instanceId)
+                > 0,
+            cancellationToken
+        );
+    }
+
+    private async Task MutateAsync(Func<bool> mutation, CancellationToken cancellationToken)
+    {
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureInitializedAsync(cancellationToken).ConfigureAwait(false);
-            int removed = _products.RemoveAll(p =>
-                p.ProductId == productId && p.InstanceId == instanceId
+            using IDisposable fileLock = await CrossProcessFileLock.AcquireAsync(
+                _filePath,
+                cancellationToken: cancellationToken
             );
-            if (removed > 0)
-            {
-                _snapshot = _products.ToList();
-                await SaveAsync(cancellationToken).ConfigureAwait(false);
-            }
+            await LoadFromDiskAsync(holdsFileLock: true, cancellationToken);
+
+            if (mutation())
+                await SaveAsync(cancellationToken);
         }
         finally
         {
@@ -270,9 +286,9 @@ public sealed class ProductRepository : IProductRepository, IInstalledProductsSn
     {
         _logger.LogDebug("Saving product repository ({Count} products)", _products.Count);
         string json = JsonSerializer.Serialize(_products, JsonOptions);
-        await SafeFileWriter
-            .WriteAtomicAsync(_filePath, json, cancellationToken)
-            .ConfigureAwait(false);
+        await SafeFileWriter.WriteAtomicWithBackupAsync(_filePath, json, cancellationToken);
+        _loadedStamp = FileStamp.Of(_filePath);
+        _snapshot = _products.ToList();
     }
 
     private bool MigrateInstanceIds(List<InstalledProduct> products)

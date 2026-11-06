@@ -11,6 +11,7 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
     private readonly string _filePath;
     private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
     private List<ActivityLogEntry>? _entries;
+    private FileStamp _loadedStamp;
     private const int MaxEntries = 1000;
 
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
@@ -31,29 +32,25 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
             Directory.CreateDirectory(directory);
     }
 
-    private async Task EnsureLoadedAsync(CancellationToken cancellationToken)
+    private async Task EnsureCurrentAsync(CancellationToken cancellationToken)
     {
-        if (_entries is not null)
+        if (_entries is not null && _loadedStamp == FileStamp.Of(_filePath))
             return;
 
-        await LoadFromDiskAsync(cancellationToken).ConfigureAwait(false);
+        await LoadFromDiskAsync(cancellationToken);
     }
 
     private async Task LoadFromDiskAsync(CancellationToken cancellationToken)
     {
-        if (File.Exists(_filePath))
-        {
-            string json = await File.ReadAllTextAsync(_filePath, cancellationToken)
-                .ConfigureAwait(false);
-            List<ActivityLogEntry>? deserialized = JsonSerializer.Deserialize<
-                List<ActivityLogEntry>
-            >(json, JsonOptions);
-            _entries = deserialized ?? [];
-        }
-        else
-        {
-            _entries = [];
-        }
+        FileStamp stampBeforeRead = FileStamp.Of(_filePath);
+        string? json = await AtomicFile.ReadAllTextAsync(
+            _filePath,
+            cancellationToken: cancellationToken
+        );
+        _entries = json is null
+            ? []
+            : JsonSerializer.Deserialize<List<ActivityLogEntry>>(json, JsonOptions) ?? [];
+        _loadedStamp = stampBeforeRead;
     }
 
     public async Task LogAsync(
@@ -61,23 +58,17 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
-        try
-        {
-            await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
-
-            _entries!.Insert(0, entry);
-            if (_entries.Count > MaxEntries)
+        await MutateAsync(
+            entries =>
             {
-                _entries.RemoveRange(MaxEntries, _entries.Count - MaxEntries);
-            }
-
-            await SaveAsync(cancellationToken).ConfigureAwait(false);
-        }
-        finally
-        {
-            _lock.Release();
-        }
+                entries.Insert(0, entry);
+                if (entries.Count > MaxEntries)
+                {
+                    entries.RemoveRange(MaxEntries, entries.Count - MaxEntries);
+                }
+            },
+            cancellationToken
+        );
     }
 
     public async Task<IReadOnlyList<ActivityLogEntry>> GetEntriesAsync(
@@ -86,10 +77,10 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureCurrentAsync(cancellationToken);
 
             return _entries!.OrderByDescending(e => e.Timestamp).Skip(offset).Take(limit).ToList();
         }
@@ -104,10 +95,10 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
         CancellationToken cancellationToken = default
     )
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            await EnsureCurrentAsync(cancellationToken);
 
             return _entries!
                 .Where(e => e.ProductId == productId)
@@ -122,26 +113,33 @@ public sealed class ActivityLogStore : IActivityLog, IDisposable
 
     public async Task ClearAsync(CancellationToken cancellationToken = default)
     {
-        await _lock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        await MutateAsync(entries => entries.Clear(), cancellationToken);
+    }
+
+    private async Task MutateAsync(
+        Action<List<ActivityLogEntry>> mutation,
+        CancellationToken cancellationToken
+    )
+    {
+        await _lock.WaitAsync(cancellationToken);
         try
         {
-            await EnsureLoadedAsync(cancellationToken).ConfigureAwait(false);
+            using IDisposable fileLock = await CrossProcessFileLock.AcquireAsync(
+                _filePath,
+                cancellationToken: cancellationToken
+            );
+            await LoadFromDiskAsync(cancellationToken);
 
-            _entries!.Clear();
-            await SaveAsync(cancellationToken).ConfigureAwait(false);
+            mutation(_entries!);
+
+            string json = JsonSerializer.Serialize(_entries, JsonOptions);
+            await SafeFileWriter.WriteAtomicWithBackupAsync(_filePath, json, cancellationToken);
+            _loadedStamp = FileStamp.Of(_filePath);
         }
         finally
         {
             _lock.Release();
         }
-    }
-
-    private async Task SaveAsync(CancellationToken cancellationToken)
-    {
-        string json = JsonSerializer.Serialize(_entries, JsonOptions);
-        await SafeFileWriter
-            .WriteAtomicAsync(_filePath, json, cancellationToken)
-            .ConfigureAwait(false);
     }
 
     public void Dispose()

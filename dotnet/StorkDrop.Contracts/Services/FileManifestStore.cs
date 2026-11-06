@@ -27,27 +27,7 @@ public static class FileManifestStore
         if (!string.IsNullOrEmpty(directory))
             Directory.CreateDirectory(directory);
 
-        // Atomic write: a crash mid-write must never truncate the manifest, because it is the exact
-        // list of files uninstall/update is allowed to delete. Write a temp file, flush to disk, then
-        // replace.
-        string tempPath = path + ".tmp";
-        try
-        {
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-            File.Move(tempPath, path, overwrite: true);
-        }
-        finally
-        {
-            try
-            {
-                if (File.Exists(tempPath))
-                    File.Delete(tempPath);
-            }
-            catch
-            {
-                // Best-effort cleanup of the temp copy.
-            }
-        }
+        await AtomicFile.WriteAllTextAsync(path, json, keepBackup: true, cancellationToken);
     }
 
     public static async Task<List<TrackedFile>?> ReadAsync(
@@ -55,11 +35,12 @@ public static class FileManifestStore
         CancellationToken cancellationToken = default
     )
     {
-        if (!File.Exists(path))
-            return null;
-
-        string json = await File.ReadAllTextAsync(path, cancellationToken);
-        return Parse(json);
+        string? json = await AtomicFile.ReadAllTextAsync(
+            path,
+            candidate => Parse(candidate) is not null,
+            cancellationToken
+        );
+        return json is null ? null : Parse(json);
     }
 
     public static async Task<List<string>?> ReadPathsAsync(

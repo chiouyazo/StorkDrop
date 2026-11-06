@@ -13,6 +13,7 @@ using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
 using StorkDrop.Installer;
+using StorkDrop.Registry;
 using Log = Serilog.Log;
 
 namespace StorkDrop.App;
@@ -22,6 +23,7 @@ public partial class App : Application
     private static Mutex? _singleInstanceMutex;
     private static EventWaitHandle? _showWindowEvent;
     private IHost? _host;
+    private FeedRegistryConfigWatcher? _feedConfigWatcher;
 
     public static IServiceProvider Services { get; internal set; } = null!;
 
@@ -30,6 +32,9 @@ public partial class App : Application
         Branding.Initialize(WhitelabelConfig.Load(AppContext.BaseDirectory));
 
         string[] args = Environment.GetCommandLineArgs();
+
+        if (int.TryParse(GetArgValue(args, "--lock-owner"), out int lockOwnerProcessId))
+            ProductOperationLock.InheritFromProcess(lockOwnerProcessId);
 
         if (args.Length >= 5 && args[1] == "--install")
         {
@@ -167,6 +172,14 @@ public partial class App : Application
 
             IFeedRegistry feedRegistry = Services.GetRequiredService<IFeedRegistry>();
             await feedRegistry.ReloadAsync();
+            _feedConfigWatcher = new FeedRegistryConfigWatcher(
+                StorkPaths.ConfigDir,
+                "config.json",
+                feedRegistry,
+                Services
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger<FeedRegistryConfigWatcher>()
+            );
 
             IInstallationEngine engine = Services.GetRequiredService<IInstallationEngine>();
 
@@ -341,6 +354,8 @@ public partial class App : Application
                 }
                 catch { }
             });
+
+            _ = Task.Run(ElevationConfigFile.CleanupStale);
 
             // Fire-and-forget self-update check
             _ = CheckForSelfUpdateAsync(mainWindow);
@@ -717,6 +732,7 @@ public partial class App : Application
     private async Task RunCliModeAsync(string[] args)
     {
         ConsoleHelper.AttachToParentConsole();
+        ElevationConfigFile.CleanupStale();
         try
         {
             _host = AppHostBuilder.Build();
@@ -821,28 +837,21 @@ public partial class App : Application
 
     private static Dictionary<string, string>? LoadElevationConfigFile()
     {
-        string[] args = Environment.GetCommandLineArgs();
-        for (int i = 0; i < args.Length - 1; i++)
+        string? path = GetArgValue(Environment.GetCommandLineArgs(), "--config-file");
+        if (path is null)
+            return null;
+
+        try
         {
-            if (args[i] == "--config-file")
-            {
-                string path = args[i + 1];
-                try
-                {
-                    if (File.Exists(path))
-                    {
-                        string json = File.ReadAllText(path);
-                        File.Delete(path);
-                        return System.Text.Json.JsonSerializer.Deserialize<
-                            Dictionary<string, string>
-                        >(json);
-                    }
-                }
-                catch { }
-                break;
-            }
+            return ElevationConfigFile.ReadAndDelete(path);
         }
-        return null;
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or System.Text.Json.JsonException
+            )
+        {
+            Log.Error(ex, "Elevation configuration file could not be read");
+            return null;
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
@@ -855,6 +864,7 @@ public partial class App : Application
                 stopTask.ContinueWith(_ => _host.Dispose(), TaskScheduler.Default);
             }
 
+            _feedConfigWatcher?.Dispose();
             _singleInstanceMutex?.ReleaseMutex();
         }
         catch

@@ -26,7 +26,40 @@ public sealed class InstallationEngine : IInstallationEngine
     private readonly UninstallService _uninstallService;
     private readonly IFeedReportService _feedReportService;
     private readonly List<IFileTypeHandler> _fileTypeHandlers;
-    private IProgress<InstallProgress>? _currentProgress;
+    private readonly PackageDownloader _downloader;
+    private readonly Func<string, long?> _availableBytes;
+    private const int MaxLockedFilesPrompts = 5;
+
+    private readonly AsyncLocal<OperationState?> _operation = new AsyncLocal<OperationState?>();
+
+    private sealed class OperationState
+    {
+        public IProgress<InstallProgress>? Progress { get; set; }
+        public bool DeferRemainingLockedFiles { get; set; }
+        public List<ProductPluginLoadContext> PluginContexts { get; } = [];
+        public string? LastElevatedError { get; set; }
+    }
+
+    private sealed class OperationScope(Action? onDispose) : IDisposable
+    {
+        public void Dispose() => onDispose?.Invoke();
+    }
+
+    private OperationState Operation => _operation.Value ?? new OperationState();
+
+    private OperationScope BeginOperation(IProgress<InstallProgress>? progress)
+    {
+        OperationState? existing = _operation.Value;
+        if (existing is not null)
+        {
+            existing.Progress = progress ?? existing.Progress;
+            return new OperationScope(null);
+        }
+
+        _operation.Value = new OperationState { Progress = progress };
+        return new OperationScope(() => _operation.Value = null);
+    }
+
     private static readonly TimeSpan RollbackPluginTimeout = TimeSpan.FromMinutes(5);
 
     /// <inheritdoc />
@@ -127,7 +160,41 @@ public sealed class InstallationEngine : IInstallationEngine
         IFeedReportService feedReportService,
         ILogger<InstallationEngine> logger
     )
+        : this(
+            feedRegistry,
+            productRepository,
+            backupService,
+            fileLockDetector,
+            activityLog,
+            configurationService,
+            encryptionService,
+            plugins,
+            envVarService,
+            uninstallService,
+            feedReportService,
+            logger,
+            new PackageDownloader(logger)
+        ) { }
+
+    internal InstallationEngine(
+        IFeedRegistry feedRegistry,
+        IProductRepository productRepository,
+        IBackupService backupService,
+        IFileLockDetector fileLockDetector,
+        IActivityLog activityLog,
+        IConfigurationService configurationService,
+        IEncryptionService encryptionService,
+        IEnumerable<IStorkDropPlugin> plugins,
+        EnvironmentVariableService envVarService,
+        UninstallService uninstallService,
+        IFeedReportService feedReportService,
+        ILogger<InstallationEngine> logger,
+        PackageDownloader downloader,
+        Func<string, long?>? availableBytes = null
+    )
     {
+        _downloader = downloader;
+        _availableBytes = availableBytes ?? DiskSpaceGuard.GetAvailableBytes;
         _feedRegistry = feedRegistry;
         _productRepository = productRepository;
         _backupService = backupService;
@@ -148,16 +215,15 @@ public sealed class InstallationEngine : IInstallationEngine
         );
     }
 
-    private IRegistryClient GetClientForFeed(string? feedId)
+    private IRegistryClient GetClientForFeed(string? feedId) =>
+        _feedRegistry.GetClient(string.IsNullOrEmpty(feedId) ? FirstFeedId() : feedId);
+
+    private string FirstFeedId()
     {
-        if (string.IsNullOrEmpty(feedId))
-        {
-            IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
-            if (feeds.Count == 0)
-                throw new InvalidOperationException("No feeds configured.");
-            return _feedRegistry.GetClient(feeds[0].Id);
-        }
-        return _feedRegistry.GetClient(feedId);
+        IReadOnlyList<FeedInfo> feeds = _feedRegistry.GetFeeds();
+        if (feeds.Count == 0)
+            throw new InvalidOperationException("No feeds configured.");
+        return feeds[0].Id;
     }
 
     /// <inheritdoc />
@@ -393,7 +459,11 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             try
             {
-                IStorkPlugin? plugin = LoadPlugin(extractPath, pluginInfo, _activePluginContexts);
+                IStorkPlugin? plugin = LoadPlugin(
+                    extractPath,
+                    pluginInfo,
+                    Operation.PluginContexts
+                );
                 if (plugin is null)
                     continue;
 
@@ -579,6 +649,19 @@ public sealed class InstallationEngine : IInstallationEngine
                 FailedStep = "HostVersion",
             };
 
+        using ProductLockAcquisition operationLock = ProductOperationLock.TryAcquire(
+            manifest.ProductId,
+            options.InstanceId,
+            "install"
+        );
+        if (!operationLock.Acquired)
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = operationLock.DescribeConflict(manifest.Title),
+                FailedStep = "Coordination",
+            };
+
         InstallResult result = await InstallInternalAsync(
             manifest,
             options,
@@ -599,8 +682,7 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
-        _currentProgress = progress;
-        _deferRemainingLockedFiles = false;
+        using OperationScope operationScope = BeginOperation(progress);
         string? resolvedPath = null;
         InstalledProduct? existingProduct = null;
         string instanceUniqueId = string.Empty;
@@ -670,22 +752,34 @@ public sealed class InstallationEngine : IInstallationEngine
 
             cancellationToken.ThrowIfCancellationRequested();
             string? productContentPath;
-            (extractPath, productContentPath) = await DownloadAndExtractAsync(
+            InstallResult? downloadError;
+            (extractPath, productContentPath, downloadError) = await DownloadAndExtractAsync(
                 manifest,
                 options,
                 tempDir,
                 progress,
                 cancellationToken
             );
-            if (extractPath is null)
-                return new InstallResult
-                {
-                    Success = false,
-                    ErrorMessage = "Extraction failed.",
-                    FailedStep = "Extracting",
-                };
+            if (downloadError is not null || extractPath is null)
+                return downloadError
+                    ?? new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage = "Extraction failed.",
+                        FailedStep = "Extracting",
+                    };
 
             string copySourcePath = productContentPath ?? extractPath;
+
+            InstallResult? diskSpaceError = await CheckTargetDiskSpaceAsync(
+                manifest,
+                options,
+                existingProduct,
+                copySourcePath,
+                cancellationToken
+            );
+            if (diskSpaceError is not null)
+                return diskSpaceError;
 
             cancellationToken.ThrowIfCancellationRequested();
             (
@@ -762,7 +856,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     IStorkPlugin? plugin = LoadPlugin(
                         extractPath,
                         pluginInfo,
-                        _activePluginContexts
+                        Operation.PluginContexts
                     );
                     if (plugin is null)
                     {
@@ -983,7 +1077,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
             // Unload plugin contexts from PreInstall phase before copying to .stork/
             // (the DLLs may already exist from a previous install and be locked)
-            foreach (ProductPluginLoadContext ctx in _activePluginContexts)
+            foreach (ProductPluginLoadContext ctx in Operation.PluginContexts)
             {
                 try
                 {
@@ -991,7 +1085,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
                 catch { }
             }
-            _activePluginContexts.Clear();
+            Operation.PluginContexts.Clear();
             GC.Collect();
             GC.WaitForPendingFinalizers();
 
@@ -1092,7 +1186,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     manifest,
                     new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
                 );
-                await File.WriteAllTextAsync(
+                await SafeFileWriter.WriteAtomicAsync(
                     Path.Combine(storkDir, "manifest.json"),
                     manifestJson,
                     cancellationToken
@@ -1345,26 +1439,23 @@ public sealed class InstallationEngine : IInstallationEngine
             if (options.RemovePreviousFiles)
                 elevationConfig["__removePreviousFiles"] = "true";
 
-            configFilePath = Path.Combine(
-                StorkPaths.TempDir,
-                $"elevation-config-{Guid.NewGuid()}.json"
+            configFilePath = await ElevationConfigFile.WriteAsync(
+                elevationConfig,
+                cancellationToken
             );
-            Directory.CreateDirectory(StorkPaths.TempDir);
-            string json = System.Text.Json.JsonSerializer.Serialize(elevationConfig);
-            await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
             _logger.LogDebug(
                 "Saved elevation config to {Path} (uniqueId={UniqueId})",
                 configFilePath,
                 instanceUniqueId
             );
 
-            _lastElevatedError = null;
+            Operation.LastElevatedError = null;
             ReportProgress(InstallStage.Installing, 0, Localize("Elevation_Starting"));
             ElevationResult elevation = ElevationHelper.RunElevatedInstall(
                 manifest.ProductId,
                 manifest.Version,
                 targetPath,
-                options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
+                options.FeedId ?? FirstFeedId(),
                 options.InstanceId,
                 configFilePath,
                 onProgressLine: ReportElevatedProgressLine,
@@ -1473,7 +1564,11 @@ public sealed class InstallationEngine : IInstallationEngine
         );
     }
 
-    private async Task<(string? extractPath, string? productContentPath)> DownloadAndExtractAsync(
+    private async Task<(
+        string? extractPath,
+        string? productContentPath,
+        InstallResult? error
+    )> DownloadAndExtractAsync(
         ProductManifest manifest,
         InstallOptions options,
         string tempDir,
@@ -1481,29 +1576,64 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
+        string description = $"{manifest.Title} v{manifest.Version}";
         _logger.LogInformation(
             "Downloading product {ProductId} v{Version}",
             manifest.ProductId,
             manifest.Version
         );
         progress.Report(
-            new InstallProgress(
-                InstallStage.Downloading,
-                0,
-                $"Downloading {manifest.Title} v{manifest.Version}..."
-            )
+            new InstallProgress(InstallStage.Downloading, 0, $"Downloading {description}...")
         );
 
         IRegistryClient registryClient = GetClientForFeed(options.FeedId);
-        using Stream downloadStream = await registryClient.DownloadProductAsync(
-            manifest.ProductId,
-            manifest.Version,
-            cancellationToken
-        );
         string zipPath = Path.Combine(tempDir, $"{manifest.ProductId}-{manifest.Version}.zip");
-        await using (FileStream fileStream = File.Create(zipPath))
+        int lastPercent = -1;
+        try
         {
-            await downloadStream.CopyToAsync(fileStream, cancellationToken);
+            await _downloader.DownloadAsync(
+                token =>
+                    registryClient.DownloadProductAsync(
+                        manifest.ProductId,
+                        manifest.Version,
+                        token
+                    ),
+                zipPath,
+                description,
+                manifest.ContentSha256,
+                manifest.DownloadSizeBytes,
+                (read, total) =>
+                {
+                    int percent = total is > 0 ? (int)Math.Min(99, read * 100 / total.Value) : 0;
+                    if (percent == lastPercent)
+                        return;
+
+                    lastPercent = percent;
+                    string size = total is > 0
+                        ? $"{FormatHelper.FormatBytes(read)} of {FormatHelper.FormatBytes(total.Value)}"
+                        : FormatHelper.FormatBytes(read);
+                    progress.Report(
+                        new InstallProgress(
+                            InstallStage.Downloading,
+                            percent,
+                            $"Downloading {description}... {size}"
+                        )
+                    );
+                },
+                cancellationToken
+            );
+        }
+        catch (PackageIntegrityException ex)
+        {
+            return StepFailure(progress, InstallStage.Downloading, "PackageVerification", ex);
+        }
+        catch (InsufficientDiskSpaceException ex)
+        {
+            return StepFailure(progress, InstallStage.Downloading, "DiskSpace", ex);
+        }
+        catch (PackageDownloadException ex)
+        {
+            return StepFailure(progress, InstallStage.Downloading, "Downloading", ex);
         }
 
         progress.Report(new InstallProgress(InstallStage.Downloading, 100, "Download complete."));
@@ -1519,6 +1649,12 @@ public sealed class InstallationEngine : IInstallationEngine
 
         try
         {
+            DiskSpaceGuard.EnsureFreeSpace(
+                tempDir,
+                DiskSpaceGuard.UncompressedSize(zipPath),
+                $"extracting {description}",
+                _availableBytes
+            );
             ZipFile.ExtractToDirectory(zipPath, extractPath);
             string? productContentPath = ExtractInnerZipIfPresent(tempDir, extractPath, progress);
 
@@ -1529,16 +1665,110 @@ public sealed class InstallationEngine : IInstallationEngine
 
             // If two-layer: extractPath has loose files (plugins, SIDs), productContentPath has product binaries
             // If single-layer: extractPath has everything, productContentPath is null
-            return (extractPath, productContentPath);
+            return (extractPath, productContentPath, null);
+        }
+        catch (InsufficientDiskSpaceException ex)
+        {
+            return StepFailure(progress, InstallStage.Extracting, "DiskSpace", ex);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Installation failed at step Extracting: {Error}", ex.Message);
-            progress.Report(
-                new InstallProgress(InstallStage.Extracting, 0, $"Extraction failed: {ex}")
+            return StepFailure(
+                progress,
+                InstallStage.Extracting,
+                "Extracting",
+                ex,
+                $"Extraction failed: {ex.Message}"
             );
-            return (null, null);
         }
+    }
+
+    private async Task<InstallResult?> CheckTargetDiskSpaceAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        InstalledProduct? existingProduct,
+        string contentPath,
+        CancellationToken cancellationToken
+    )
+    {
+        if (options.TargetPath.Contains('{'))
+            return null;
+
+        long required = new DirectoryInfo(contentPath)
+            .EnumerateFiles("*", SearchOption.AllDirectories)
+            .Sum(file => file.Length);
+
+        if (existingProduct is not null && !manifest.SharedInstallLocation)
+        {
+            List<string>? tracked = await LoadFileManifest(
+                existingProduct.ProductId,
+                existingProduct.InstanceUniqueId ?? string.Empty,
+                cancellationToken
+            );
+            long replaced = (tracked ?? [])
+                .Select(relative => new FileInfo(
+                    Path.Combine(existingProduct.InstalledPath, relative)
+                ))
+                .Where(file => file.Exists)
+                .Sum(file => file.Length);
+            required = Math.Max(0, required - replaced);
+        }
+
+        try
+        {
+            DiskSpaceGuard.EnsureFreeSpace(
+                options.TargetPath,
+                required,
+                $"installing {manifest.Title} v{manifest.Version}",
+                _availableBytes
+            );
+            return null;
+        }
+        catch (InsufficientDiskSpaceException ex)
+        {
+            _logger.LogError(
+                ex,
+                "Not enough disk space to install {ProductId}",
+                manifest.ProductId
+            );
+            ReportProgress(InstallStage.Installing, 0, ex.Message);
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = ex.Message,
+                FailedStep = "DiskSpace",
+                Exception = ex,
+            };
+        }
+    }
+
+    private (string? extractPath, string? productContentPath, InstallResult? error) StepFailure(
+        IProgress<InstallProgress> progress,
+        InstallStage stage,
+        string failedStep,
+        Exception exception,
+        string? message = null
+    )
+    {
+        string errorMessage = message ?? exception.Message;
+        _logger.LogError(
+            exception,
+            "Installation failed at step {Step}: {Error}",
+            failedStep,
+            errorMessage
+        );
+        progress.Report(new InstallProgress(stage, 0, errorMessage));
+        return (
+            null,
+            null,
+            new InstallResult
+            {
+                Success = false,
+                ErrorMessage = errorMessage,
+                FailedStep = failedStep,
+                Exception = exception,
+            }
+        );
     }
 
     private string? ExtractInnerZipIfPresent(
@@ -1563,6 +1793,12 @@ public sealed class InstallationEngine : IInstallationEngine
                 50,
                 $"Extracting inner archive {Path.GetFileName(innerZipPath)}..."
             )
+        );
+        DiskSpaceGuard.EnsureFreeSpace(
+            tempDir,
+            DiskSpaceGuard.UncompressedSize(innerZipPath),
+            "extracting the inner archive",
+            _availableBytes
         );
         ZipFile.ExtractToDirectory(innerZipPath, productContentPath);
         File.Delete(innerZipPath);
@@ -1936,21 +2172,18 @@ public sealed class InstallationEngine : IInstallationEngine
                 if (options.RemovePreviousFiles)
                     elevationConfig["__removePreviousFiles"] = "true";
 
-                configFilePath = Path.Combine(
-                    StorkPaths.TempDir,
-                    $"elevation-config-{Guid.NewGuid()}.json"
+                configFilePath = await ElevationConfigFile.WriteAsync(
+                    elevationConfig,
+                    cancellationToken
                 );
-                Directory.CreateDirectory(StorkPaths.TempDir);
-                string configJson = System.Text.Json.JsonSerializer.Serialize(elevationConfig);
-                await File.WriteAllTextAsync(configFilePath, configJson, cancellationToken);
 
-                _lastElevatedError = null;
+                Operation.LastElevatedError = null;
                 ReportProgress(InstallStage.Installing, 0, Localize("Elevation_Starting"));
                 ElevationResult elevation = ElevationHelper.RunElevatedInstall(
                     manifest.ProductId,
                     manifest.Version,
                     resolvedTargetPath,
-                    options.FeedId ?? _feedRegistry.GetFeeds()[0].Id,
+                    options.FeedId ?? FirstFeedId(),
                     options.InstanceId,
                     configFilePath,
                     onProgressLine: ReportElevatedProgressLine,
@@ -2365,7 +2598,7 @@ public sealed class InstallationEngine : IInstallationEngine
             if (!Directory.Exists(tempDir))
                 return;
 
-            foreach (ProductPluginLoadContext ctx in _activePluginContexts)
+            foreach (ProductPluginLoadContext ctx in Operation.PluginContexts)
             {
                 try
                 {
@@ -2373,7 +2606,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
                 catch { }
             }
-            _activePluginContexts.Clear();
+            Operation.PluginContexts.Clear();
             GC.Collect();
             GC.WaitForPendingFinalizers();
 
@@ -2446,6 +2679,16 @@ public sealed class InstallationEngine : IInstallationEngine
         if (hostVersionError is not null)
             throw new InvalidOperationException(hostVersionError);
 
+        using ProductLockAcquisition operationLock = ProductOperationLock.TryAcquire(
+            installed.ProductId,
+            installed.InstanceId,
+            "update"
+        );
+        if (!operationLock.Acquired)
+            throw new InvalidOperationException(operationLock.DescribeConflict(installed.Title));
+
+        using OperationScope operationScope = BeginOperation(progress);
+
         List<string>? lockCheckManifest = await LoadFileManifest(
             installed.ProductId,
             installed.InstanceUniqueId ?? string.Empty,
@@ -2471,7 +2714,19 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             if (OnLockedFilesDetected is not null)
             {
-                OnLockedFilesDetected(lockedFiles, _fileLockDetector, installed.InstalledPath);
+                if (
+                    !ResolveLockedFilesBeforeUpdate(
+                        lockedFiles,
+                        trackedPaths,
+                        installed,
+                        cancellationToken
+                    )
+                )
+                {
+                    throw new OperationCanceledException(
+                        $"Update of {installed.Title} cancelled: files in use were not released."
+                    );
+                }
             }
             else
             {
@@ -2751,6 +3006,38 @@ public sealed class InstallationEngine : IInstallationEngine
                 throw new OperationCanceledException(cancellationToken);
             throw;
         }
+    }
+
+    private bool ResolveLockedFilesBeforeUpdate(
+        IReadOnlyList<LockedFileInfo> lockedFiles,
+        IReadOnlyList<string> trackedPaths,
+        InstalledProduct installed,
+        CancellationToken cancellationToken
+    )
+    {
+        for (int prompt = 0; prompt < MaxLockedFilesPrompts; prompt++)
+        {
+            LockedFilesAction action = OnLockedFilesDetected!(
+                lockedFiles,
+                _fileLockDetector,
+                installed.InstalledPath
+            );
+
+            if (action == LockedFilesAction.RenameAndContinue)
+            {
+                Operation.DeferRemainingLockedFiles = true;
+                return true;
+            }
+
+            if (action != LockedFilesAction.Retry)
+                return false;
+
+            lockedFiles = _fileLockDetector.GetLockedFiles(trackedPaths, cancellationToken);
+            if (lockedFiles.Count == 0)
+                return true;
+        }
+
+        return false;
     }
 
     private static IReadOnlyList<string> CollectBackupFiles(
@@ -3077,6 +3364,14 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
+        using ProductLockAcquisition operationLock = ProductOperationLock.TryAcquire(
+            product.ProductId,
+            product.InstanceId,
+            "uninstall"
+        );
+        if (!operationLock.Acquired)
+            throw new InvalidOperationException(operationLock.DescribeConflict(product.Title));
+
         _logger.LogInformation(
             "Delegating uninstall of {ProductId} to UninstallService",
             product.ProductId
@@ -3091,7 +3386,20 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken = default
     )
     {
-        _currentProgress = progress;
+        using ProductLockAcquisition operationLock = ProductOperationLock.TryAcquire(
+            product.ProductId,
+            product.InstanceId,
+            "re-execute"
+        );
+        if (!operationLock.Acquired)
+            return new InstallResult
+            {
+                Success = false,
+                ErrorMessage = operationLock.DescribeConflict(product.Title),
+                FailedStep = "Coordination",
+            };
+
+        using OperationScope operationScope = BeginOperation(progress);
 
         try
         {
@@ -3127,6 +3435,16 @@ public sealed class InstallationEngine : IInstallationEngine
                     }
                 );
 
+            if (manifest is not null && CheckMinHostVersion(manifest) is string hostVersionError)
+            {
+                return new InstallResult
+                {
+                    Success = false,
+                    ErrorMessage = hostVersionError,
+                    FailedStep = "HostVersion",
+                };
+            }
+
             string storkFilesDir = Path.Combine(storkDir, "files");
             bool hasFileHandlerFiles =
                 Directory.Exists(storkFilesDir) && Directory.GetFiles(storkFilesDir).Length > 0;
@@ -3161,7 +3479,7 @@ public sealed class InstallationEngine : IInstallationEngine
                         IStorkPlugin? plugin = LoadPlugin(
                             storkDir,
                             pluginInfo,
-                            _activePluginContexts
+                            Operation.PluginContexts
                         );
                         if (plugin is null)
                         {
@@ -3532,7 +3850,7 @@ public sealed class InstallationEngine : IInstallationEngine
         }
         finally
         {
-            foreach (ProductPluginLoadContext ctx in _activePluginContexts)
+            foreach (ProductPluginLoadContext ctx in Operation.PluginContexts)
             {
                 try
                 {
@@ -3540,9 +3858,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
                 catch { }
             }
-            _activePluginContexts.Clear();
+            Operation.PluginContexts.Clear();
             CurrentInteractivePlugin = null;
-            _currentProgress = null;
         }
     }
 
@@ -3553,15 +3870,28 @@ public sealed class InstallationEngine : IInstallationEngine
         CancellationToken cancellationToken
     )
     {
-        string configFilePath = Path.Combine(
-            StorkPaths.TempDir,
-            $"elevation-config-{Guid.NewGuid()}.json"
+        string configFilePath = await ElevationConfigFile.WriteAsync(
+            configValues,
+            cancellationToken
         );
-        Directory.CreateDirectory(StorkPaths.TempDir);
-        string json = System.Text.Json.JsonSerializer.Serialize(configValues);
-        await File.WriteAllTextAsync(configFilePath, json, cancellationToken);
+        try
+        {
+            return RunElevatedReExecute(product, options, configFilePath, cancellationToken);
+        }
+        finally
+        {
+            ElevationConfigFile.TryDelete(configFilePath);
+        }
+    }
 
-        _lastElevatedError = null;
+    private InstallResult RunElevatedReExecute(
+        InstalledProduct product,
+        ReExecuteOptions options,
+        string configFilePath,
+        CancellationToken cancellationToken
+    )
+    {
+        Operation.LastElevatedError = null;
         ReportProgress(InstallStage.RunningPlugins, 0, Localize("Elevation_Starting"));
         ElevationResult elevation = ElevationHelper.RunElevatedReExecute(
             product.ProductId,
@@ -3645,7 +3975,7 @@ public sealed class InstallationEngine : IInstallationEngine
                     pluginSearchPath = extractPath;
                 else
                     pluginSearchPath = metadataSearchPath;
-                plugin = LoadPlugin(pluginSearchPath, pluginInfo, _activePluginContexts);
+                plugin = LoadPlugin(pluginSearchPath, pluginInfo, Operation.PluginContexts);
                 if (plugin is null)
                 {
                     await LogPluginResult(
@@ -3926,13 +4256,9 @@ public sealed class InstallationEngine : IInstallationEngine
         }
     }
 
-    // Set once the user chose "rename and continue" for a locked file, so the rest of the copy defers
-    // still-locked files without asking again. Reset at the start of every install.
-    private bool _deferRemainingLockedFiles;
-
     private bool TryResolveLockedFile(string filePath)
     {
-        if (_deferRemainingLockedFiles)
+        if (Operation.DeferRemainingLockedFiles)
             return false;
 
         if (OnLockedFilesDetected is null)
@@ -3951,7 +4277,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
         if (action == LockedFilesAction.RenameAndContinue)
         {
-            _deferRemainingLockedFiles = true;
+            Operation.DeferRemainingLockedFiles = true;
             return false;
         }
 
@@ -4118,16 +4444,21 @@ public sealed class InstallationEngine : IInstallationEngine
             cancellationToken.ThrowIfCancellationRequested();
 
             IRegistryClient registryClient = GetClientForFeed(feedId);
-            using Stream downloadStream = await registryClient.DownloadProductAsync(
-                manifest.ProductId,
-                manifest.Version,
+            string zipPath = Path.Combine(tempDir, "package.zip");
+            await _downloader.DownloadAsync(
+                token =>
+                    registryClient.DownloadProductAsync(
+                        manifest.ProductId,
+                        manifest.Version,
+                        token
+                    ),
+                zipPath,
+                $"plugin package {manifest.Title} v{manifest.Version}",
+                manifest.ContentSha256,
+                manifest.DownloadSizeBytes,
+                onProgress: null,
                 cancellationToken
             );
-            string zipPath = Path.Combine(tempDir, "package.zip");
-            await using (FileStream fileStream = File.Create(zipPath))
-            {
-                await downloadStream.CopyToAsync(fileStream, cancellationToken);
-            }
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -4167,8 +4498,6 @@ public sealed class InstallationEngine : IInstallationEngine
             );
         }
     }
-
-    private readonly List<ProductPluginLoadContext> _activePluginContexts = [];
 
     private static IStorkPlugin? LoadPlugin(
         string basePath,
@@ -4378,6 +4707,7 @@ public sealed class InstallationEngine : IInstallationEngine
             options.InstanceId,
             cancellationToken: cancellationToken
         );
+        OperationState operation = Operation;
 
         return new PluginContext
         {
@@ -4395,7 +4725,7 @@ public sealed class InstallationEngine : IInstallationEngine
             Log = message =>
             {
                 _logger.LogInformation("[Plugin] {Message}", message);
-                _currentProgress?.Report(
+                operation.Progress?.Report(
                     new InstallProgress(InstallStage.RunningPlugins, 0, message)
                 );
             },
@@ -4424,7 +4754,7 @@ public sealed class InstallationEngine : IInstallationEngine
             values,
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true }
         );
-        await File.WriteAllTextAsync(filePath, json, cancellationToken);
+        await SafeFileWriter.WriteAtomicWithBackupAsync(filePath, json, cancellationToken);
     }
 
     private static async Task<List<string>?> LoadFileManifest(
@@ -4448,7 +4778,7 @@ public sealed class InstallationEngine : IInstallationEngine
 
     private void ReportProgress(InstallStage stage, int percentage, string message)
     {
-        _currentProgress?.Report(new InstallProgress(stage, percentage, message));
+        _operation.Value?.Progress?.Report(new InstallProgress(stage, percentage, message));
     }
 
     /// <summary>
@@ -4456,13 +4786,11 @@ public sealed class InstallationEngine : IInstallationEngine
     /// leading Serilog timestamp+level prefix (e.g. "2026-08-13 11:45:16.012 +02:00 [INF] ") so the
     /// UI shows clean status text. Falls back to the raw line if parsing fails.
     /// </summary>
-    private string? _lastElevatedError;
-
     private void ReportElevatedProgressLine(string line)
     {
         string message = StripLogPrefix(line);
         if (LooksLikeError(line))
-            _lastElevatedError = message;
+            Operation.LastElevatedError = message;
         ReportProgress(InstallStage.Installing, 0, message);
     }
 
@@ -4483,9 +4811,10 @@ public sealed class InstallationEngine : IInstallationEngine
         if (elevation == ElevationResult.DeniedByUser)
             return deniedMessage;
 
-        return string.IsNullOrEmpty(_lastElevatedError)
+        string? lastError = Operation.LastElevatedError;
+        return string.IsNullOrEmpty(lastError)
             ? "The elevated step failed. See the log for details."
-            : $"The elevated step failed: {_lastElevatedError}";
+            : $"The elevated step failed: {lastError}";
     }
 
     /// <summary>
@@ -4510,13 +4839,13 @@ public sealed class InstallationEngine : IInstallationEngine
 
     /// <summary>
     /// Builds and shows the "installation is taking longer than expected" prompt via <see cref="OnPrompt"/>.
-    /// Returns true when the user chooses to keep waiting; false on cancel/dismiss or when no prompt
-    /// handler is registered (headless).
+    /// Returns true when the user chooses to keep waiting or when no prompt handler is registered
+    /// (headless: a running install is never aborted because of elapsed time); false on cancel/dismiss.
     /// </summary>
-    private bool HandleElevatedLongRunning(string currentStep)
+    internal bool HandleElevatedLongRunning(string currentStep)
     {
         if (OnPrompt is null)
-            return false;
+            return true;
 
         string step = string.IsNullOrWhiteSpace(currentStep)
             ? string.Empty
@@ -4556,8 +4885,13 @@ public sealed class InstallationEngine : IInstallationEngine
                 return new Dictionary<string, string>();
         }
 
-        string json = await File.ReadAllTextAsync(filePath, cancellationToken);
-        return System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+        string? json = await AtomicFile.ReadAllTextAsync(
+            filePath,
+            cancellationToken: cancellationToken
+        );
+        return json is null
+            ? new Dictionary<string, string>()
+            : System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(json)
             ?? new Dictionary<string, string>();
     }
 

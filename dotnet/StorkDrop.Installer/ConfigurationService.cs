@@ -43,6 +43,8 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
 
         string json = await File.ReadAllTextAsync(_configFilePath, cancellationToken)
             .ConfigureAwait(false);
+        if (!AtomicFile.IsValidJson(json))
+            json = AtomicFile.ReadAllText(_configFilePath) ?? json;
         AppConfiguration? config = JsonSerializer.Deserialize<AppConfiguration>(json, JsonOptions);
 
         if (config is not null)
@@ -64,16 +66,11 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
         try
         {
             string json = JsonSerializer.Serialize(configuration, JsonOptions);
-
-            if (File.Exists(_configFilePath))
-            {
-                string backupPath = _configFilePath + ".bak";
-                File.Copy(_configFilePath, backupPath, overwrite: true);
-            }
-
-            await SafeFileWriter
-                .WriteAtomicAsync(_configFilePath, json, cancellationToken)
-                .ConfigureAwait(false);
+            await SafeFileWriter.WriteAtomicWithBackupAsync(
+                _configFilePath,
+                json,
+                cancellationToken
+            );
         }
         finally
         {
@@ -89,7 +86,7 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
 
         string json = await File.ReadAllTextAsync(_configFilePath, cancellationToken)
             .ConfigureAwait(false);
-        await File.WriteAllTextAsync(filePath, json, cancellationToken).ConfigureAwait(false);
+        await SafeFileWriter.WriteAtomicAsync(filePath, json, cancellationToken);
         _logger.LogInformation("Configuration exported successfully to {Path}", filePath);
     }
 
@@ -111,15 +108,11 @@ public sealed class ConfigurationService : IConfigurationService, IDisposable
         await _saveLock.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            if (File.Exists(_configFilePath))
-            {
-                string backupPath = _configFilePath + ".bak";
-                File.Copy(_configFilePath, backupPath, overwrite: true);
-            }
-
-            await SafeFileWriter
-                .WriteAtomicAsync(_configFilePath, json, cancellationToken)
-                .ConfigureAwait(false);
+            await SafeFileWriter.WriteAtomicWithBackupAsync(
+                _configFilePath,
+                json,
+                cancellationToken
+            );
             _logger.LogInformation("Configuration imported successfully from {Path}", filePath);
         }
         finally

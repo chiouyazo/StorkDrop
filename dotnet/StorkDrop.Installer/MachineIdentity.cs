@@ -49,21 +49,20 @@ internal static class MachineIdentity
         try
         {
             string path = StorkPaths.MachineIdFile;
-            if (File.Exists(path))
-            {
-                string existing = File.ReadAllText(path).Trim();
-                if (Guid.TryParse(existing, out _))
-                    return existing;
-            }
+            string? existing = AtomicFile.ReadAllText(path, IsGuid)?.Trim();
+            if (existing is not null && IsGuid(existing))
+                return existing;
 
             string id = Guid.NewGuid().ToString();
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            File.WriteAllText(path, id);
-            return id;
+            AtomicFile.WriteAllText(path, id);
+            return AtomicFile.ReadAllText(path, IsGuid)?.Trim() ?? id;
         }
         catch
         {
             return Environment.MachineName;
         }
     }
+
+    private static bool IsGuid(string content) => Guid.TryParse(content.Trim(), out _);
 }

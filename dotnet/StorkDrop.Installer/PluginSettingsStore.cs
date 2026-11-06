@@ -17,9 +17,14 @@ public sealed class PluginSettingsStore : IPluginSettingsStore
         if (!File.Exists(path))
             return new Dictionary<string, string>();
 
-        string json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<Dictionary<string, string>>(json)
-            ?? new Dictionary<string, string>();
+        string? json = await AtomicFile.ReadAllTextAsync(
+            path,
+            cancellationToken: cancellationToken
+        );
+        return json is null
+            ? new Dictionary<string, string>()
+            : JsonSerializer.Deserialize<Dictionary<string, string>>(json)
+                ?? new Dictionary<string, string>();
     }
 
     public async Task SaveAsync(
@@ -31,6 +36,6 @@ public sealed class PluginSettingsStore : IPluginSettingsStore
         string path = StorkPaths.PluginConfigFile(pluginId);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         string json = JsonSerializer.Serialize(values, JsonOptions);
-        await SafeFileWriter.WriteAtomicAsync(path, json, cancellationToken).ConfigureAwait(false);
+        await SafeFileWriter.WriteAtomicWithBackupAsync(path, json, cancellationToken);
     }
 }

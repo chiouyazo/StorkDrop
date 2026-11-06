@@ -9,6 +9,8 @@ namespace StorkDrop.App.Services;
 /// <inheritdoc />
 public sealed class FeedLockService : IFeedLockService
 {
+    private const int MaxPasswordAttempts = 5;
+
     private readonly IConfigurationService _configurationService;
     private readonly ILogger<FeedLockService> _logger;
 
@@ -75,7 +77,7 @@ public sealed class FeedLockService : IFeedLockService
         return app.Dispatcher.Invoke(() =>
         {
             string? error = null;
-            while (true)
+            for (int attempt = 0; attempt < MaxPasswordAttempts; attempt++)
             {
                 Views.FeedLockPromptDialog dialog = new Views.FeedLockPromptDialog(
                     feed.Name,
@@ -94,6 +96,8 @@ public sealed class FeedLockService : IFeedLockService
 
                 error = LocalizationManager.GetString("FeedLock_WrongPassword");
             }
+
+            return false;
         });
     }
 }

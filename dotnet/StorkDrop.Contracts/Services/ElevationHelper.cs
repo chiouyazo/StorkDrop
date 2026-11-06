@@ -74,49 +74,24 @@ public static class ElevationHelper
         Action<string>? onProgressLine = null,
         Func<string, bool>? onLongRunning = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            string exePath =
-                Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
-            if (string.IsNullOrEmpty(exePath))
-                return ElevationResult.Failed;
-
-            string pluginDirArgs = GetPluginDirArgs();
-            string configFileArg = configFilePath is not null
-                ? $"--config-file \"{configFilePath}\""
-                : "";
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = exePath,
-                UseShellExecute = true,
-                Verb = "runas",
-                Arguments =
-                    $"--install \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" --version \"{version}\" {pluginDirArgs} {configFileArg}".Trim(),
-            };
-
-            return WaitForElevatedProcess(
-                startInfo,
-                onProgressLine,
-                onLongRunning,
-                cancellationToken
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
-        {
-            return ElevationResult.DeniedByUser;
-        }
-        catch
-        {
-            return ElevationResult.Failed;
-        }
-    }
+    ) =>
+        RunElevated(
+            progressLog =>
+                ElevationArguments.ForInstall(
+                    productId,
+                    version,
+                    targetPath,
+                    feedId,
+                    instanceId,
+                    configFilePath,
+                    Environment.GetCommandLineArgs(),
+                    Environment.ProcessId,
+                    progressLog
+                ),
+            onProgressLine,
+            onLongRunning,
+            cancellationToken
+        );
 
     public static ElevationResult RunElevatedUninstall(
         string productId,
@@ -124,45 +99,20 @@ public static class ElevationHelper
         Action<string>? onProgressLine = null,
         Func<string, bool>? onLongRunning = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            string exePath =
-                Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
-            if (string.IsNullOrEmpty(exePath))
-                return ElevationResult.Failed;
-
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = exePath,
-                UseShellExecute = true,
-                Verb = "runas",
-                Arguments =
-                    $"--uninstall \"{productId}\" --instance \"{instanceId}\" {GetPluginDirArgs()}".Trim(),
-            };
-
-            return WaitForElevatedProcess(
-                startInfo,
-                onProgressLine,
-                onLongRunning,
-                cancellationToken
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
-        {
-            return ElevationResult.DeniedByUser;
-        }
-        catch
-        {
-            return ElevationResult.Failed;
-        }
-    }
+    ) =>
+        RunElevated(
+            progressLog =>
+                ElevationArguments.ForUninstall(
+                    productId,
+                    instanceId,
+                    Environment.GetCommandLineArgs(),
+                    Environment.ProcessId,
+                    progressLog
+                ),
+            onProgressLine,
+            onLongRunning,
+            cancellationToken
+        );
 
     public static ElevationResult RunElevatedUpdate(
         string productId,
@@ -174,48 +124,24 @@ public static class ElevationHelper
         Action<string>? onProgressLine = null,
         Func<string, bool>? onLongRunning = null,
         CancellationToken cancellationToken = default
-    )
-    {
-        try
-        {
-            string exePath =
-                Environment.ProcessPath
-                ?? Process.GetCurrentProcess().MainModule?.FileName ?? string.Empty;
-            if (string.IsNullOrEmpty(exePath))
-                return ElevationResult.Failed;
-
-            string configFileArg = configFilePath is not null
-                ? $"--config-file \"{configFilePath}\""
-                : "";
-            ProcessStartInfo startInfo = new ProcessStartInfo
-            {
-                FileName = exePath,
-                UseShellExecute = true,
-                Verb = "runas",
-                Arguments =
-                    $"--update \"{productId}\" \"{targetPath}\" \"{feedId}\" --instance \"{instanceId}\" --version \"{version}\" {GetPluginDirArgs()} {configFileArg}".Trim(),
-            };
-
-            return WaitForElevatedProcess(
-                startInfo,
-                onProgressLine,
-                onLongRunning,
-                cancellationToken
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
-        {
-            return ElevationResult.DeniedByUser;
-        }
-        catch
-        {
-            return ElevationResult.Failed;
-        }
-    }
+    ) =>
+        RunElevated(
+            progressLog =>
+                ElevationArguments.ForUpdate(
+                    productId,
+                    version,
+                    targetPath,
+                    feedId,
+                    instanceId,
+                    configFilePath,
+                    Environment.GetCommandLineArgs(),
+                    Environment.ProcessId,
+                    progressLog
+                ),
+            onProgressLine,
+            onLongRunning,
+            cancellationToken
+        );
 
     public static ElevationResult RunElevatedReExecute(
         string productId,
@@ -226,8 +152,32 @@ public static class ElevationHelper
         Action<string>? onProgressLine = null,
         Func<string, bool>? onLongRunning = null,
         CancellationToken cancellationToken = default
+    ) =>
+        RunElevated(
+            progressLog =>
+                ElevationArguments.ForReExecute(
+                    productId,
+                    instanceId,
+                    runPreInstall,
+                    runPostInstall,
+                    configFilePath,
+                    Environment.GetCommandLineArgs(),
+                    Environment.ProcessId,
+                    progressLog
+                ),
+            onProgressLine,
+            onLongRunning,
+            cancellationToken
+        );
+
+    private static ElevationResult RunElevated(
+        Func<string, string> buildArguments,
+        Action<string>? onProgressLine,
+        Func<string, bool>? onLongRunning,
+        CancellationToken cancellationToken
     )
     {
+        string? progressLog = null;
         try
         {
             string exePath =
@@ -236,22 +186,22 @@ public static class ElevationHelper
             if (string.IsNullOrEmpty(exePath))
                 return ElevationResult.Failed;
 
-            string configFileArg = configFilePath is not null
-                ? $"--config-file \"{configFilePath}\""
-                : "";
-            string skipPre = runPreInstall ? "" : "--skip-pre";
-            string skipPost = runPostInstall ? "" : "--skip-post";
+            Directory.CreateDirectory(StorkPaths.TempDir);
+            progressLog = Path.Combine(
+                StorkPaths.TempDir,
+                $"{ProgressLogPrefix}{Guid.NewGuid():N}.log"
+            );
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments =
-                    $"--reexecute \"{productId}\" --instance \"{instanceId}\" {skipPre} {skipPost} {GetPluginDirArgs()} {configFileArg}".Trim(),
+                Arguments = buildArguments(progressLog),
             };
 
             return WaitForElevatedProcess(
                 startInfo,
+                progressLog,
                 onProgressLine,
                 onLongRunning,
                 cancellationToken
@@ -269,21 +219,53 @@ public static class ElevationHelper
         {
             return ElevationResult.Failed;
         }
+        finally
+        {
+            DeleteQuietly(progressLog);
+        }
     }
 
-    // Timeout after which onLongRunning is consulted before killing the child.
+    internal const string ProgressLogPrefix = "elevation-progress-";
+
+    // Interval after which onLongRunning is consulted. Without a callback the child is never killed.
     private static readonly TimeSpan LongRunningThreshold = TimeSpan.FromMinutes(10);
 
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(1);
+
     /// <summary>
-    /// Starts an elevated child process and waits for it to exit, surfacing progress by tailing
-    /// the shared StorkDrop rolling log file (stdout cannot be redirected under <c>runas</c>).
+    /// Starts an elevated child process and waits for it to exit, surfacing progress by tailing the
+    /// child's dedicated progress log (stdout cannot be redirected under <c>runas</c>).
     /// </summary>
-    /// <param name="startInfo">The elevated child process to start.</param>
+    private static ElevationResult WaitForElevatedProcess(
+        ProcessStartInfo startInfo,
+        string progressLogPath,
+        Action<string>? onProgressLine,
+        Func<string, bool>? onLongRunning,
+        CancellationToken cancellationToken
+    )
+    {
+        using Process? process = Process.Start(startInfo);
+        if (process is null)
+            return ElevationResult.Failed;
+
+        return WaitForChild(
+            new ProcessElevatedChild(process),
+            progressLogPath,
+            onProgressLine,
+            onLongRunning,
+            LongRunningThreshold,
+            PollInterval,
+            cancellationToken
+        );
+    }
+
+    /// <param name="child">The elevated child process to wait for.</param>
+    /// <param name="progressLogPath">Log file written only by this child; each new line is forwarded.</param>
     /// <param name="onProgressLine">Invoked for each new non-empty log line appended while waiting.</param>
     /// <param name="onLongRunning">
-    /// Invoked with the last observed log line when the process has run past the long-running
-    /// threshold without exiting. Return <c>true</c> to keep waiting, <c>false</c> to kill it.
-    /// When null, a long-running process is killed.
+    /// Consulted with the last observed log line each time <paramref name="longRunningThreshold"/>
+    /// elapses without the child exiting. Return <c>true</c> to keep waiting, <c>false</c> to kill it.
+    /// When null, a running child is never killed because of elapsed time.
     /// </param>
     /// <param name="cancellationToken">
     /// When cancellation is requested the elevated child is killed and an
@@ -294,66 +276,40 @@ public static class ElevationHelper
     /// <see cref="ElevationResult.Failed"/>. A child that never started or exited non-zero is a
     /// failure, not a refusal - a refusal is caught as a <see cref="Win32Exception"/> by the caller.
     /// </returns>
-    private static ElevationResult WaitForElevatedProcess(
-        ProcessStartInfo startInfo,
+    internal static ElevationResult WaitForChild(
+        IElevatedChild child,
+        string? progressLogPath,
         Action<string>? onProgressLine,
         Func<string, bool>? onLongRunning,
-        CancellationToken cancellationToken = default
+        TimeSpan longRunningThreshold,
+        TimeSpan pollInterval,
+        CancellationToken cancellationToken
     )
     {
-        // Determine the log file to tail and its current end position BEFORE starting the child,
-        // so we only surface lines produced by the elevated install.
-        string? logPath = GetNewestLogFile();
         long position = 0;
-        if (logPath is not null)
-        {
-            try
-            {
-                position = new FileInfo(logPath).Length;
-            }
-            catch
-            {
-                position = 0;
-            }
-        }
-
-        Process? process = Process.Start(startInfo);
-        if (process is null)
-            return ElevationResult.Failed;
-
         string currentStep = string.Empty;
         Stopwatch stopwatch = Stopwatch.StartNew();
 
-        while (!process.WaitForExit(1000))
+        while (!child.WaitForExit(pollInterval))
         {
-            (position, currentStep) = TailLog(logPath, position, currentStep, onProgressLine);
+            (position, currentStep) = TailLog(
+                progressLogPath,
+                position,
+                currentStep,
+                onProgressLine
+            );
 
             if (cancellationToken.IsCancellationRequested)
             {
-                try
-                {
-                    process.Kill(entireProcessTree: true);
-                }
-                catch
-                {
-                    // Best effort; the process may have exited in the meantime.
-                }
+                child.Kill();
                 cancellationToken.ThrowIfCancellationRequested();
             }
 
-            if (stopwatch.Elapsed >= LongRunningThreshold)
+            if (stopwatch.Elapsed >= longRunningThreshold)
             {
-                bool keepWaiting = onLongRunning?.Invoke(currentStep) ?? false;
-                if (!keepWaiting)
+                if (onLongRunning is not null && !onLongRunning(currentStep))
                 {
-                    try
-                    {
-                        process.Kill(entireProcessTree: true);
-                    }
-                    catch
-                    {
-                        // Best effort; the process may have exited in the meantime.
-                    }
+                    child.Kill();
                     return ElevationResult.Failed;
                 }
 
@@ -361,9 +317,8 @@ public static class ElevationHelper
             }
         }
 
-        // Flush any lines appended just before exit.
-        TailLog(logPath, position, currentStep, onProgressLine);
-        return process.ExitCode == 0 ? ElevationResult.Succeeded : ElevationResult.Failed;
+        TailLog(progressLogPath, position, currentStep, onProgressLine);
+        return child.ExitCode == 0 ? ElevationResult.Succeeded : ElevationResult.Failed;
     }
 
     /// <summary>
@@ -416,25 +371,16 @@ public static class ElevationHelper
         return (position, currentStep);
     }
 
-    /// <summary>Finds the most recently written <c>storkdrop-*.log</c> in the log directory, if any.</summary>
-    private static string? GetNewestLogFile()
+    private static void DeleteQuietly(string? path)
     {
+        if (path is null)
+            return;
+
         try
         {
-            string dir = StorkPaths.LogDir;
-            if (!Directory.Exists(dir))
-                return null;
-
-            return new DirectoryInfo(dir)
-                .GetFiles("storkdrop-*.log")
-                .OrderByDescending(f => f.LastWriteTimeUtc)
-                .FirstOrDefault()
-                ?.FullName;
+            File.Delete(path);
         }
-        catch
-        {
-            return null;
-        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
     }
 
     public static bool RestartAsAdmin(string[]? args = null)
@@ -452,7 +398,7 @@ public static class ElevationHelper
                 FileName = exePath,
                 UseShellExecute = true,
                 Verb = "runas",
-                Arguments = args is not null ? string.Join(" ", args) : string.Empty,
+                Arguments = args is not null ? ElevationArguments.Join(args) : string.Empty,
             };
 
             Process.Start(startInfo);
@@ -462,20 +408,5 @@ public static class ElevationHelper
         {
             return false;
         }
-    }
-
-    /// <summary>
-    /// Collects --plugin-dir arguments from the current process to forward to elevated processes.
-    /// </summary>
-    private static string GetPluginDirArgs()
-    {
-        string[] args = Environment.GetCommandLineArgs();
-        List<string> pluginDirs = [];
-        for (int i = 0; i < args.Length - 1; i++)
-        {
-            if (args[i] == "--plugin-dir")
-                pluginDirs.Add($"--plugin-dir \"{args[i + 1]}\"");
-        }
-        return string.Join(" ", pluginDirs);
     }
 }

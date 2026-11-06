@@ -48,7 +48,7 @@ public static class AppHostBuilder
     {
         string logPath = StorkPaths.LogFile;
 
-        Log.Logger = new LoggerConfiguration()
+        LoggerConfiguration loggerConfiguration = new LoggerConfiguration()
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .Enrich.FromLogContext()
@@ -59,8 +59,14 @@ public static class AppHostBuilder
                 retainedFileCountLimit: 30,
                 shared: true
             )
-            .WriteTo.Sink(new InstallLogSink())
-            .CreateLogger();
+            .WriteTo.Sink(new InstallLogSink());
+
+        string[] commandLineArgs = Environment.GetCommandLineArgs();
+        int progressLogIndex = Array.IndexOf(commandLineArgs, "--progress-log");
+        if (progressLogIndex >= 0 && progressLogIndex + 1 < commandLineArgs.Length)
+            loggerConfiguration.WriteTo.File(commandLineArgs[progressLogIndex + 1], shared: true);
+
+        Log.Logger = loggerConfiguration.CreateLogger();
 
         IHostBuilder builder = Host.CreateDefaultBuilder();
 
