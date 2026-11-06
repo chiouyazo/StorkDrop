@@ -89,13 +89,60 @@ public sealed class VersionComparer : IComparer<string>
             else if (numericY)
                 cmp = 1;
             else
-                cmp = idX.SequenceCompareTo(idY);
+                cmp = CompareHyphenatedIdentifier(idX, idY);
 
             if (cmp != 0)
                 return cmp;
         }
 
         return 0;
+    }
+
+    private static int CompareHyphenatedIdentifier(ReadOnlySpan<char> x, ReadOnlySpan<char> y)
+    {
+        while (!x.IsEmpty || !y.IsEmpty)
+        {
+            if (x.IsEmpty)
+                return -1;
+            if (y.IsEmpty)
+                return 1;
+
+            ReadOnlySpan<char> segmentX = TakeSegment(ref x);
+            ReadOnlySpan<char> segmentY = TakeSegment(ref y);
+
+            bool numericX = IsAllDigits(segmentX);
+            bool numericY = IsAllDigits(segmentY);
+
+            int cmp;
+            if (numericX && numericY)
+                cmp = CompareNumericIdentifier(segmentX, segmentY);
+            else if (numericX)
+                cmp = -1;
+            else if (numericY)
+                cmp = 1;
+            else
+                cmp = segmentX.SequenceCompareTo(segmentY);
+
+            if (cmp != 0)
+                return cmp;
+        }
+
+        return 0;
+    }
+
+    private static ReadOnlySpan<char> TakeSegment(ref ReadOnlySpan<char> span)
+    {
+        int dash = span.IndexOf('-');
+        if (dash < 0)
+        {
+            ReadOnlySpan<char> whole = span;
+            span = ReadOnlySpan<char>.Empty;
+            return whole;
+        }
+
+        ReadOnlySpan<char> segment = span[..dash];
+        span = span[(dash + 1)..];
+        return segment;
     }
 
     private static ReadOnlySpan<char> TakeIdentifier(ref ReadOnlySpan<char> span)
@@ -136,57 +183,46 @@ public sealed class VersionComparer : IComparer<string>
 
     private static int CompareNumericParts(ReadOnlySpan<char> x, ReadOnlySpan<char> y)
     {
-        Span<int> partsX = stackalloc int[4];
-        Span<int> partsY = stackalloc int[4];
-
-        int countX = ParseParts(x, partsX);
-        int countY = ParseParts(y, partsY);
-
-        int maxParts = Math.Max(countX, countY);
-        for (int i = 0; i < maxParts; i++)
+        while (true)
         {
-            int partX = i < countX ? partsX[i] : 0;
-            int partY = i < countY ? partsY[i] : 0;
+            ReadOnlySpan<char> partX = TakeNumericPart(ref x, out string? ownedX);
+            ReadOnlySpan<char> partY = TakeNumericPart(ref y, out string? ownedY);
+            if (partX.IsEmpty && ownedX is null && partY.IsEmpty && ownedY is null)
+                return 0;
 
-            if (partX < partY)
-                return -1;
-            if (partX > partY)
-                return 1;
+            int cmp = CompareNumericIdentifier(
+                ownedX is null ? partX : ownedX,
+                ownedY is null ? partY : ownedY
+            );
+            if (cmp != 0)
+                return cmp;
         }
-
-        return 0;
     }
 
-    private static int ParseParts(ReadOnlySpan<char> version, Span<int> parts)
+    private static ReadOnlySpan<char> TakeNumericPart(
+        ref ReadOnlySpan<char> version,
+        out string? owned
+    )
     {
-        int partIndex = 0;
-        int current = 0;
-        bool hasDigit = false;
-
-        for (int i = 0; i < version.Length && partIndex < parts.Length; i++)
+        owned = null;
+        while (!version.IsEmpty)
         {
-            if (version[i] == '.')
+            int dot = version.IndexOf('.');
+            ReadOnlySpan<char> segment = dot < 0 ? version : version[..dot];
+            version = dot < 0 ? ReadOnlySpan<char>.Empty : version[(dot + 1)..];
+
+            if (IsAllDigits(segment))
+                return segment;
+
+            string digits = string.Concat(segment.ToArray().Where(char.IsDigit));
+            if (digits.Length > 0)
             {
-                if (hasDigit)
-                {
-                    parts[partIndex++] = current;
-                    current = 0;
-                    hasDigit = false;
-                }
-            }
-            else if (char.IsDigit(version[i]))
-            {
-                current = current * 10 + (version[i] - '0');
-                hasDigit = true;
+                owned = digits;
+                return ReadOnlySpan<char>.Empty;
             }
         }
 
-        if (hasDigit && partIndex < parts.Length)
-        {
-            parts[partIndex++] = current;
-        }
-
-        return partIndex;
+        return ReadOnlySpan<char>.Empty;
     }
 
     public static bool IsNewer(string candidate, string baseline) =>

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
+using StorkDrop.Installer;
 
 namespace StorkDrop.App.Services;
 
@@ -16,6 +17,8 @@ public sealed class UpdateBackgroundService : BackgroundService
     private readonly IConfigurationService _configurationService;
     private readonly INotificationService _notificationService;
     private readonly ILogger<UpdateBackgroundService> _logger;
+    private readonly UpdateNotificationDebouncer _notificationDebouncer =
+        new UpdateNotificationDebouncer();
 
     /// <summary>
     /// Initializes a new instance of the <see cref="UpdateBackgroundService"/> class.
@@ -56,7 +59,7 @@ public sealed class UpdateBackgroundService : BackgroundService
                         .GetAllAsync(stoppingToken)
                         .ConfigureAwait(false);
 
-                    List<ProductManifest> allAvailable = [];
+                    Dictionary<string, IReadOnlyList<ProductManifest>> availableByFeed = [];
                     foreach (FeedInfo feed in _feedRegistry.GetFeeds())
                     {
                         try
@@ -71,7 +74,7 @@ public sealed class UpdateBackgroundService : BackgroundService
                                 available.Count,
                                 feed.Id
                             );
-                            allAvailable.AddRange(available);
+                            availableByFeed[feed.Id] = available;
                         }
                         catch (Exception ex)
                         {
@@ -83,38 +86,40 @@ public sealed class UpdateBackgroundService : BackgroundService
                         }
                     }
 
-                    foreach (InstalledProduct product in installed)
+                    IReadOnlyList<AvailableUpdate> updates = UpdateDetector.FindUpdates(
+                        installed,
+                        availableByFeed
+                    );
+                    _notificationDebouncer.Forget(
+                        installed.Where(p =>
+                            !string.IsNullOrEmpty(p.FeedId) && availableByFeed.ContainsKey(p.FeedId)
+                        ),
+                        updates
+                    );
+                    foreach (AvailableUpdate update in updates)
                     {
-                        ProductManifest? latest = allAvailable.FirstOrDefault(m =>
-                            m.ProductId == product.ProductId
+                        InstalledProduct product = update.Installed;
+                        ProductManifest latest = update.Latest;
+                        _logger.LogInformation(
+                            "Update available for {ProductTitle}: {CurrentVersion} -> {NewVersion}",
+                            product.Title,
+                            product.Version,
+                            latest.Version
                         );
-                        if (
-                            latest is not null
-                            && !string.IsNullOrEmpty(latest.Version)
-                            && VersionComparer.IsNewer(latest.Version, product.Version)
-                        )
+                        if (!_notificationDebouncer.ShouldNotify(update))
+                            continue;
+
+                        try
                         {
-                            _logger.LogInformation(
-                                "Update available for {ProductTitle}: {CurrentVersion} -> {NewVersion}",
-                                product.Title,
-                                product.Version,
-                                latest.Version
+                            _notificationService.ShowUpdateAvailable(product.Title, latest.Version);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(
+                                ex,
+                                "Failed to show update notification for {ProductTitle}",
+                                product.Title
                             );
-                            try
-                            {
-                                _notificationService.ShowUpdateAvailable(
-                                    product.Title,
-                                    latest.Version
-                                );
-                            }
-                            catch (Exception ex)
-                            {
-                                _logger.LogWarning(
-                                    ex,
-                                    "Failed to show update notification for {ProductTitle}",
-                                    product.Title
-                                );
-                            }
                         }
                     }
 

@@ -118,6 +118,91 @@ public sealed class VersionComparerTests
     }
 
     [Theory]
+    [InlineData("2.36.1-2386-20260915-99", "2.36.1-2386-20260915-100", -1)]
+    [InlineData("2.36.1-2386-20260915-100", "2.36.1-2386-20260915-99", 1)]
+    [InlineData("2.36.1-2386-20260915-2438", "2.36.1-2386-20260915-2438", 0)]
+    [InlineData("2.36.1-2386-20260916-1", "2.36.1-2386-20260915-9999", 1)]
+    [InlineData("2.36.1-1000-20260101-1", "2.36.1-999-20260915-5", 1)]
+    [InlineData("2.36.1-2386-20260915-5", "2.36.1-2386-20260915-5-1", -1)]
+    [InlineData("2.36.1-epic-20260915-12", "2.36.1-epic-20260915-9", 1)]
+    [InlineData("2.36.1-2386-20260915-5", "2.36.1-epic-20260915-1", -1)]
+    public void Compare_ShouldCompareFeedBuildSegmentsNumerically(string x, string y, int expected)
+    {
+        Math.Sign(_comparer.Compare(x, y)).Should().Be(expected);
+        Math.Sign(_comparer.Compare(y, x)).Should().Be(-expected);
+    }
+
+    [Theory]
+    [InlineData("2.36.1", "2.36.1-2386-20260915-2438", 1)]
+    [InlineData("2.36.1-2386-20260915-2438", "2.36.0", 1)]
+    [InlineData("2.36.2-2386-20260915-1", "2.36.1", 1)]
+    [InlineData("2.37.0-1-20260101-1", "2.36.9", 1)]
+    [InlineData("2.36.1-2386-20260915-2438", "2.36.2", -1)]
+    public void Compare_ShouldPlaceFeedBuildsAgainstReleasesBySemVerRules(
+        string x,
+        string y,
+        int expected
+    )
+    {
+        Math.Sign(_comparer.Compare(x, y)).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Compare_ShouldSortRealisticFeedVersionsInAscendingOrder()
+    {
+        string[] expected =
+        [
+            "2.35.0",
+            "2.36.0",
+            "2.36.1-2386-20260915-99",
+            "2.36.1-2386-20260915-100",
+            "2.36.1-2386-20260916-2",
+            "2.36.1-2400-20260101-1",
+            "2.36.1",
+            "2.36.2-2500-20261001-7",
+            "2.37.0",
+        ];
+        string[] shuffled =
+        [
+            expected[5],
+            expected[8],
+            expected[2],
+            expected[0],
+            expected[7],
+            expected[3],
+            expected[6],
+            expected[1],
+            expected[4],
+        ];
+
+        string[] sorted = shuffled.Order(VersionComparer.Instance).ToArray();
+
+        sorted.Should().Equal(expected);
+    }
+
+    [Theory]
+    [InlineData("2.36.1-2386-20260915-100", "2.36.1-2386-20260915-99", true)]
+    [InlineData("2.36.1-2386-20260915-99", "2.36.1-2386-20260915-100", false)]
+    public void IsNewer_ShouldRecognizeTheHigherBuildNumber(
+        string candidate,
+        string baseline,
+        bool expected
+    )
+    {
+        VersionComparer.IsNewer(candidate, baseline).Should().Be(expected);
+    }
+
+    [Theory]
+    [InlineData("1.0.4294967296", "1.0.1", 1)]
+    [InlineData("1.0.99999999999999999999999", "1.0.99999999999999999999998", 1)]
+    [InlineData("1.0.99999999999999999999999", "1.0.99999999999999999999999", 0)]
+    [InlineData("1.0.0.0.0.2", "1.0.0.0.0.1", 1)]
+    public void Compare_ShouldNotOverflowOnVeryLargeParts(string x, string y, int expected)
+    {
+        Math.Sign(_comparer.Compare(x, y)).Should().Be(expected);
+    }
+
+    [Theory]
     [InlineData("1.0.0+build", true)]
     [InlineData("1.0.0-alpha+build", true)]
     public void IsValid_ShouldAcceptBuildMetadata(string version, bool expected)

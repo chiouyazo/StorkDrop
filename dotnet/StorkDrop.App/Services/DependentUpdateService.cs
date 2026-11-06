@@ -127,6 +127,10 @@ public sealed class DependentUpdateService
 
         try
         {
+            using CancellationTokenSource linked = CancellationTokenSource.CreateLinkedTokenSource(
+                cancellationToken,
+                tracked.Cts.Token
+            );
             InstallResult result = await Task.Run(
                 () =>
                     _coordinator.UpdateWithIsolationAsync(
@@ -134,7 +138,7 @@ public sealed class DependentUpdateService
                         item.TargetManifest,
                         options,
                         progress,
-                        cancellationToken
+                        linked.Token
                     ),
                 cancellationToken
             );

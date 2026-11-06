@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -24,22 +25,26 @@ public sealed class NexusRegistryClient(
 
     private string RawContentBase => $"{BaseApi}/repository/{options.Value.Repository}";
 
+    private string ComponentsUrl(string? continuationToken)
+    {
+        string url =
+            $"{BaseApi}/service/rest/v1/components?repository={Uri.EscapeDataString(options.Value.Repository)}";
+        return continuationToken is not null
+            ? $"{url}&continuationToken={Uri.EscapeDataString(continuationToken)}"
+            : url;
+    }
+
     public async Task<IReadOnlyList<ProductManifest>> GetAllProductsAsync(
         CancellationToken cancellationToken = default
     )
     {
         List<ProductManifest> products = [];
         HashSet<string> discoveredProducts = [];
-
-        string componentsUrl =
-            $"{BaseApi}/service/rest/v1/components?repository={options.Value.Repository}";
         string? continuationToken = null;
 
         do
         {
-            string url = continuationToken is not null
-                ? $"{componentsUrl}&continuationToken={continuationToken}"
-                : componentsUrl;
+            string url = ComponentsUrl(continuationToken);
 
             NexusComponentSearchResponse response =
                 await httpClient
@@ -67,90 +72,115 @@ public sealed class NexusRegistryClient(
             continuationToken = response.ContinuationToken;
         } while (continuationToken is not null);
 
+        List<HttpRequestException> failures = [];
         foreach (string productId in discoveredProducts)
         {
-            ProductManifest? manifest = await GetProductManifestAsync(productId, cancellationToken)
-                .ConfigureAwait(false);
-            if (manifest is not null)
+            try
             {
-                products.Add(manifest);
+                ProductManifest? manifest = await GetProductManifestAsync(
+                        productId,
+                        cancellationToken
+                    )
+                    .ConfigureAwait(false);
+                if (manifest is not null)
+                {
+                    products.Add(manifest);
+                }
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode != HttpStatusCode.Unauthorized)
+            {
+                logger.LogWarning(ex, "Manifest of {ProductId} could not be read", productId);
+                failures.Add(ex);
             }
         }
+
+        if (products.Count == 0 && failures.Count > 0)
+            throw failures[0];
 
         return products;
     }
 
-    public async Task<ProductManifest?> GetProductManifestAsync(
+    public Task<ProductManifest?> GetProductManifestAsync(
         string productId,
         CancellationToken cancellationToken = default
-    )
-    {
-        string url = $"{RawContentBase}/{productId}/manifest.json";
+    ) =>
+        FetchManifestAsync(
+            $"{RawContentBase}/{productId}/manifest.json",
+            productId,
+            null,
+            cancellationToken
+        );
 
-        using HttpResponseMessage response = await httpClient
-            .GetAsync(url, cancellationToken)
-            .ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            return null;
-
-        if (response.Content is null)
-            return null;
-
-        string json = await response
-            .Content.ReadAsStringAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        try
-        {
-            return JsonSerializer.Deserialize<ProductManifest>(json, JsonOptions);
-        }
-        catch (JsonException ex)
-        {
-            logger.LogWarning(
-                ex,
-                "Fehler beim Deserialisieren des Manifests für {ProductId}",
-                productId
-            );
-            return null;
-        }
-    }
-
-    public async Task<ProductManifest?> GetProductManifestAsync(
+    public Task<ProductManifest?> GetProductManifestAsync(
         string productId,
         string version,
         CancellationToken cancellationToken = default
+    ) =>
+        FetchManifestAsync(
+            $"{RawContentBase}/{productId}/versions/{version}/manifest.json",
+            productId,
+            version,
+            cancellationToken
+        );
+
+    private async Task<ProductManifest?> FetchManifestAsync(
+        string url,
+        string productId,
+        string? version,
+        CancellationToken cancellationToken
     )
     {
-        string url = $"{RawContentBase}/{productId}/versions/{version}/manifest.json";
-
         using HttpResponseMessage response = await httpClient
             .GetAsync(url, cancellationToken)
             .ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
+        if (response.StatusCode == HttpStatusCode.NotFound)
             return null;
 
-        if (response.Content is null)
-            return null;
+        response.EnsureSuccessStatusCode();
 
         string json = await response
             .Content.ReadAsStringAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        ProductManifest? manifest;
         try
         {
-            return JsonSerializer.Deserialize<ProductManifest>(json, JsonOptions);
+            manifest = JsonSerializer.Deserialize<ProductManifest>(json, JsonOptions);
         }
         catch (JsonException ex)
         {
             logger.LogWarning(
                 ex,
-                "Fehler beim Deserialisieren des Manifests für {ProductId} v{Version}",
+                "Fehler beim Deserialisieren des Manifests für {ProductId} {Version}",
                 productId,
                 version
             );
             return null;
         }
+
+        if (manifest is not null && !IsRequestedManifest(manifest, productId, version))
+        {
+            logger.LogWarning(
+                "Manifest at {Url} describes {ActualId} {ActualVersion}, not {ProductId} {Version}; ignoring it",
+                url,
+                manifest.ProductId,
+                manifest.Version,
+                productId,
+                version
+            );
+            return null;
+        }
+
+        return manifest;
     }
+
+    private static bool IsRequestedManifest(
+        ProductManifest manifest,
+        string productId,
+        string? version
+    ) =>
+        string.Equals(manifest.ProductId, productId, StringComparison.OrdinalIgnoreCase)
+        && (version is null || VersionComparer.Instance.Compare(manifest.Version, version) == 0);
 
     public async Task<IReadOnlyList<string>> GetAvailableVersionsAsync(
         string productId,
@@ -158,18 +188,11 @@ public sealed class NexusRegistryClient(
     )
     {
         List<string> versions = [];
-
-        string componentsUrl =
-            $"{BaseApi}/service/rest/v1/components?repository={options.Value.Repository}";
-
-        string prefix = $"{productId}/versions/";
         string? continuationToken = null;
 
         do
         {
-            string url = continuationToken is not null
-                ? $"{componentsUrl}&continuationToken={continuationToken}"
-                : componentsUrl;
+            string url = ComponentsUrl(continuationToken);
 
             NexusComponentSearchResponse response =
                 await httpClient
@@ -184,15 +207,16 @@ public sealed class NexusRegistryClient(
             {
                 foreach (NexusAsset asset in component.Assets)
                 {
-                    string path = asset.Path.TrimStart('/');
-                    if (path.StartsWith(prefix) && path.EndsWith("/manifest.json"))
+                    string[] segments = asset.Path.TrimStart('/').Split('/');
+                    if (
+                        segments.Length == 4
+                        && string.Equals(segments[0], productId, StringComparison.Ordinal)
+                        && string.Equals(segments[1], "versions", StringComparison.Ordinal)
+                        && string.Equals(segments[3], "manifest.json", StringComparison.Ordinal)
+                        && !versions.Contains(segments[2])
+                    )
                     {
-                        string version = path[prefix.Length..];
-                        version = version[..version.IndexOf('/')];
-                        if (!versions.Contains(version))
-                        {
-                            versions.Add(version);
-                        }
+                        versions.Add(segments[2]);
                     }
                 }
             }

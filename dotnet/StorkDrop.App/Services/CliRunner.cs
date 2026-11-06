@@ -187,25 +187,51 @@ internal sealed class CliRunner
         if (installed is null)
             return Error($"Product '{productId}' is not installed.");
 
-        (ProductManifest? manifest, string? feedId) = await FindManifestInFeedsAsync(
-            productId,
-            version
+        UpdatePlan plan = await UpdatePlanner.PlanAsync(
+            _feedRegistry,
+            installed,
+            version,
+            GetFlag(args, "--feed"),
+            args.Contains("--allow-downgrade")
         );
-        if (manifest is null || feedId is null)
+        switch (plan.Decision)
         {
-            return version is not null
-                ? Error($"Version '{version}' not found for product '{productId}'.")
-                : Error($"No update found for product '{productId}' in any configured feed.");
+            case UpdateDecision.ManifestNotFound:
+                return version is not null
+                    ? Error($"Version '{version}' not found for product '{productId}'.")
+                    : Error($"No update found for product '{productId}' in the installation feed.");
+            case UpdateDecision.AlreadyUpToDate:
+                Console.WriteLine(
+                    $"{installed.Title} v{installed.Version} is up to date (latest on the feed: v{plan.Manifest!.Version})."
+                );
+                return 0;
+            case UpdateDecision.DowngradeBlocked:
+                return Error(
+                    $"Version '{plan.Manifest!.Version}' is older than the installed v{installed.Version}. Use --allow-downgrade to install it."
+                );
         }
+
+        ProductManifest manifest = plan.Manifest!;
+        string feedId = plan.FeedId!;
+        if (!string.Equals(feedId, installed.FeedId, StringComparison.Ordinal))
+            Console.WriteLine($"Switching {installed.Title} to feed '{feedId}'.");
 
         if (!await CheckFeedLockAsync(feedId, args))
             return 1;
 
-        int configError = await ValidatePluginConfigAsync(manifest, feedId, configValues);
+        Dictionary<string, string> effectiveConfig = await _engine.LoadSavedPluginConfigAsync(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty
+        );
+        foreach ((string key, string value) in configValues)
+            effectiveConfig[key] = value;
+
+        int configError = await ValidatePluginConfigAsync(manifest, feedId, effectiveConfig);
         if (configError != 0)
             return configError;
 
-        SetupPluginConfigCallbacks(configValues);
+        _engine.OnPluginConfigNeeded = (fields, currentValues) => effectiveConfig;
+        _engine.OnFileHandlerConfigNeeded = (fields, currentValues) => effectiveConfig;
 
         Console.WriteLine(
             $"Updating {manifest.Title} from v{installed.Version} to v{manifest.Version}"
@@ -213,8 +239,9 @@ internal sealed class CliRunner
 
         InstallOptions options = new InstallOptions(
             TargetPath: installed.InstalledPath,
+            InstanceId: installed.InstanceId,
             FeedId: feedId,
-            PluginConfigValues: configValues.Count > 0 ? configValues : null
+            PluginConfigValues: effectiveConfig
         );
         Progress<InstallProgress> progress = new Progress<InstallProgress>(p =>
         {
@@ -1041,6 +1068,12 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --version <version>     Update to a specific version (default: latest)"
                 );
+                Console.WriteLine(
+                    "  --feed <feedId>         Update from another feed (switches the channel)"
+                );
+                Console.WriteLine(
+                    "  --allow-downgrade       Allow installing a version older than the installed one"
+                );
                 Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
@@ -1048,6 +1081,10 @@ internal sealed class CliRunner
                 );
                 Console.WriteLine(
                     "  --unlock <password>     Feed lock password (required if the feed is locked)"
+                );
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Without --config the plugin config saved by the last install is reused."
                 );
                 break;
 

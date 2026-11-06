@@ -645,7 +645,7 @@ public partial class InstalledViewModel : ObservableObject
                     manifest,
                     options,
                     progress,
-                    cancellationToken
+                    tracked.Cts.Token
                 )
             );
 

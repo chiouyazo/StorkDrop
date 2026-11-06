@@ -17,10 +17,18 @@ public sealed class EnvironmentVariableService
 
     private static readonly SemaphoreSlim EnvVarLock = new SemaphoreSlim(1, 1);
     private readonly ILogger<EnvironmentVariableService> _logger;
+    private readonly IEnvironmentVariableStore _store;
 
     public EnvironmentVariableService(ILogger<EnvironmentVariableService> logger)
+        : this(logger, new SystemEnvironmentVariableStore()) { }
+
+    internal EnvironmentVariableService(
+        ILogger<EnvironmentVariableService> logger,
+        IEnvironmentVariableStore store
+    )
     {
         _logger = logger;
+        _store = store;
     }
 
     /// <summary>
@@ -35,6 +43,50 @@ public sealed class EnvironmentVariableService
         try
         {
             return ApplyInternal(declarations, installPath);
+        }
+        finally
+        {
+            EnvVarLock.Release();
+        }
+    }
+
+    /// <summary>
+    /// Applies the declarations and persists the tracking file before the first variable is touched,
+    /// so a variable that was set can always be removed again. The tracking is then narrowed to what
+    /// was actually applied.
+    /// </summary>
+    public async Task<List<AppliedEnvironmentVariable>> ApplyTrackedAsync(
+        string productId,
+        string uniqueId,
+        EnvironmentVariableInfo[] declarations,
+        string installPath,
+        CancellationToken cancellationToken
+    )
+    {
+        await EnvVarLock.WaitAsync(cancellationToken);
+        try
+        {
+            List<AppliedEnvironmentVariable> planned = declarations
+                .Where(d =>
+                    d.Action.Equals("set", StringComparison.OrdinalIgnoreCase)
+                    || d.Action.Equals("append", StringComparison.OrdinalIgnoreCase)
+                )
+                .Select(d => new AppliedEnvironmentVariable(
+                    d.Name,
+                    d.Action.ToLowerInvariant(),
+                    ResolveTemplates(d.Value, installPath),
+                    d.Separator,
+                    d.Target
+                ))
+                .ToList();
+            await SaveAppliedAsync(productId, uniqueId, planned, cancellationToken);
+
+            List<AppliedEnvironmentVariable> applied = ApplyInternal(declarations, installPath);
+            if (applied.Count == 0)
+                DeleteTracking(productId, uniqueId);
+            else
+                await SaveAppliedAsync(productId, uniqueId, applied, cancellationToken);
+            return applied;
         }
         finally
         {
@@ -58,7 +110,7 @@ public sealed class EnvironmentVariableService
 
                 if (decl.Action.Equals("set", StringComparison.OrdinalIgnoreCase))
                 {
-                    Environment.SetEnvironmentVariable(decl.Name, resolvedValue, target);
+                    _store.Set(decl.Name, resolvedValue, target);
                     _logger.LogInformation(
                         "Set environment variable {Name}={Value} ({Target})",
                         decl.Name,
@@ -78,7 +130,7 @@ public sealed class EnvironmentVariableService
                 }
                 else if (decl.Action.Equals("append", StringComparison.OrdinalIgnoreCase))
                 {
-                    string? currentValue = Environment.GetEnvironmentVariable(decl.Name, target);
+                    string? currentValue = _store.Get(decl.Name, target);
 
                     if (currentValue is null && decl.MustExist)
                     {
@@ -98,15 +150,6 @@ public sealed class EnvironmentVariableService
                             "Value already present in {Name}, skipping append",
                             decl.Name
                         );
-                        applied.Add(
-                            new AppliedEnvironmentVariable(
-                                decl.Name,
-                                "append",
-                                resolvedValue,
-                                decl.Separator,
-                                decl.Target
-                            )
-                        );
                         continue;
                     }
 
@@ -114,7 +157,7 @@ public sealed class EnvironmentVariableService
                         ? resolvedValue
                         : currentValue + decl.Separator + resolvedValue;
 
-                    Environment.SetEnvironmentVariable(decl.Name, newValue, target);
+                    _store.Set(decl.Name, newValue, target);
                     _logger.LogInformation(
                         "Appended to environment variable {Name}: {Value} ({Target})",
                         decl.Name,
@@ -153,12 +196,14 @@ public sealed class EnvironmentVariableService
     /// <summary>
     /// Removes all environment variable changes that were applied during installation.
     /// </summary>
-    public async Task RemoveAsync(List<AppliedEnvironmentVariable> appliedVars)
+    public async Task<List<AppliedEnvironmentVariable>> RemoveAsync(
+        List<AppliedEnvironmentVariable> appliedVars
+    )
     {
         await EnvVarLock.WaitAsync();
         try
         {
-            RemoveInternal(appliedVars);
+            return RemoveInternal(appliedVars);
         }
         finally
         {
@@ -166,8 +211,36 @@ public sealed class EnvironmentVariableService
         }
     }
 
-    private void RemoveInternal(List<AppliedEnvironmentVariable> appliedVars)
+    /// <summary>
+    /// Removes everything the tracking file lists and deletes the file only when all removals
+    /// succeeded; otherwise the tracking is narrowed to the entries that are still applied.
+    /// Returns the entries that could not be removed.
+    /// </summary>
+    public async Task<List<AppliedEnvironmentVariable>> RemoveTrackedAsync(
+        string productId,
+        string uniqueId,
+        CancellationToken cancellationToken
+    )
     {
+        List<AppliedEnvironmentVariable> applied = await LoadAppliedAsync(
+            productId,
+            uniqueId,
+            cancellationToken
+        );
+        List<AppliedEnvironmentVariable> failed =
+            applied.Count > 0 ? await RemoveAsync(applied) : [];
+        if (failed.Count == 0)
+            DeleteTracking(productId, uniqueId);
+        else
+            await SaveAppliedAsync(productId, uniqueId, failed, cancellationToken);
+        return failed;
+    }
+
+    private List<AppliedEnvironmentVariable> RemoveInternal(
+        List<AppliedEnvironmentVariable> appliedVars
+    )
+    {
+        List<AppliedEnvironmentVariable> failed = [];
         foreach (AppliedEnvironmentVariable applied in appliedVars)
         {
             try
@@ -176,7 +249,7 @@ public sealed class EnvironmentVariableService
 
                 if (applied.Action.Equals("set", StringComparison.OrdinalIgnoreCase))
                 {
-                    Environment.SetEnvironmentVariable(applied.Name, null, target);
+                    _store.Set(applied.Name, null, target);
                     _logger.LogInformation(
                         "Deleted environment variable {Name} ({Target})",
                         applied.Name,
@@ -185,7 +258,7 @@ public sealed class EnvironmentVariableService
                 }
                 else if (applied.Action.Equals("append", StringComparison.OrdinalIgnoreCase))
                 {
-                    string? currentValue = Environment.GetEnvironmentVariable(applied.Name, target);
+                    string? currentValue = _store.Get(applied.Name, target);
                     if (currentValue is null)
                         continue;
 
@@ -194,7 +267,7 @@ public sealed class EnvironmentVariableService
                         applied.AppliedValue,
                         applied.Separator
                     );
-                    Environment.SetEnvironmentVariable(applied.Name, newValue, target);
+                    _store.Set(applied.Name, newValue, target);
 
                     _logger.LogInformation(
                         "Removed appended value from {Name}: {Value} ({Target})",
@@ -211,8 +284,11 @@ public sealed class EnvironmentVariableService
                     "Failed to remove environment variable change for {Name}",
                     applied.Name
                 );
+                failed.Add(applied);
             }
         }
+
+        return failed;
     }
 
     public async Task SaveAppliedAsync(
@@ -225,19 +301,12 @@ public sealed class EnvironmentVariableService
         if (applied.Count == 0)
             return;
 
-        try
-        {
-            string path = StorkPaths.EnvVarsPath(productId, uniqueId);
-            string? directory = Path.GetDirectoryName(path);
-            if (!string.IsNullOrEmpty(directory))
-                Directory.CreateDirectory(directory);
-            string json = JsonSerializer.Serialize(applied, JsonOptions);
-            await File.WriteAllTextAsync(path, json, cancellationToken);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Could not save env var tracking for {ProductId}", productId);
-        }
+        string path = StorkPaths.EnvVarsPath(productId, uniqueId);
+        string? directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+            Directory.CreateDirectory(directory);
+        string json = JsonSerializer.Serialize(applied, JsonOptions);
+        await SafeFileWriter.WriteAtomicAsync(path, json, cancellationToken);
     }
 
     public async Task<List<AppliedEnvironmentVariable>> LoadAppliedAsync(

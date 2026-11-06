@@ -41,11 +41,22 @@ public sealed class IntegrityService : IIntegrityService
             TrackedFile file = tracked[i];
             string fullPath = Path.Combine(product.InstalledPath, file.Path);
 
-            FileIntegrityStatus status = await DetermineStatusAsync(
-                file,
-                fullPath,
-                cancellationToken
-            );
+            FileIntegrityStatus status;
+            try
+            {
+                status = await DetermineStatusAsync(file, fullPath, cancellationToken);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                _logger.LogWarning(
+                    ex,
+                    "Could not verify {File} of {ProductId}",
+                    file.Path,
+                    product.ProductId
+                );
+                status = FileIntegrityStatus.Unverifiable;
+            }
+
             entries.Add(new FileIntegrityEntry(file.Path, status));
 
             progress?.Report((int)((i + 1) * 100.0 / Math.Max(1, tracked.Count)));

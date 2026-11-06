@@ -380,6 +380,8 @@ public partial class ProductDetailViewModel : ObservableObject
         )
             return;
 
+        TrackedInstallation? activeTracked = null;
+        string productTitle = Manifest.Title;
         try
         {
             IRegistryClient client = _feedRegistry.GetClient(FeedId);
@@ -493,6 +495,7 @@ public partial class ProductDetailViewModel : ObservableObject
                 manifest.ProductId,
                 manifest.Title
             );
+            activeTracked = tracked;
             using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
             tracked.AddLog($"Installing {manifest.Title} v{manifest.Version} to {targetPath}");
 
@@ -535,6 +538,7 @@ public partial class ProductDetailViewModel : ObservableObject
             }
 
             tracked.Complete(true);
+            activeTracked = null;
             _tracker.NotifyChanged();
             try
             {
@@ -584,6 +588,21 @@ public partial class ProductDetailViewModel : ObservableObject
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to install product from detail view");
+            activeTracked?.Complete(false, ex.Message);
+            _tracker.NotifyChanged();
+            try
+            {
+                _notificationService.ShowError(
+                    LocalizationManager
+                        .GetString("Error_InstallFailed")
+                        .Replace("{0}", productTitle),
+                    ex.Message
+                );
+            }
+            catch (Exception notificationEx)
+            {
+                _logger.LogWarning(notificationEx, "Failed to show install error notification");
+            }
         }
         finally
         {

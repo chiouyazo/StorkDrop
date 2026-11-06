@@ -14,6 +14,7 @@ namespace StorkDrop.Installer;
 public sealed class UninstallService
 {
     private const int MaxRetries = 3;
+    private const int MaxUnloadCollections = 10;
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMilliseconds(500);
 
     private readonly IProductRepository _productRepository;
@@ -28,6 +29,14 @@ public sealed class UninstallService
     /// Set to true after an uninstall deferred locked files for reboot deletion.
     /// </summary>
     public bool RequiresReboot { get; private set; }
+
+    private bool _deferLockedFiles;
+
+    internal string ProgramsFolder { get; set; } =
+        Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
+            "Programs"
+        );
 
     /// <summary>
     /// Callback invoked when locked files are detected during uninstall.
@@ -73,21 +82,30 @@ public sealed class UninstallService
         );
 
         RequiresReboot = false;
+        _deferLockedFiles = false;
 
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 5, "Running pre-uninstall hooks...")
         );
-        await RunUninstallPluginPhaseAsync(product, "PreUninstall", cancellationToken);
+        List<WeakReference> pluginLoadContexts = [];
+        await RunUninstallPluginPhaseAsync(
+            product,
+            "PreUninstall",
+            pluginLoadContexts,
+            cancellationToken
+        );
 
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 8, "Running post-uninstall hooks...")
         );
-        await RunUninstallPluginPhaseAsync(product, "PostUninstall", cancellationToken);
+        await RunUninstallPluginPhaseAsync(
+            product,
+            "PostUninstall",
+            pluginLoadContexts,
+            cancellationToken
+        );
 
-        // Force GC to release plugin assembly file locks
-        GC.Collect();
-        GC.WaitForPendingFinalizers();
-        GC.Collect();
+        WaitForPluginUnload(pluginLoadContexts);
 
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 10, "Checking for locked files...")
@@ -117,7 +135,12 @@ public sealed class UninstallService
             {
                 if (OnLockedFilesDetected is not null)
                 {
-                    OnLockedFilesDetected(lockedFiles, _fileLockDetector, product.InstalledPath);
+                    ResolveLockedFilesChoice(
+                        lockedFiles,
+                        trackedPaths,
+                        product.InstalledPath,
+                        cancellationToken
+                    );
                 }
                 else
                 {
@@ -224,7 +247,7 @@ public sealed class UninstallService
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 80, "Removing shortcuts...")
         );
-        RemoveShortcuts(product.Title);
+        RemoveShortcuts(product.Title, product.InstalledPath);
 
         progress?.Report(
             new InstallProgress(InstallStage.Uninstalling, 85, "Updating product registry...")
@@ -272,9 +295,23 @@ public sealed class UninstallService
         await _feedReportService.NotifyFeedChangedAsync(product.FeedId, cancellationToken);
     }
 
+    private static void WaitForPluginUnload(List<WeakReference> loadContexts)
+    {
+        for (
+            int attempt = 0;
+            attempt < MaxUnloadCollections && loadContexts.Exists(c => c.IsAlive);
+            attempt++
+        )
+        {
+            GC.Collect();
+            GC.WaitForPendingFinalizers();
+        }
+    }
+
     private async Task RunUninstallPluginPhaseAsync(
         InstalledProduct product,
         string phase,
+        List<WeakReference> loadContexts,
         CancellationToken cancellationToken
     )
     {
@@ -369,11 +406,15 @@ public sealed class UninstallService
                         pluginInfo.TypeName
                     );
 
-                    // Run the plugin in a non-inlined method on a thread pool thread
-                    // so all assembly/plugin references die on the stack before
-                    // GC.Collect in the caller, and no SyncContext deadlock occurs.
-                    await Task.Run(() =>
-                        ExecutePluginPhase(assemblyPath, pluginInfo.TypeName, phase, context)
+                    loadContexts.Add(
+                        await Task.Run(() =>
+                            ExecutePluginPhaseAsync(
+                                assemblyPath,
+                                pluginInfo.TypeName,
+                                phase,
+                                context
+                            )
+                        )
                     );
                 }
                 catch (Exception ex)
@@ -404,7 +445,7 @@ public sealed class UninstallService
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void ExecutePluginPhase(
+    private async Task<WeakReference> ExecutePluginPhaseAsync(
         string assemblyPath,
         string typeName,
         string phase,
@@ -425,6 +466,7 @@ public sealed class UninstallService
             );
 
             ProductPluginLoadContext loadContext = new(tempDir);
+            WeakReference loadContextReference = new WeakReference(loadContext);
             try
             {
                 System.Reflection.Assembly assembly = loadContext.LoadFromStream(
@@ -436,23 +478,20 @@ public sealed class UninstallService
                     pluginType is null
                     || Activator.CreateInstance(pluginType) is not IStorkPlugin plugin
                 )
-                    return;
+                    return loadContextReference;
 
                 if (phase == "PreUninstall")
                 {
-                    PluginPreInstallResult result = plugin
-                        .PreUninstallAsync(context, CancellationToken.None)
-                        .GetAwaiter()
-                        .GetResult();
+                    PluginPreInstallResult result = await plugin.PreUninstallAsync(
+                        context,
+                        CancellationToken.None
+                    );
                     if (!result.Success)
                         _logger.LogWarning("{Phase} failed: {Message}", phase, result.Message);
                 }
                 else if (phase == "PostUninstall")
                 {
-                    plugin
-                        .PostUninstallAsync(context, CancellationToken.None)
-                        .GetAwaiter()
-                        .GetResult();
+                    await plugin.PostUninstallAsync(context, CancellationToken.None);
                 }
 
                 try
@@ -463,6 +502,8 @@ public sealed class UninstallService
                 {
                     _logger.LogWarning(cleanupEx, "Plugin cleanup failed for {TypeName}", typeName);
                 }
+
+                return loadContextReference;
             }
             finally
             {
@@ -486,15 +527,15 @@ public sealed class UninstallService
         }
     }
 
-    private static void CopyDirectoryRecursive(string source, string destination)
+    internal static void CopyDirectoryRecursive(string source, string destination)
     {
         foreach (string dir in Directory.GetDirectories(source, "*", SearchOption.AllDirectories))
         {
-            Directory.CreateDirectory(dir.Replace(source, destination));
+            Directory.CreateDirectory(Path.Combine(destination, Path.GetRelativePath(source, dir)));
         }
         foreach (string file in Directory.GetFiles(source, "*", SearchOption.AllDirectories))
         {
-            File.Copy(file, file.Replace(source, destination), true);
+            File.Copy(file, Path.Combine(destination, Path.GetRelativePath(source, file)), true);
         }
     }
 
@@ -646,51 +687,47 @@ public sealed class UninstallService
         }
     }
 
-    private static void RemoveShortcuts(string productTitle)
+    private void RemoveShortcuts(string productTitle, string installPath)
     {
-        string programsFolder = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.CommonStartMenu),
-            "Programs"
-        );
-
-        if (!Directory.Exists(programsFolder))
-            return;
+        string programsFolder = ProgramsFolder;
 
         try
         {
-            foreach (string subDir in Directory.GetDirectories(programsFolder))
-            {
-                try
-                {
-                    foreach (string lnk in Directory.GetFiles(subDir, "*.lnk"))
-                    {
-                        if (
-                            Path.GetFileNameWithoutExtension(lnk)
-                                .Contains(productTitle, StringComparison.OrdinalIgnoreCase)
-                        )
-                        {
-                            File.Delete(lnk);
-                        }
-                    }
-
-                    if (
-                        Directory.Exists(subDir)
-                        && Directory.GetFiles(subDir).Length == 0
-                        && Directory.GetDirectories(subDir).Length == 0
-                    )
-                    {
-                        Directory.Delete(subDir);
-                    }
-                }
-                catch
-                {
-                    // Best effort per folder
-                }
-            }
+            StartMenuShortcutCleaner.RemoveProductShortcuts(
+                programsFolder,
+                productTitle,
+                installPath,
+                StartMenuShortcutCleaner.ReadWithShell
+            );
         }
-        catch
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Non critical
+            _logger.LogWarning(
+                ex,
+                "Start menu shortcuts of {Title} could not be removed",
+                productTitle
+            );
+        }
+    }
+
+    private void ResolveLockedFilesChoice(
+        IReadOnlyList<LockedFileInfo> initiallyLocked,
+        List<string> trackedPaths,
+        string directory,
+        CancellationToken cancellationToken
+    )
+    {
+        IReadOnlyList<LockedFileInfo> locked = initiallyLocked;
+        while (locked.Count > 0)
+        {
+            LockedFilesAction action = OnLockedFilesDetected!(locked, _fileLockDetector, directory);
+            if (action != LockedFilesAction.Retry)
+            {
+                _deferLockedFiles = true;
+                return;
+            }
+
+            locked = _fileLockDetector.GetLockedFiles(trackedPaths, cancellationToken);
         }
     }
 
@@ -708,32 +745,44 @@ public sealed class UninstallService
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                if (attempt < MaxRetries)
+                if (attempt < MaxRetries && !_deferLockedFiles)
                 {
                     await Task.Delay(RetryDelay, cancellationToken);
                     continue;
                 }
 
-                if (OnLockedFilesDetected is not null)
+                if (!_deferLockedFiles && OnLockedFilesDetected is not null)
                 {
                     IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
                         [filePath],
                         cancellationToken
                     );
-                    if (lockedFiles.Count > 0)
+                    while (lockedFiles.Count > 0)
                     {
-                        OnLockedFilesDetected(
+                        LockedFilesAction action = OnLockedFilesDetected(
                             lockedFiles,
                             _fileLockDetector,
                             Path.GetDirectoryName(filePath)!
                         );
+                        if (action != LockedFilesAction.Retry)
+                        {
+                            _deferLockedFiles = true;
+                            break;
+                        }
 
                         try
                         {
                             File.Delete(filePath);
                             return;
                         }
-                        catch { }
+                        catch (Exception retryEx)
+                            when (retryEx is IOException or UnauthorizedAccessException)
+                        {
+                            lockedFiles = _fileLockDetector.GetLockedFiles(
+                                [filePath],
+                                cancellationToken
+                            );
+                        }
                     }
                 }
 
@@ -746,8 +795,14 @@ public sealed class UninstallService
                     string delName = $"DEL_{Guid.NewGuid():N}_{Path.GetFileName(filePath)}";
                     string delPath = Path.Combine(Path.GetDirectoryName(filePath)!, delName);
                     File.Move(filePath, delPath);
-                    _deferredFileOps.ScheduleDeleteOnReboot(delPath);
-                    RequiresReboot = true;
+                    if (_deferredFileOps.ScheduleDeleteOnReboot(delPath))
+                        RequiresReboot = true;
+                    else
+                        _logger.LogWarning(
+                            "Could not schedule {File} for deletion on reboot; it stays on disk as {DeferredName}",
+                            Path.GetFileName(filePath),
+                            delName
+                        );
                 }
                 catch (Exception renameEx)
                 {
@@ -769,20 +824,25 @@ public sealed class UninstallService
     {
         try
         {
-            List<AppliedEnvironmentVariable> applied = await _envVarService.LoadAppliedAsync(
+            List<AppliedEnvironmentVariable> notRemoved = await _envVarService.RemoveTrackedAsync(
                 productId,
                 uniqueId,
                 cancellationToken
             );
-
-            if (applied.Count > 0)
-                await _envVarService.RemoveAsync(applied);
-
-            _envVarService.DeleteTracking(productId, uniqueId);
+            if (notRemoved.Count > 0)
+                _logger.LogWarning(
+                    "{Count} environment variable change(s) of {ProductId} could not be removed and stay tracked",
+                    notRemoved.Count,
+                    productId
+                );
         }
-        catch
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            // Best effort
+            _logger.LogWarning(
+                ex,
+                "Environment variables of {ProductId} could not be removed",
+                productId
+            );
         }
     }
 }

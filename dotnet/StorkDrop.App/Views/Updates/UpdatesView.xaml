@@ -8,6 +8,7 @@
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
     <!-- Header with Update All -->
@@ -196,6 +197,23 @@
         </DataTemplate>
       </ListView.ItemTemplate>
     </ListView>
+
+    <!-- Error banner -->
+    <Border
+      Grid.Row="2"
+      Background="#FFF3E0"
+      CornerRadius="6"
+      Padding="12,8"
+      Margin="0,8,0,0"
+      Visibility="{Binding HasError, Converter={StaticResource BoolToVisibilityConverter}}"
+    >
+      <TextBlock
+        Text="{Binding ErrorMessage}"
+        FontSize="13"
+        Foreground="#E65100"
+        TextWrapping="Wrap"
+      />
+    </Border>
 
     <!-- Loading -->
     <Border

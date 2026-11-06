@@ -22,7 +22,7 @@ public sealed class NexusAuthHandler(
             try
             {
                 string credentials = Convert.ToBase64String(
-                    Encoding.ASCII.GetBytes($"{opts.Username}:{opts.Password}")
+                    Encoding.UTF8.GetBytes($"{opts.Username}:{opts.Password}")
                 );
                 request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
             }

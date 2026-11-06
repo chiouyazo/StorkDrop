@@ -8,6 +8,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInstaller(this IServiceCollection services)
     {
         services.AddSingleton<IProductRepository, ProductRepository>();
+        services.AddSingleton<IInstalledProductsSnapshot>(provider =>
+            (ProductRepository)provider.GetRequiredService<IProductRepository>()
+        );
         services.AddSingleton<IActivityLog, ActivityLogStore>();
         services.AddSingleton<IBackupService, BackupService>();
         services.AddSingleton<IConfigurationService, ConfigurationService>();

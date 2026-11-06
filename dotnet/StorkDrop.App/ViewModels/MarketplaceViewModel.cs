@@ -234,7 +234,7 @@ public partial class MarketplaceViewModel : ObservableObject
 
             Views.InstallDialog dialog = new Views.InstallDialog(
                 product.Title,
-                product.Version,
+                manifest.Version,
                 defaultPath,
                 manifest,
                 hasFileTypeHandlers,
@@ -319,7 +319,7 @@ public partial class MarketplaceViewModel : ObservableObject
                 product.Title
             );
             using var logScope = Serilog.Context.LogContext.PushProperty("InstallId", tracked.Id);
-            tracked.AddLog($"Installing {product.Title} v{product.Version} to {targetPath}");
+            tracked.AddLog($"Installing {product.Title} v{manifest.Version} to {targetPath}");
 
             InstallOptions options = new InstallOptions(
                 TargetPath: targetPath,
@@ -380,7 +380,7 @@ public partial class MarketplaceViewModel : ObservableObject
             {
                 _notificationService.ShowSuccess(
                     $"{product.Title} installed successfully",
-                    $"Version {product.Version} has been installed."
+                    $"Version {manifest.Version} has been installed."
                 );
             }
             catch (Exception ex)
@@ -393,7 +393,7 @@ public partial class MarketplaceViewModel : ObservableObject
             }
             product.IsInstalled = true;
             product.HasUpdate = false;
-            product.InstalledVersion = product.Version;
+            product.InstalledVersion = manifest.Version;
             product.IsInstalling = false;
 
             // Offer optional post-products
@@ -746,17 +746,19 @@ public partial class MarketplaceViewModel : ObservableObject
             .Select(group =>
             {
                 List<ChannelEntry> channels = group.Value;
-                ChannelEntry best = channels
-                    .OrderByDescending(c => c.Manifest.Version, VersionComparer.Instance)
-                    .First();
-                ProductManifest manifest = best.Manifest;
-
-                IEnumerable<InstalledProduct> instances = _installedProducts.Where(i =>
-                    i.ProductId == group.Key
-                );
-                int instanceCount = instances.Count();
+                List<InstalledProduct> instances = _installedProducts
+                    .Where(i => i.ProductId == group.Key)
+                    .ToList();
+                int instanceCount = instances.Count;
                 bool isInstalled = instanceCount > 0;
                 InstalledProduct? installed = instances.FirstOrDefault();
+                ChannelEntry best = MarketplaceChannelSelector.SelectBest(
+                    channels,
+                    c => c.Manifest,
+                    c => c.FeedId,
+                    installed?.FeedId
+                );
+                ProductManifest manifest = best.Manifest;
                 bool hasUpdate =
                     isInstalled && VersionComparer.IsNewer(manifest.Version, installed!.Version);
 

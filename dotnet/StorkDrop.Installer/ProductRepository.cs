@@ -7,12 +7,13 @@ using StorkDrop.Contracts.Services;
 
 namespace StorkDrop.Installer;
 
-public sealed class ProductRepository : IProductRepository, IDisposable
+public sealed class ProductRepository : IProductRepository, IInstalledProductsSnapshot, IDisposable
 {
     private readonly string _filePath;
     private readonly SemaphoreSlim _lock = new SemaphoreSlim(1, 1);
     private readonly ILogger<ProductRepository> _logger;
     private List<InstalledProduct> _products = [];
+    private volatile IReadOnlyList<InstalledProduct>? _snapshot;
     private bool _initialized;
 
     private static readonly JsonSerializerOptions JsonOptions = new JsonSerializerOptions
@@ -110,7 +111,23 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             );
         }
 
+        _snapshot = _products.ToList();
         _initialized = true;
+    }
+
+    public IReadOnlyList<InstalledProduct> GetInstances(string productId)
+    {
+        IReadOnlyList<InstalledProduct> products = _snapshot ?? ReadFromDisk();
+        return products.Where(p => p.ProductId == productId).ToList();
+    }
+
+    private IReadOnlyList<InstalledProduct> ReadFromDisk()
+    {
+        if (!File.Exists(_filePath))
+            return [];
+
+        string json = File.ReadAllText(_filePath);
+        return JsonSerializer.Deserialize<List<InstalledProduct>>(json, JsonOptions) ?? [];
     }
 
     public async Task<IReadOnlyList<InstalledProduct>> GetAllAsync(
@@ -185,6 +202,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
                 p.ProductId == product.ProductId && p.InstanceId == product.InstanceId
             );
             _products.Add(product);
+            _snapshot = _products.ToList();
             await SaveAsync(cancellationToken).ConfigureAwait(false);
         }
         finally
@@ -208,6 +226,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             if (index >= 0)
             {
                 _products[index] = product;
+                _snapshot = _products.ToList();
                 await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
         }
@@ -237,6 +256,7 @@ public sealed class ProductRepository : IProductRepository, IDisposable
             );
             if (removed > 0)
             {
+                _snapshot = _products.ToList();
                 await SaveAsync(cancellationToken).ConfigureAwait(false);
             }
         }

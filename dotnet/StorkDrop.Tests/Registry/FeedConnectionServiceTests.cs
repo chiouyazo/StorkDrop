@@ -35,6 +35,21 @@ public sealed class FeedConnectionServiceTests
     }
 
     [Fact]
+    public void CreateAuthenticatedClient_EncodesCredentialsAsUtf8()
+    {
+        using HttpClient client = _service.CreateAuthenticatedClient(
+            "https://nexus.example.com",
+            "jürgen",
+            "pässwörd€"
+        );
+
+        string decoded = System.Text.Encoding.UTF8.GetString(
+            Convert.FromBase64String(client.DefaultRequestHeaders.Authorization!.Parameter!)
+        );
+        decoded.Should().Be("jürgen:pässwörd€");
+    }
+
+    [Fact]
     public void CreateAuthenticatedClient_SkipsAuth_WhenNoCredentials()
     {
         using HttpClient client = _service.CreateAuthenticatedClient(

@@ -65,8 +65,16 @@ public partial class MainWindow : Window
         return logo;
     }
 
+    private bool _closeDecided;
+
     protected override void OnClosing(CancelEventArgs e)
     {
+        if (_closeDecided)
+        {
+            base.OnClosing(e);
+            return;
+        }
+
         if (ShouldCancelForActiveInstallations())
         {
             e.Cancel = true;
@@ -74,10 +82,10 @@ public partial class MainWindow : Window
         }
 
         TrayIconService? trayService = App.Services.GetService<TrayIconService>();
-        if (trayService?.IsVisible == true && ShouldRunInBackground())
+        if (trayService?.IsVisible == true)
         {
             e.Cancel = true;
-            Hide();
+            _ = HideOrShutdownAsync(trayService);
         }
         else
         {
@@ -88,13 +96,26 @@ public partial class MainWindow : Window
         base.OnClosing(e);
     }
 
-    private static bool ShouldRunInBackground()
+    private async Task HideOrShutdownAsync(TrayIconService trayService)
+    {
+        if (await ShouldRunInBackgroundAsync())
+        {
+            Hide();
+            return;
+        }
+
+        _closeDecided = true;
+        trayService.Hide();
+        Application.Current.Shutdown();
+    }
+
+    private static async Task<bool> ShouldRunInBackgroundAsync()
     {
         try
         {
             IConfigurationService configService =
                 App.Services.GetRequiredService<IConfigurationService>();
-            AppConfiguration? config = configService.LoadAsync().GetAwaiter().GetResult();
+            AppConfiguration? config = await configService.LoadAsync();
             return config?.RunInBackground ?? true;
         }
         catch

@@ -1,6 +1,7 @@
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 using Microsoft.Extensions.Logging;
@@ -56,18 +57,58 @@ public sealed class S3RegistryClient : IRegistryClient
             .ConfigureAwait(false);
 
         // Fetch the per-product root manifests in parallel (the S3 client is thread-safe).
-        ProductManifest?[] manifests = await Task.WhenAll(
-                productIds.Select(id => GetProductManifestAsync(id, cancellationToken))
+        (ProductManifest? Manifest, AmazonServiceException? Failure)[] results = await Task.WhenAll(
+                productIds.Select(id => TryGetProductManifestAsync(id, cancellationToken))
             )
             .ConfigureAwait(false);
 
-        return manifests.Where(m => m is not null).Cast<ProductManifest>().ToList();
+        List<ProductManifest> manifests = results
+            .Where(r => r.Manifest is not null)
+            .Select(r => r.Manifest!)
+            .ToList();
+        AmazonServiceException? firstFailure = results
+            .Select(r => r.Failure)
+            .FirstOrDefault(f => f is not null);
+        if (manifests.Count == 0 && firstFailure is not null)
+            throw firstFailure;
+
+        return manifests;
+    }
+
+    private async Task<(
+        ProductManifest? Manifest,
+        AmazonServiceException? Failure
+    )> TryGetProductManifestAsync(string productId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return (
+                await GetProductManifestAsync(productId, cancellationToken).ConfigureAwait(false),
+                null
+            );
+        }
+        catch (AmazonServiceException ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Manifest of {ProductId} in channel {Channel} could not be read",
+                productId,
+                _channel
+            );
+            return (null, ex);
+        }
     }
 
     public Task<ProductManifest?> GetProductManifestAsync(
         string productId,
         CancellationToken cancellationToken = default
-    ) => ReadManifestAsync(_layout.LatestManifestKey(_channel, productId), cancellationToken);
+    ) =>
+        ReadManifestAsync(
+            _layout.LatestManifestKey(_channel, productId),
+            productId,
+            null,
+            cancellationToken
+        );
 
     public Task<ProductManifest?> GetProductManifestAsync(
         string productId,
@@ -76,6 +117,8 @@ public sealed class S3RegistryClient : IRegistryClient
     ) =>
         ReadManifestAsync(
             _layout.VersionManifestKey(_channel, productId, version),
+            productId,
+            version,
             cancellationToken
         );
 
@@ -210,6 +253,8 @@ public sealed class S3RegistryClient : IRegistryClient
 
     private async Task<ProductManifest?> ReadManifestAsync(
         string key,
+        string productId,
+        string? version,
         CancellationToken cancellationToken
     )
     {
@@ -217,15 +262,40 @@ public sealed class S3RegistryClient : IRegistryClient
         if (json is null)
             return null;
 
+        ProductManifest? manifest;
         try
         {
-            return JsonSerializer.Deserialize<ProductManifest>(json, S3Json.Options);
+            manifest = JsonSerializer.Deserialize<ProductManifest>(json, S3Json.Options);
         }
         catch (JsonException ex)
         {
             _logger.LogWarning(ex, "Manifest at {Key} is corrupt", key);
             return null;
         }
+
+        if (
+            manifest is not null
+            && !(
+                string.Equals(manifest.ProductId, productId, StringComparison.OrdinalIgnoreCase)
+                && (
+                    version is null
+                    || VersionComparer.Instance.Compare(manifest.Version, version) == 0
+                )
+            )
+        )
+        {
+            _logger.LogWarning(
+                "Manifest at {Key} describes {ActualId} {ActualVersion}, not {ProductId} {Version}; ignoring it",
+                key,
+                manifest.ProductId,
+                manifest.Version,
+                productId,
+                version
+            );
+            return null;
+        }
+
+        return manifest;
     }
 
     private async Task<string?> ReadTextAsync(string key, CancellationToken cancellationToken)

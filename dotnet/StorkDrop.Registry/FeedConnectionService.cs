@@ -25,9 +25,7 @@ public sealed class FeedConnectionService : IFeedConnectionService
 
         if (!string.IsNullOrEmpty(username) && !string.IsNullOrEmpty(password))
         {
-            string creds = Convert.ToBase64String(
-                Encoding.ASCII.GetBytes($"{username}:{password}")
-            );
+            string creds = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{username}:{password}"));
             httpClient.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue(
                 "Basic",
                 creds

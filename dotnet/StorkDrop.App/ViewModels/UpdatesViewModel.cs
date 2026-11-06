@@ -53,6 +53,10 @@ public partial class UpdatesViewModel : ObservableObject
     [ObservableProperty]
     private bool _isUpdatingAll;
 
+    public bool HasError => !string.IsNullOrEmpty(ErrorMessage);
+
+    partial void OnErrorMessageChanged(string value) => OnPropertyChanged(nameof(HasError));
+
     private CancellationTokenSource? _cts;
 
     [RelayCommand]
@@ -141,6 +145,7 @@ public partial class UpdatesViewModel : ObservableObject
         try
         {
             IsUpdatingAll = true;
+            ErrorMessage = string.Empty;
             // Prompt at most once per locked feed for the whole batch.
             FeedUnlockScope scope = _feedLock.CreateScope();
             List<UpdateItemViewModel> snapshot = [.. Updates];
@@ -179,6 +184,7 @@ public partial class UpdatesViewModel : ObservableObject
         )
             return;
 
+        ErrorMessage = string.Empty;
         if (await UpdateOneAsync(update))
         {
             await _dependentUpdates.OfferDependentUpdatesAsync(
@@ -190,6 +196,31 @@ public partial class UpdatesViewModel : ObservableObject
         }
     }
 
+    private void ReportChangedVersion(
+        UpdateItemViewModel update,
+        InstalledProduct installed,
+        ProductManifest? latest
+    )
+    {
+        if (latest is not null && VersionComparer.IsNewer(latest.Version, installed.Version))
+        {
+            string approved = update.AvailableVersion;
+            update.AvailableVersion = latest.Version;
+            update.ReleaseNotes = latest.ReleaseNotes ?? string.Empty;
+            ErrorMessage = LocalizationManager
+                .GetString("Update_VersionChanged")
+                .Replace("{0}", update.Title)
+                .Replace("{1}", approved)
+                .Replace("{2}", latest.Version);
+            return;
+        }
+
+        Updates.Remove(update);
+        ErrorMessage = LocalizationManager
+            .GetString("Update_NoLongerAvailable")
+            .Replace("{0}", update.Title);
+    }
+
     private async Task<bool> UpdateOneAsync(UpdateItemViewModel update)
     {
         try
@@ -197,26 +228,34 @@ public partial class UpdatesViewModel : ObservableObject
             using CancellationTokenSource cts = new CancellationTokenSource();
             CancellationToken cancellationToken = cts.Token;
 
-            var fetchResult = await Task.Run(async () =>
-            {
-                InstalledProduct? inst = await _productRepository.GetByIdAsync(
-                    update.ProductId,
-                    update.InstanceId,
-                    cancellationToken
-                );
-                IRegistryClient cl = _feedRegistry.GetClient(update.FeedId);
-                ProductManifest? man = await cl.GetProductManifestAsync(
-                    update.ProductId,
-                    cancellationToken
-                );
-                return (inst, man);
-            });
+            (InstalledProduct? inst, ApprovedUpdateResolution resolution) fetchResult =
+                await Task.Run(async () =>
+                {
+                    InstalledProduct? inst = await _productRepository.GetByIdAsync(
+                        update.ProductId,
+                        update.InstanceId,
+                        cancellationToken
+                    );
+                    IRegistryClient cl = _feedRegistry.GetClient(update.FeedId);
+                    ApprovedUpdateResolution resolution = await ApprovedUpdateResolver.ResolveAsync(
+                        cl,
+                        update.ProductId,
+                        update.AvailableVersion,
+                        cancellationToken
+                    );
+                    return (inst, resolution);
+                });
 
             InstalledProduct? installed = fetchResult.inst;
-            ProductManifest? manifest = fetchResult.man;
-
-            if (installed is null || manifest is null)
+            if (installed is null)
                 return false;
+
+            ProductManifest? manifest = fetchResult.resolution.Approved;
+            if (manifest is null)
+            {
+                ReportChangedVersion(update, installed, fetchResult.resolution.CurrentLatest);
+                return false;
+            }
 
             update.IsUpdating = true;
             update.UpdatePercentage = 0;
@@ -251,7 +290,7 @@ public partial class UpdatesViewModel : ObservableObject
                     manifest,
                     options,
                     progress,
-                    cancellationToken
+                    tracked.Cts.Token
                 )
             );
 

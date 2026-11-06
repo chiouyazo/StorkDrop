@@ -27,6 +27,7 @@ public sealed class InstallationEngine : IInstallationEngine
     private readonly IFeedReportService _feedReportService;
     private readonly List<IFileTypeHandler> _fileTypeHandlers;
     private IProgress<InstallProgress>? _currentProgress;
+    private static readonly TimeSpan RollbackPluginTimeout = TimeSpan.FromMinutes(5);
 
     /// <inheritdoc />
     /// <inheritdoc />
@@ -44,10 +45,18 @@ public sealed class InstallationEngine : IInstallationEngine
     public Func<InstancePickRequest, InstalledProduct?>? OnPickInstalledInstance { get; set; }
     public Func<string, object[], string>? OnLocalize { get; set; }
 
-    private IReadOnlyList<InstalledProduct> GetInstalledInstances(string productId) =>
-        Task.Run(() => _productRepository.GetInstancesAsync(productId, CancellationToken.None))
-            .GetAwaiter()
-            .GetResult();
+    private async Task<
+        Func<string, IReadOnlyList<InstalledProduct>>
+    > CreateInstalledInstancesLookupAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync(
+            cancellationToken
+        );
+        return productId =>
+            installed
+                .Where(p => string.Equals(p.ProductId, productId, StringComparison.Ordinal))
+                .ToList();
+    }
 
     public IInteractiveStorkPlugin? CurrentInteractivePlugin { get; private set; }
 
@@ -596,6 +605,8 @@ public sealed class InstallationEngine : IInstallationEngine
         InstalledProduct? existingProduct = null;
         string instanceUniqueId = string.Empty;
         string? extractPath = null;
+        bool preInstallPassed = false;
+        bool filesCopyStarted = false;
 
         _logger.LogInformation(
             "Starting installation of {ProductId} v{Version} to {TargetPath}",
@@ -850,6 +861,8 @@ public sealed class InstallationEngine : IInstallationEngine
                 };
             }
 
+            preInstallPassed = true;
+
             // Update only: now that PreInstall succeeded (and stopped the product's own services),
             // remove the previous install's files. Doing this after PreInstall means a failed PreInstall
             // leaves the existing install untouched, and the services are no longer holding their files.
@@ -885,7 +898,19 @@ public sealed class InstallationEngine : IInstallationEngine
                 cancellationToken
             );
             if (pathError is not null)
+            {
+                if (existingProduct is null && !pathError.Success)
+                    await CleanUpFailedFreshInstallAsync(
+                        manifest,
+                        options,
+                        instanceUniqueId,
+                        resolvedPath ?? options.TargetPath,
+                        extractPath,
+                        runPostUninstall: true,
+                        removeInstallDir: false
+                    );
                 return pathError;
+            }
 
             pluginContext.InstallPath = resolvedPath;
 
@@ -933,6 +958,7 @@ public sealed class InstallationEngine : IInstallationEngine
                 }
             }
 
+            filesCopyStarted = true;
             InstallResult? copyError = await CopyFilesToTargetAsync(
                 copySourcePath,
                 resolvedPath,
@@ -941,7 +967,19 @@ public sealed class InstallationEngine : IInstallationEngine
                 cancellationToken
             );
             if (copyError is not null)
+            {
+                if (existingProduct is null)
+                    await CleanUpFailedFreshInstallAsync(
+                        manifest,
+                        options,
+                        instanceUniqueId,
+                        resolvedPath,
+                        extractPath,
+                        runPostUninstall: true,
+                        removeInstallDir: true
+                    );
                 return copyError;
+            }
 
             // Unload plugin contexts from PreInstall phase before copying to .stork/
             // (the DLLs may already exist from a previous install and be locked)
@@ -1071,7 +1109,19 @@ public sealed class InstallationEngine : IInstallationEngine
                 progress
             );
             if (verifyError is not null)
+            {
+                if (existingProduct is null)
+                    await CleanUpFailedFreshInstallAsync(
+                        manifest,
+                        options,
+                        instanceUniqueId,
+                        resolvedPath,
+                        extractPath,
+                        runPostUninstall: true,
+                        removeInstallDir: true
+                    );
                 return verifyError;
+            }
 
             await FinalizeInstallationAsync(
                 manifest,
@@ -1103,14 +1153,33 @@ public sealed class InstallationEngine : IInstallationEngine
         }
         catch (OperationCanceledException)
         {
-            progress.Report(
-                new InstallProgress(
-                    InstallStage.Installing,
-                    0,
-                    "Installation cancelled. Cleaning up..."
-                )
-            );
             _logger.LogWarning("Installation of {ProductId} cancelled by user", manifest.ProductId);
+            if (existingProduct is null && preInstallPassed)
+            {
+                progress.Report(
+                    new InstallProgress(
+                        InstallStage.Installing,
+                        0,
+                        "Installation cancelled. Cleaning up..."
+                    )
+                );
+                await CleanUpFailedFreshInstallAsync(
+                    manifest,
+                    options,
+                    instanceUniqueId,
+                    resolvedPath ?? options.TargetPath,
+                    extractPath,
+                    runPostUninstall: true,
+                    removeInstallDir: filesCopyStarted
+                );
+            }
+            else
+            {
+                progress.Report(
+                    new InstallProgress(InstallStage.Installing, 0, "Installation cancelled.")
+                );
+            }
+
             return new InstallResult
             {
                 Success = false,
@@ -1162,43 +1231,22 @@ public sealed class InstallationEngine : IInstallationEngine
                 new InstallProgress(
                     InstallStage.Installing,
                     0,
-                    $"Installation failed: {ex.Message}. Cleaning up..."
+                    freshInstall
+                        ? $"Installation failed: {ex.Message}. Cleaning up..."
+                        : $"Installation failed: {ex.Message}"
                 )
             );
 
-            if (freshInstall && manifest.Plugins is { Length: > 0 })
-            {
-                try
-                {
-                    ReportProgress(
-                        InstallStage.Installing,
-                        0,
-                        "Cleaning up database entries after failed install..."
-                    );
-                    PluginContext cleanupContext = await BuildPluginContextAsync(
-                        manifest,
-                        options,
-                        instanceUniqueId,
-                        cancellationToken
-                    );
-                    cleanupContext.InstallPath = installPath;
-                    await RunPluginPhaseAsync(
-                        manifest,
-                        options,
-                        cleanupContext,
-                        PluginPhase.PostUninstall,
-                        cancellationToken,
-                        extractPath
-                    );
-                }
-                catch (Exception cleanupEx)
-                {
-                    _logger.LogWarning(cleanupEx, "PostUninstall cleanup failed");
-                }
-            }
-
             if (freshInstall)
-                TryRemoveInstallDir(installPath);
+                await CleanUpFailedFreshInstallAsync(
+                    manifest,
+                    options,
+                    instanceUniqueId,
+                    installPath,
+                    extractPath,
+                    runPostUninstall: true,
+                    removeInstallDir: filesCopyStarted
+                );
 
             return new InstallResult
             {
@@ -1212,6 +1260,52 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             CleanupTempDirectory(tempDir, progress);
         }
+    }
+
+    private async Task CleanUpFailedFreshInstallAsync(
+        ProductManifest manifest,
+        InstallOptions options,
+        string instanceUniqueId,
+        string installPath,
+        string? extractPath,
+        bool runPostUninstall,
+        bool removeInstallDir
+    )
+    {
+        if (runPostUninstall && manifest.Plugins is { Length: > 0 })
+        {
+            using CancellationTokenSource cleanupTimeout = new(RollbackPluginTimeout);
+            try
+            {
+                ReportProgress(
+                    InstallStage.Installing,
+                    0,
+                    "Cleaning up database entries after failed install..."
+                );
+                PluginContext cleanupContext = await BuildPluginContextAsync(
+                    manifest,
+                    options,
+                    instanceUniqueId,
+                    cleanupTimeout.Token
+                );
+                cleanupContext.InstallPath = installPath;
+                await RunPluginPhaseAsync(
+                    manifest,
+                    options,
+                    cleanupContext,
+                    PluginPhase.PostUninstall,
+                    cleanupTimeout.Token,
+                    extractPath
+                );
+            }
+            catch (Exception cleanupEx)
+            {
+                _logger.LogWarning(cleanupEx, "PostUninstall cleanup failed");
+            }
+        }
+
+        if (removeInstallDir)
+            TryRemoveInstallDir(installPath);
     }
 
     private async Task<InstallResult?> TryElevateInstallAsync(
@@ -2405,21 +2499,38 @@ public sealed class InstallationEngine : IInstallationEngine
         }
 
         string? backupPath = null;
+        string? metadataBackupPath = null;
         if (options.CreateBackup && Directory.Exists(installed.InstalledPath))
         {
-            IReadOnlyList<string> backupFiles = lockCheckManifest ?? [];
-            _logger.LogInformation(
-                "Creating backup of {ProductId} ({Count} tracked files) before update",
-                installed.ProductId,
-                backupFiles.Count
+            IReadOnlyList<string> backupFiles = CollectBackupFiles(
+                installed.InstalledPath,
+                lockCheckManifest,
+                newManifest
             );
             long backupStartTicks = Environment.TickCount64;
-            backupPath = await _backupService.CreateBackupAsync(
-                installed.ProductId,
-                installed.InstalledPath,
-                backupFiles,
-                cancellationToken
-            );
+            if (backupFiles.Count > 0)
+            {
+                _logger.LogInformation(
+                    "Creating backup of {ProductId} ({Count} files) before update",
+                    installed.ProductId,
+                    backupFiles.Count
+                );
+                backupPath = await _backupService.CreateBackupAsync(
+                    installed.ProductId,
+                    installed.InstalledPath,
+                    backupFiles,
+                    cancellationToken
+                );
+            }
+            else
+            {
+                _logger.LogWarning(
+                    "No files to back up for {ProductId}; the update runs without a backup",
+                    installed.ProductId
+                );
+            }
+
+            metadataBackupPath = await CreateMetadataBackupAsync(installed, cancellationToken);
             _logger.LogInformation(
                 "Backup of {ProductId} complete in {ElapsedMs}ms",
                 installed.ProductId,
@@ -2459,21 +2570,26 @@ public sealed class InstallationEngine : IInstallationEngine
             );
             try
             {
-                List<AppliedEnvironmentVariable> oldEnvVars = await _envVarService.LoadAppliedAsync(
-                    installed.ProductId,
-                    installed.InstanceUniqueId ?? string.Empty,
-                    cancellationToken
-                );
-                if (oldEnvVars.Count > 0)
-                    await _envVarService.RemoveAsync(oldEnvVars);
-                _envVarService.DeleteTracking(
-                    installed.ProductId,
-                    installed.InstanceUniqueId ?? string.Empty
-                );
+                List<AppliedEnvironmentVariable> notRemoved =
+                    await _envVarService.RemoveTrackedAsync(
+                        installed.ProductId,
+                        installed.InstanceUniqueId ?? string.Empty,
+                        cancellationToken
+                    );
+                if (notRemoved.Count > 0)
+                    _logger.LogWarning(
+                        "{Count} environment variable change(s) of {ProductId} could not be removed and stay tracked",
+                        notRemoved.Count,
+                        installed.ProductId
+                    );
             }
-            catch
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // Best-effort
+                _logger.LogWarning(
+                    ex,
+                    "Old environment variables of {ProductId} could not be removed",
+                    installed.ProductId
+                );
             }
 
             // The old files are removed inside InstallInternalAsync, after the plugin's PreInstall
@@ -2531,7 +2647,8 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             _logger.LogError(ex, "Update failed for {ProductId}", installed.ProductId);
 
-            if (!ShouldRollBackAfterFailure(installed, newManifest, ex))
+            bool cancelled = cancellationToken.IsCancellationRequested;
+            if (!cancelled && !ShouldRollBackAfterFailure(installed, newManifest, ex))
             {
                 _logger.LogWarning(
                     "Rollback declined for {ProductId}; keeping the updated files.",
@@ -2562,7 +2679,14 @@ public sealed class InstallationEngine : IInstallationEngine
                 )
             );
 
-            await StopProductServicesForRollbackAsync(installed, newManifest, cancellationToken);
+            using (CancellationTokenSource rollbackPluginTimeout = new(RollbackPluginTimeout))
+            {
+                await StopProductServicesForRollbackAsync(
+                    installed,
+                    newManifest,
+                    rollbackPluginTimeout.Token
+                );
+            }
 
             if (backupPath is not null && Directory.Exists(installed.InstalledPath))
             {
@@ -2618,12 +2742,117 @@ public sealed class InstallationEngine : IInstallationEngine
                 await _backupService.RestoreBackupAsync(
                     backupPath,
                     installed.InstalledPath,
-                    cancellationToken
+                    CancellationToken.None
                 );
             }
+
+            await RestoreMetadataAsync(installed, metadataBackupPath);
+            if (cancelled)
+                throw new OperationCanceledException(cancellationToken);
             throw;
         }
     }
+
+    private static IReadOnlyList<string> CollectBackupFiles(
+        string installPath,
+        IReadOnlyList<string>? trackedFiles,
+        ProductManifest newManifest
+    )
+    {
+        HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (trackedFiles is { Count: > 0 })
+            files.UnionWith(trackedFiles);
+        else if (!newManifest.SharedInstallLocation)
+            files.UnionWith(
+                Directory
+                    .GetFiles(installPath, "*", SearchOption.AllDirectories)
+                    .Select(file => Path.GetRelativePath(installPath, file))
+            );
+
+        string[] preservedPatterns =
+        [
+            .. newManifest.ExcludeFiles ?? [],
+            .. newManifest.PreserveOnSwitch ?? [],
+        ];
+        foreach (string preserved in ResolveExcludedFiles(installPath, preservedPatterns))
+            files.Add(Path.GetRelativePath(installPath, preserved));
+
+        return files.ToList();
+    }
+
+    private async Task<string?> CreateMetadataBackupAsync(
+        InstalledProduct installed,
+        CancellationToken cancellationToken
+    )
+    {
+        string uniqueId = installed.InstanceUniqueId ?? string.Empty;
+        string configDir = StorkPaths.StorkConfigDir;
+        string metadataDir = StorkPaths.ProductMetadataDir(installed.ProductId, uniqueId);
+
+        List<string> files = [];
+        if (Directory.Exists(metadataDir))
+            files.AddRange(
+                Directory
+                    .GetFiles(metadataDir, "*", SearchOption.AllDirectories)
+                    .Select(file => Path.GetRelativePath(configDir, file))
+            );
+        foreach (
+            string sibling in new[]
+            {
+                StorkPaths.FileManifestPath(installed.ProductId, uniqueId),
+                StorkPaths.InstancePluginConfigPath(installed.ProductId, uniqueId),
+            }
+        )
+        {
+            if (File.Exists(sibling))
+                files.Add(Path.GetRelativePath(configDir, sibling));
+        }
+
+        if (files.Count == 0)
+            return null;
+
+        return await _backupService.CreateBackupAsync(
+            MetadataBackupKey(installed),
+            configDir,
+            files,
+            cancellationToken
+        );
+    }
+
+    private async Task RestoreMetadataAsync(InstalledProduct installed, string? metadataBackupPath)
+    {
+        if (metadataBackupPath is null)
+            return;
+
+        string metadataDir = StorkPaths.ProductMetadataDir(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty
+        );
+        try
+        {
+            if (Directory.Exists(metadataDir))
+                Directory.Delete(metadataDir, recursive: true);
+
+            await _backupService.RestoreBackupAsync(
+                metadataBackupPath,
+                StorkPaths.StorkConfigDir,
+                CancellationToken.None
+            );
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            _logger.LogError(
+                ex,
+                "Could not restore the .stork metadata of {ProductId} from {BackupPath}",
+                installed.ProductId,
+                metadataBackupPath
+            );
+        }
+    }
+
+    private static string MetadataBackupKey(InstalledProduct installed) =>
+        $"{installed.ProductId}_{installed.InstanceUniqueId}.stork";
 
     /// <summary>
     /// Before restoring a backup, lets each product plugin release its file locks (typically by stopping
@@ -2641,11 +2870,11 @@ public sealed class InstallationEngine : IInstallationEngine
         if (newManifest.Plugins is not { Length: > 0 })
             return;
 
-        string pluginsDir = StorkPaths.ProductPluginsDir(
+        string metadataDir = StorkPaths.ProductMetadataDir(
             installed.ProductId,
             installed.InstanceUniqueId ?? string.Empty
         );
-        if (!Directory.Exists(pluginsDir))
+        if (!Directory.Exists(Path.Combine(metadataDir, "plugins")))
             return;
 
         PluginContext context = new PluginContext
@@ -2666,7 +2895,7 @@ public sealed class InstallationEngine : IInstallationEngine
             {
                 try
                 {
-                    IStorkPlugin? plugin = LoadPlugin(pluginsDir, pluginInfo, contexts);
+                    IStorkPlugin? plugin = LoadPlugin(metadataDir, pluginInfo, contexts);
                     if (plugin is IRollbackAwarePlugin rollbackAware)
                         await rollbackAware.PrepareForRollbackAsync(context, cancellationToken);
                 }
@@ -3206,7 +3435,9 @@ public sealed class InstallationEngine : IInstallationEngine
                     Log = message => _logger.LogInformation("[Plugin] {Message}", message),
                     Prompt = OnPrompt,
                     PickInstalledInstance = OnPickInstalledInstance,
-                    GetInstalledInstances = GetInstalledInstances,
+                    GetInstalledInstances = await CreateInstalledInstancesLookupAsync(
+                        cancellationToken
+                    ),
                 };
 
                 bool preEnabled = manifest!.Plugins!.Any(p =>
@@ -3395,17 +3626,25 @@ public sealed class InstallationEngine : IInstallationEngine
 
                 // PreInstall/PostInstall: use extraction dir if available (guarantees fresh DLL)
                 // Uninstall: use .stork/ under the target dir (extraction dir no longer exists)
+                string metadataSearchPath = StorkPaths.ProductMetadataDir(
+                    manifest.ProductId,
+                    context.InstanceUniqueId
+                );
                 string pluginSearchPath;
                 if (
                     extractPath is not null
-                    && (phase == PluginPhase.PreInstall || phase == PluginPhase.PostInstall)
+                    && (
+                        phase == PluginPhase.PreInstall
+                        || phase == PluginPhase.PostInstall
+                        || (
+                            phase == PluginPhase.PostUninstall
+                            && !File.Exists(Path.Combine(metadataSearchPath, pluginInfo.Assembly))
+                        )
+                    )
                 )
                     pluginSearchPath = extractPath;
                 else
-                    pluginSearchPath = StorkPaths.ProductMetadataDir(
-                        manifest.ProductId,
-                        context.InstanceUniqueId
-                    );
+                    pluginSearchPath = metadataSearchPath;
                 plugin = LoadPlugin(pluginSearchPath, pluginInfo, _activePluginContexts);
                 if (plugin is null)
                 {
@@ -4162,7 +4401,7 @@ public sealed class InstallationEngine : IInstallationEngine
             },
             Prompt = OnPrompt,
             PickInstalledInstance = OnPickInstalledInstance,
-            GetInstalledInstances = GetInstalledInstances,
+            GetInstalledInstances = await CreateInstalledInstancesLookupAsync(cancellationToken),
         };
     }
 
@@ -4361,14 +4600,11 @@ public sealed class InstallationEngine : IInstallationEngine
 
         try
         {
-            List<AppliedEnvironmentVariable> applied = await _envVarService.ApplyAsync(
-                manifest.EnvironmentVariables,
-                installPath
-            );
-            await _envVarService.SaveAppliedAsync(
+            await _envVarService.ApplyTrackedAsync(
                 manifest.ProductId,
                 uniqueId,
-                applied,
+                manifest.EnvironmentVariables,
+                installPath,
                 cancellationToken
             );
         }

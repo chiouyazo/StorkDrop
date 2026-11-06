@@ -9,6 +9,45 @@ public sealed class FileLockDetectorTests
     private readonly FileLockDetector _detector = new();
 
     [Fact]
+    public void IsFileLocked_ForFileHeldWithoutSharing_ReturnsTrue()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"storkdrop-lock-{Guid.NewGuid():N}.dll");
+        File.WriteAllText(path, "x");
+        try
+        {
+            using FileStream hold = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.ReadWrite,
+                FileShare.None
+            );
+
+            new FileLockDetector().IsFileLocked(path).Should().BeTrue();
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void IsFileLocked_ForReadOnlyFileNobodyUses_ReturnsFalse()
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"storkdrop-lock-{Guid.NewGuid():N}.dll");
+        File.WriteAllText(path, "x");
+        File.SetAttributes(path, FileAttributes.ReadOnly);
+        try
+        {
+            new FileLockDetector().IsFileLocked(path).Should().BeFalse();
+        }
+        finally
+        {
+            File.SetAttributes(path, FileAttributes.Normal);
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
     public void ThrowIfAnyLocked_DoesNothingForNonExistentDirectory()
     {
         string dir = Path.Combine(Path.GetTempPath(), "StorkDropTests", Guid.NewGuid().ToString());

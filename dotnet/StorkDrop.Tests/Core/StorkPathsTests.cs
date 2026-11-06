@@ -4,6 +4,7 @@ using Xunit;
 
 namespace StorkDrop.Tests.Core;
 
+[Collection(StorkDrop.Tests.Installer.StorkPathsCollection.Name)]
 public sealed class StorkPathsTests
 {
     [Fact]

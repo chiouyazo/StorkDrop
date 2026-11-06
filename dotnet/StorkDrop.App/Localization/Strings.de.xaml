@@ -297,6 +297,12 @@
   <system:String x:Key="Rollback_KeepInstall">Installation behalten</system:String>
   <system:String x:Key="Rollback_RemoveInstall">Entfernen</system:String>
   <system:String x:Key="Error_UpdateProductFailed">Update von {0} fehlgeschlagen</system:String>
+  <system:String x:Key="Update_VersionChanged"
+    >Die verfügbare Version von {0} hat sich von {1} auf {2} geändert. Es wurde nichts installiert. Bitte die neue Version prüfen und erneut auf Aktualisieren klicken.</system:String
+  >
+  <system:String x:Key="Update_NoLongerAvailable"
+    >Das Update von {0} ist nicht mehr verfügbar. Es wurde nichts installiert.</system:String
+  >
   <system:String x:Key="Error_LoadSettingsFailed">
     Fehler beim Laden der Einstellungen
   </system:String

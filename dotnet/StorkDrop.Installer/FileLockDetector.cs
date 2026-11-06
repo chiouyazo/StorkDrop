@@ -67,14 +67,20 @@ public sealed class FileLockDetector : IFileLockDetector
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+            when (ex is DllNotFoundException or EntryPointNotFoundException or ExternalException)
+        {
+            return processes;
+        }
         finally
         {
             try
             {
                 NativeMethods.RmEndSession(sessionHandle);
             }
-            catch { }
+            catch (Exception ex)
+                when (ex is DllNotFoundException or EntryPointNotFoundException or ExternalException
+                ) { }
         }
 
         return processes;
@@ -232,9 +238,10 @@ public sealed class FileLockDetector : IFileLockDetector
         }
         catch (UnauthorizedAccessException)
         {
-            // ACL / read-only, not an in-use lock. Elevation and attribute handling deal with that
-            // elsewhere; reporting it here would false-positive when the probe runs unelevated.
-            return false;
+            // ACL / read-only is not an in-use lock and would false-positive when the probe runs
+            // unelevated, but the same error can hide a file that a running process holds. Only
+            // treat it as locked when the Restart Manager names a process using the file.
+            return GetLockingProcesses(filePath).Count > 0;
         }
         finally
         {
@@ -309,12 +316,20 @@ public sealed class FileLockDetector : IFileLockDetector
 
                         try
                         {
-                            Process proc = Process.GetProcessById(pid);
+                            using Process proc = Process.GetProcessById(pid);
                             if (string.IsNullOrWhiteSpace(appName))
                                 appName = proc.ProcessName;
                             userName = GetProcessOwner(pid);
                         }
-                        catch { }
+                        catch (Exception ex)
+                            when (ex
+                                    is ArgumentException
+                                        or InvalidOperationException
+                                        or ExternalException
+                            )
+                        {
+                            userName = string.Empty;
+                        }
 
                         if (string.IsNullOrWhiteSpace(appName))
                             continue;
@@ -333,14 +348,20 @@ public sealed class FileLockDetector : IFileLockDetector
                 }
             }
         }
-        catch { }
+        catch (Exception ex)
+            when (ex is DllNotFoundException or EntryPointNotFoundException or ExternalException)
+        {
+            return processes;
+        }
         finally
         {
             try
             {
                 NativeMethods.RmEndSession(sessionHandle);
             }
-            catch { }
+            catch (Exception ex)
+                when (ex is DllNotFoundException or EntryPointNotFoundException or ExternalException
+                ) { }
         }
 
         return processes;

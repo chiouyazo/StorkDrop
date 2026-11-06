@@ -334,18 +334,10 @@ public partial class App : Application
             {
                 try
                 {
-                    string tempDir = StorkDrop.Contracts.Services.StorkPaths.TempDir;
-                    if (Directory.Exists(tempDir))
-                    {
-                        foreach (string dir in Directory.GetDirectories(tempDir))
-                        {
-                            try
-                            {
-                                Directory.Delete(dir, true);
-                            }
-                            catch { }
-                        }
-                    }
+                    StorkDrop.Installer.TempDirectoryCleaner.DeleteStaleSubdirectories(
+                        StorkDrop.Contracts.Services.StorkPaths.TempDir,
+                        StorkDrop.Installer.TempDirectoryCleaner.DefaultMinimumAge
+                    );
                 }
                 catch { }
             });
@@ -523,12 +515,9 @@ public partial class App : Application
             InstalledProduct? result = null;
             try
             {
-                IProductRepository repository = Services.GetRequiredService<IProductRepository>();
-                IReadOnlyList<InstalledProduct> instances = Task.Run(() =>
-                        repository.GetInstancesAsync(request.ProductId)
-                    )
-                    .GetAwaiter()
-                    .GetResult();
+                IReadOnlyList<InstalledProduct> instances = Services
+                    .GetRequiredService<StorkDrop.Installer.IInstalledProductsSnapshot>()
+                    .GetInstances(request.ProductId);
                 if (instances.Count == 0)
                     return null;
 
