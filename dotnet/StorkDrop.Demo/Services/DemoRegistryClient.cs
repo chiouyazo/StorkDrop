@@ -1,84 +1,66 @@
 using System.IO;
+using System.Net;
+using System.Net.Http;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
 using StorkDrop.Contracts.Services;
+using StorkDrop.Demo.Scenarios;
 
 namespace StorkDrop.Demo.Services;
 
 internal sealed class DemoRegistryClient : IRegistryClient
 {
-    private readonly IReadOnlyList<ProductManifest> _products;
-    private readonly IReadOnlyList<string>? _versions;
-    private readonly string? _badgeText;
-    private readonly string? _badgeColor;
+    private readonly DemoFeedContent _content;
 
-    public DemoRegistryClient(
-        IReadOnlyList<ProductManifest> products,
-        IReadOnlyList<string>? versions = null,
-        string? badgeText = null,
-        string? badgeColor = null
-    )
+    public DemoRegistryClient(DemoFeedContent content)
     {
-        _products = products;
-        _versions = versions;
-        _badgeText = badgeText;
-        _badgeColor = badgeColor;
+        _content = content;
     }
 
-    private ProductManifest Decorate(ProductManifest manifest) =>
-        _badgeText is null && _badgeColor is null
-            ? manifest
-            : manifest with
-            {
-                BadgeText = _badgeText ?? manifest.BadgeText,
-                BadgeColor = _badgeColor ?? manifest.BadgeColor,
-            };
-
-    public Task<IReadOnlyList<ProductManifest>> GetAllProductsAsync(
+    public async Task<IReadOnlyList<ProductManifest>> GetAllProductsAsync(
         CancellationToken cancellationToken = default
-    ) => Task.FromResult<IReadOnlyList<ProductManifest>>(_products.Select(Decorate).ToList());
+    )
+    {
+        await _content.EnsureReachableAsync(cancellationToken);
+        return _content.GetLatestManifests();
+    }
 
-    public Task<ProductManifest?> GetProductManifestAsync(
+    public async Task<ProductManifest?> GetProductManifestAsync(
         string productId,
         CancellationToken cancellationToken = default
     )
     {
-        ProductManifest? product = _products.FirstOrDefault(p => p.ProductId == productId);
-        if (product is null)
-            return Task.FromResult<ProductManifest?>(null);
-
-        string latest = _versions is { Count: > 0 }
-            ? _versions.OrderByDescending(v => v, VersionComparer.Instance).First()
-            : product.Version;
-
-        return Task.FromResult<ProductManifest?>(Decorate(product with { Version = latest }));
+        await _content.EnsureReachableAsync(cancellationToken);
+        return _content.Find(productId, null);
     }
 
-    public Task<ProductManifest?> GetProductManifestAsync(
+    public async Task<ProductManifest?> GetProductManifestAsync(
         string productId,
         string version,
         CancellationToken cancellationToken = default
     )
     {
-        ProductManifest? product = _products.FirstOrDefault(p => p.ProductId == productId);
-        if (product is null)
-            return Task.FromResult<ProductManifest?>(null);
+        await _content.EnsureReachableAsync(cancellationToken);
+        if (_content.FailsVersionLookup(productId, version))
+            throw new HttpRequestException(
+                "Response status code does not indicate success: 503 (Service Unavailable).",
+                null,
+                HttpStatusCode.ServiceUnavailable
+            );
 
-        return Task.FromResult<ProductManifest?>(Decorate(product with { Version = version }));
+        return _content.Find(productId, version);
     }
 
-    public Task<IReadOnlyList<string>> GetAvailableVersionsAsync(
+    public async Task<IReadOnlyList<string>> GetAvailableVersionsAsync(
         string productId,
         CancellationToken cancellationToken = default
     )
     {
-        ProductManifest? product = _products.FirstOrDefault(p => p.ProductId == productId);
-        if (product is null)
-            return Task.FromResult<IReadOnlyList<string>>([]);
-
-        return Task.FromResult<IReadOnlyList<string>>(
-            _versions ?? ["1.0.0", "1.1.0", product.Version]
-        );
+        await _content.EnsureReachableAsync(cancellationToken);
+        return _content
+            .Versions(productId)
+            .OrderByDescending(v => v, VersionComparer.Instance)
+            .ToList();
     }
 
     public Task<Stream> DownloadProductAsync(
@@ -87,6 +69,9 @@ internal sealed class DemoRegistryClient : IRegistryClient
         CancellationToken cancellationToken = default
     ) => Task.FromResult<Stream>(new MemoryStream());
 
-    public Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(true);
+    public async Task<bool> TestConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        await _content.EnsureReachableAsync(cancellationToken);
+        return true;
+    }
 }

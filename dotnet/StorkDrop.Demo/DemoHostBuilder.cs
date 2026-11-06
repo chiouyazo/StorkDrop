@@ -20,6 +20,7 @@ internal static class DemoHostBuilder
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
             .WriteTo.Console()
+            .WriteTo.Sink(new InstallLogSink())
             .CreateLogger();
 
         IHostBuilder builder = Host.CreateDefaultBuilder();
@@ -33,27 +34,38 @@ internal static class DemoHostBuilder
         builder.ConfigureServices(
             (context, services) =>
             {
-                services.AddSingleton<IFeedRegistry, DemoFeedRegistry>();
+                services.AddSingleton<DemoControlState>();
+                services.AddSingleton<DemoLockState>();
+                services.AddSingleton<DemoFeedRegistry>();
+                services.AddSingleton<IFeedRegistry>(p => p.GetRequiredService<DemoFeedRegistry>());
                 services.AddSingleton<IInstallationEngine, DemoInstallationEngine>();
-                services.AddSingleton<IProductRepository, DemoProductRepository>();
+                services.AddSingleton<DemoProductRepository>();
+                services.AddSingleton<IProductRepository>(p =>
+                    p.GetRequiredService<DemoProductRepository>()
+                );
+                services.AddSingleton<IInstalledProductsSnapshot>(p =>
+                    p.GetRequiredService<DemoProductRepository>()
+                );
                 services.AddSingleton<IConfigurationService, DemoConfigurationService>();
                 services.AddSingleton<IActivityLog, DemoActivityLog>();
-                services.AddSingleton<IBackupService, DemoBackupService>();
+                services.AddSingleton<IBackupService, BackupService>();
                 services.AddSingleton<IEncryptionService, DemoEncryptionService>();
                 services.AddSingleton<IFileLockDetector, DemoFileLockDetector>();
                 services.AddSingleton<ISelfUpdateChecker, DemoSelfUpdateChecker>();
                 services.AddSingleton<INotificationService, DemoNotificationService>();
                 services.AddSingleton<IPluginSettingsStore, DemoPluginSettingsStore>();
                 services.AddSingleton<IFeedConnectionService, DemoFeedConnectionService>();
+                services.AddSingleton<IIntegrityService, DemoIntegrityService>();
+                services.AddSingleton<IFeedReportService, DemoFeedReportService>();
 
                 services.AddSingleton<InstallationCoordinator>();
                 services.AddSingleton<UninstallService>();
                 services.AddSingleton<EnvironmentVariableService>();
                 services.AddSingleton<DeferredFileOps>();
                 services.AddSingleton<FileOperations>();
-                services.AddSingleton<IFeedReportService, FeedReportService>();
+                services.AddSingleton<DependentUpdateResolver>();
                 services.AddSingleton<IFeedLockService, FeedLockService>();
-                services.AddSingleton<IIntegrityService, IntegrityService>();
+                services.AddHostedService<UpdateBackgroundService>();
 
                 services.AddSingleton<IStorkDropPlugin, DemoStorkDropPlugin>();
 
@@ -67,6 +79,7 @@ internal static class DemoHostBuilder
                 services.AddSingleton<InstallationTracker>();
                 services.AddSingleton<PostProductResolver>();
                 services.AddSingleton<SelfUpdateService>();
+                services.AddSingleton<DependentUpdateService>();
 
                 services.AddSingleton<MainWindowViewModel>();
                 services.AddSingleton<MarketplaceViewModel>();

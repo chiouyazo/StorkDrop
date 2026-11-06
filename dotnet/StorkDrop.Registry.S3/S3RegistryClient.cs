@@ -82,10 +82,7 @@ public sealed class S3RegistryClient : IRegistryClient
     {
         try
         {
-            return (
-                await GetProductManifestAsync(productId, cancellationToken).ConfigureAwait(false),
-                null
-            );
+            return (await GetProductManifestAsync(productId, cancellationToken), null);
         }
         catch (AmazonServiceException ex)
         {

@@ -162,6 +162,6 @@ internal sealed class DemoStorkDropPlugin
     {
         if (!targetPath.Contains("{DemoPath}"))
             return null;
-        return targetPath.Replace("{DemoPath}", @"C:\Users\Demo\StorkDrop");
+        return targetPath.Replace("{DemoPath}", StorkDrop.Demo.Sandbox.DemoSandbox.AppsRoot);
     }
 }

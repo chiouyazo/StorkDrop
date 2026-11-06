@@ -78,10 +78,9 @@ public sealed class NexusRegistryClient(
             try
             {
                 ProductManifest? manifest = await GetProductManifestAsync(
-                        productId,
-                        cancellationToken
-                    )
-                    .ConfigureAwait(false);
+                    productId,
+                    cancellationToken
+                );
                 if (manifest is not null)
                 {
                     products.Add(manifest);

@@ -1,5 +1,7 @@
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
+using StorkDrop.Contracts.Services;
+using StorkDrop.Demo.Scenarios;
 
 namespace StorkDrop.Demo.Services;
 
@@ -8,29 +10,22 @@ internal sealed class DemoConfigurationService : IConfigurationService
     private AppConfiguration _config = new(
         Feeds:
         [
-            new FeedConfiguration(
-                "internal",
-                "Internal",
-                "https://demo.internal",
-                null,
-                null,
-                null,
-                null
+            Feed(DemoIds.FeedInternal, "Internal", "https://demo.internal"),
+            Feed(DemoIds.FeedPartner, "Partner", "https://demo.partner"),
+            Feed(
+                DemoIds.FeedLocked,
+                "Demo: Locked feed",
+                "https://demo.locked",
+                PasswordHasher.Hash(DemoIds.LockedFeedPassword)
             ),
-            new FeedConfiguration(
-                "partner",
-                "Partner",
-                "https://demo.partner",
-                null,
-                null,
-                null,
-                null
-            ),
+            Feed(DemoIds.FeedDown, "Demo: Feed unreachable", "https://demo.down"),
+            Feed(DemoIds.FeedUnauthorized, "Demo: Feed unauthorized (401)", "https://demo.unauth"),
         ],
         AutoStart: false,
-        AutoCheckForUpdates: false,
-        CheckInterval: TimeSpan.FromHours(24),
-        Language: "en"
+        AutoCheckForUpdates: true,
+        CheckInterval: TimeSpan.FromSeconds(20),
+        Language: "en",
+        CheckForStorkDropUpdates: false
     );
 
     public bool ConfigurationExists() => true;
@@ -52,4 +47,11 @@ internal sealed class DemoConfigurationService : IConfigurationService
 
     public Task ImportAsync(string filePath, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
+
+    private static FeedConfiguration Feed(
+        string id,
+        string name,
+        string url,
+        string? lockHash = null
+    ) => new FeedConfiguration(id, name, url, null, null, null, null, LockPasswordHash: lockHash);
 }
