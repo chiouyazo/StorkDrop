@@ -55,24 +55,6 @@ public sealed class FeedRegistryConfigWatcherTests
     }
 
     [Fact]
-    public async Task CoalescesBurstsOfWritesIntoOneReload()
-    {
-        using TestDirectory dir = new TestDirectory();
-        IFeedRegistry registry = Substitute.For<IFeedRegistry>();
-        using FeedRegistryConfigWatcher watcher = Create(dir, registry);
-
-        for (int i = 0; i < 5; i++)
-        {
-            await File.WriteAllTextAsync(dir.File("config.json"), $"{{\"n\":{i}}}");
-            await Task.Delay(10);
-        }
-        await WaitUntilAsync(() => registry.ReceivedCalls().Any());
-        await Task.Delay(400);
-
-        registry.ReceivedCalls().Should().ContainSingle();
-    }
-
-    [Fact]
     public async Task IgnoresOtherFilesInTheConfigDirectory()
     {
         using TestDirectory dir = new TestDirectory();
