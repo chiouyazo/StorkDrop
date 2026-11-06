@@ -1,6 +1,7 @@
 using System.IO;
 using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
+using StorkDrop.App.Services.Cli;
 using StorkDrop.Contracts;
 using StorkDrop.Contracts.Interfaces;
 using StorkDrop.Contracts.Models;
@@ -18,6 +19,9 @@ internal sealed class CliRunner
     private readonly IConfigurationService _configurationService;
     private readonly IEncryptionService _encryptionService;
     private readonly IFeedReportService _feedReportService;
+    private readonly CliQueryService _query;
+    private readonly List<string> _feedFailures = [];
+    private string? _feedToken;
 
     public CliRunner(IServiceProvider services)
     {
@@ -28,6 +32,7 @@ internal sealed class CliRunner
         _configurationService = services.GetRequiredService<IConfigurationService>();
         _encryptionService = services.GetRequiredService<IEncryptionService>();
         _feedReportService = services.GetRequiredService<IFeedReportService>();
+        _query = new CliQueryService(_feedRegistry, _productRepository, Console.Out, Console.Error);
     }
 
     public async Task<int> RunAsync(string[] args)
@@ -35,10 +40,11 @@ internal sealed class CliRunner
         if (args.Length < 3)
         {
             PrintHelp();
-            return 1;
+            return CliExitCodes.Usage;
         }
 
         string command = args[2].ToLowerInvariant();
+        _feedToken = CliArguments.GetFlag(args, "--feed");
 
         try
         {
@@ -51,14 +57,30 @@ internal sealed class CliRunner
                 "apply" => await ApplyAsync(args),
                 "add-feed" => await AddFeedAsync(args),
                 "remove-feed" => await RemoveFeedAsync(args),
-                "list" => await ListAsync(),
+                "list" => await ListAsync(args),
                 "versions" => await VersionsAsync(args),
+                "installed" => await _query.InstalledAsync(
+                    _feedToken,
+                    CliArguments.HasFlag(args, "--json")
+                ),
+                "outdated" => await _query.OutdatedAsync(
+                    _feedToken,
+                    CliArguments.HasFlag(args, "--json")
+                ),
                 "help" => PrintCommandHelp(args.Length > 3 ? args[3] : null),
-                _ => Error($"Unknown command '{command}'. Run --cli help for usage."),
+                _ => Error(
+                    $"Unknown command '{command}'. Run --cli help for usage.",
+                    CliExitCodes.Usage
+                ),
             };
 
             await FlushReportsBestEffortAsync();
             return exitCode;
+        }
+        catch (CliException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            return ex.ExitCode;
         }
         catch (Exception ex)
         {
@@ -86,7 +108,8 @@ internal sealed class CliRunner
     {
         if (args.Length < 4)
             return Error(
-                "Missing product ID. Usage: storkdrop --cli install <productId> [--instance <id>]"
+                "Missing product ID. Usage: storkdrop --cli install <productId> [--instance <id>]",
+                CliExitCodes.Usage
             );
 
         string productId = args[3];
@@ -101,15 +124,18 @@ internal sealed class CliRunner
         );
         if (manifest is null || feedId is null)
         {
-            return version is not null
-                ? Error($"Version '{version}' not found for product '{productId}'.")
-                : Error($"Product '{productId}' not found in any configured feed.");
+            return NotFoundOrFeedError(
+                version is not null
+                    ? $"Version '{version}' not found for product '{productId}'."
+                    : $"Product '{productId}' not found in any configured feed."
+            );
         }
 
         string targetPath = path ?? manifest.RecommendedInstallPath ?? string.Empty;
         if (string.IsNullOrEmpty(targetPath))
             return Error(
-                "No install path specified and product has no recommended path. Use --path."
+                "No install path specified and product has no recommended path. Use --path.",
+                CliExitCodes.Usage
             );
 
         if (!await CheckFeedLockAsync(feedId, args))
@@ -153,13 +179,14 @@ internal sealed class CliRunner
     {
         if (args.Length < 4)
             return Error(
-                "Missing product ID. Usage: storkdrop --cli uninstall <productId> [--instance <id>]"
+                "Missing product ID. Usage: storkdrop --cli uninstall <productId> [--instance <id>]",
+                CliExitCodes.Usage
             );
 
         string productId = args[3];
         InstalledProduct? installed = await FindInstalledProduct(productId, args);
         if (installed is null)
-            return Error($"Product '{productId}' is not installed.");
+            return Error($"Product '{productId}' is not installed.", CliExitCodes.NotFound);
 
         if (!await CheckFeedLockAsync(installed.FeedId, args))
             return 1;
@@ -268,7 +295,8 @@ internal sealed class CliRunner
     {
         if (args.Length < 4)
             return Error(
-                "Missing product ID. Usage: storkdrop --cli re-execute <productId> [--instance <id>]"
+                "Missing product ID. Usage: storkdrop --cli re-execute <productId> [--instance <id>]",
+                CliExitCodes.Usage
             );
 
         string productId = args[3];
@@ -279,7 +307,7 @@ internal sealed class CliRunner
 
         InstalledProduct? installed = await FindInstalledProduct(productId, args);
         if (installed is null)
-            return Error($"Product '{productId}' is not installed.");
+            return Error($"Product '{productId}' is not installed.", CliExitCodes.NotFound);
 
         if (!await CheckFeedLockAsync(installed.FeedId, args))
             return 1;
@@ -324,14 +352,21 @@ internal sealed class CliRunner
         string? url = GetFlag(args, "--url");
         if (string.IsNullOrWhiteSpace(url))
             return Error(
-                "Missing --url. Usage: storkdrop --cli add-feed --url <url> [--id <id>] [--name <name>] [--repo <repo>] [--user <u>] [--password <p>]"
+                "Missing --url. Usage: storkdrop --cli add-feed --url <url> [--id <id>] [--name <name>] [--repo <repo>] [--user <u>] [--password <p>]",
+                CliExitCodes.Usage
             );
 
         string? id = GetFlag(args, "--id");
         string? name = GetFlag(args, "--name");
         string? repo = GetFlag(args, "--repo");
         string? user = GetFlag(args, "--user");
-        string? password = GetFlag(args, "--password");
+        string? password = CliSecretResolver.Resolve(
+            args,
+            "--password",
+            "--password-file",
+            "STORKDROP_FEED_PASSWORD",
+            Environment.GetEnvironmentVariable
+        );
 
         FeedProvider provider = GetFlag(args, "--provider")?.ToLowerInvariant() switch
         {
@@ -345,9 +380,18 @@ internal sealed class CliRunner
         {
             string? bucket = GetFlag(args, "--bucket");
             if (string.IsNullOrWhiteSpace(bucket))
-                return Error("Missing --bucket for an S3 feed (--provider s3).");
+                return Error(
+                    "Missing --bucket for an S3 feed (--provider s3).",
+                    CliExitCodes.Usage
+                );
 
-            string? secretKey = GetFlag(args, "--secret-key");
+            string? secretKey = CliSecretResolver.Resolve(
+                args,
+                "--secret-key",
+                "--secret-key-file",
+                "STORKDROP_S3_SECRET_KEY",
+                Environment.GetEnvironmentVariable
+            );
             s3 = new S3FeedSettings(
                 Bucket: bucket,
                 Region: GetFlag(args, "--region"),
@@ -406,13 +450,14 @@ internal sealed class CliRunner
     {
         if (args.Length < 4)
             return Error(
-                "Missing feed identifier. Usage: storkdrop --cli remove-feed <id|name|url>"
+                "Missing feed identifier. Usage: storkdrop --cli remove-feed <id|name|url>",
+                CliExitCodes.Usage
             );
 
         string token = args[3];
         AppConfiguration? config = await _configurationService.LoadAsync();
         if (config is null)
-            return Error("No configuration found.");
+            return Error("No configuration found.", CliExitCodes.NotFound);
 
         List<FeedConfiguration> feeds = config.Feeds.ToList();
         int removed = feeds.RemoveAll(f =>
@@ -422,7 +467,7 @@ internal sealed class CliRunner
         );
 
         if (removed == 0)
-            return Error($"No feed matched '{token}'.");
+            return Error($"No feed matched '{token}'.", CliExitCodes.NotFound);
 
         await _configurationService.SaveAsync(config with { Feeds = feeds.ToArray() });
         await _feedRegistry.ReloadAsync();
@@ -434,17 +479,18 @@ internal sealed class CliRunner
     {
         if (args.Length < 4)
             return Error(
-                "Missing manifest path. Usage: storkdrop --cli apply <manifest.json> [--report <path>] [--continue-on-error]"
+                "Missing manifest path. Usage: storkdrop --cli apply <manifest.json> [--report <path>] [--continue-on-error]",
+                CliExitCodes.Usage
             );
 
         string manifestPath = args[3];
-        if (!File.Exists(manifestPath))
-            return Error($"Manifest file not found: {manifestPath}");
-
         bool continueOnError = args.Any(a => a == "--continue-on-error");
         string reportPath =
             GetFlag(args, "--report")
             ?? Path.Combine(Path.GetTempPath(), "storkdrop-apply-result.json");
+
+        if (!File.Exists(manifestPath))
+            return ApplyUsageError($"Manifest file not found: {manifestPath}", reportPath);
 
         EnvironmentManifest? manifest;
         try
@@ -456,11 +502,11 @@ internal sealed class CliRunner
         }
         catch (JsonException ex)
         {
-            return Error($"Failed to parse manifest: {ex.Message}");
+            return ApplyUsageError($"Failed to parse manifest: {ex.Message}", reportPath);
         }
 
         if (manifest is null || manifest.Products.Count == 0)
-            return Error("Manifest contains no products.");
+            return ApplyUsageError("Manifest contains no products.", reportPath);
 
         List<PlanNode> plan = await BuildInstallPlanAsync(manifest);
 
@@ -508,6 +554,25 @@ internal sealed class CliRunner
         WriteReport(reportPath, report);
         Console.WriteLine($"Apply report written to {reportPath}");
         return allOk ? 0 : 1;
+    }
+
+    private static int ApplyUsageError(string message, string reportPath)
+    {
+        EnvironmentApplyReport report = new EnvironmentApplyReport
+        {
+            Success = false,
+            Steps =
+            [
+                new EnvironmentApplyStep
+                {
+                    Id = "manifest",
+                    Ok = false,
+                    Error = message,
+                },
+            ],
+        };
+        WriteReport(reportPath, report);
+        return Error(message, CliExitCodes.Usage);
     }
 
     private async Task<(bool Ok, string? Error)> InstallPlanNodeAsync(PlanNode node)
@@ -660,8 +725,13 @@ internal sealed class CliRunner
         public string? ResolveError { get; set; }
     }
 
-    private async Task<int> ListAsync()
+    private async Task<int> ListAsync(string[] args)
     {
+        if (CliArguments.HasFlag(args, "--json"))
+            return await _query.ListJsonAsync(_feedToken);
+
+        IReadOnlyList<FeedInfo> feeds = CliFeedSelector.Select(_feedRegistry, _feedToken);
+        bool feedFailed = false;
         IReadOnlyList<InstalledProduct> installed = await _productRepository.GetAllAsync();
         bool hasNonDefault = installed.Any(p => p.InstanceId != InstanceIdHelper.DefaultInstanceId);
         bool hasUniqueId = installed.Any(p => !string.IsNullOrEmpty(p.InstanceUniqueId));
@@ -701,7 +771,7 @@ internal sealed class CliRunner
             }
         }
 
-        foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+        foreach (FeedInfo feed in feeds)
         {
             try
             {
@@ -770,44 +840,29 @@ internal sealed class CliRunner
             }
             catch (Exception ex)
             {
+                feedFailed = true;
                 Console.Error.WriteLine(
                     $"Failed to load products from feed '{feed.Name}': {ex.Message}"
                 );
             }
         }
 
-        return 0;
+        return feedFailed ? CliExitCodes.FeedError : CliExitCodes.Success;
     }
 
     private async Task<int> VersionsAsync(string[] args)
     {
         if (args.Length < 4)
-            return Error("Missing product ID. Usage: storkdrop --cli versions <productId>");
+            return Error(
+                "Missing product ID. Usage: storkdrop --cli versions <productId>",
+                CliExitCodes.Usage
+            );
 
-        string productId = args[3];
-        bool found = false;
-
-        foreach (FeedInfo feed in _feedRegistry.GetFeeds())
-        {
-            try
-            {
-                IRegistryClient client = _feedRegistry.GetClient(feed.Id);
-                IReadOnlyList<string> versions = await client.GetAvailableVersionsAsync(productId);
-                if (versions.Count > 0)
-                {
-                    found = true;
-                    Console.WriteLine($"Versions for '{productId}' on feed '{feed.Name}':");
-                    foreach (string v in versions)
-                        Console.WriteLine($"  {v}");
-                }
-            }
-            catch { }
-        }
-
-        if (!found)
-            return Error($"Product '{productId}' not found in any configured feed.");
-
-        return 0;
+        return await _query.VersionsAsync(
+            args[3],
+            _feedToken,
+            CliArguments.HasFlag(args, "--json")
+        );
     }
 
     /// <summary>
@@ -821,16 +876,22 @@ internal sealed class CliRunner
         if (!FeedLock.IsLocked(feed))
             return true;
 
-        string? unlock = GetFlag(args, "--unlock");
+        string? unlock = CliSecretResolver.Resolve(
+            args,
+            "--unlock",
+            "--unlock-file",
+            "STORKDROP_UNLOCK_PASSWORD",
+            Environment.GetEnvironmentVariable
+        );
         if (unlock is not null && FeedLock.Verify(feed!, unlock))
             return true;
 
-        Error(
+        throw new CliException(
+            CliExitCodes.FeedLocked,
             unlock is null
-                ? $"Feed '{feed!.Name}' is locked. Provide the feed password with --unlock <password>."
-                : $"Feed '{feed!.Name}' is locked. The --unlock password is incorrect."
+                ? $"Feed '{feed!.Name}' is locked. Provide the feed password with --unlock <password>, --unlock-file <path> or the STORKDROP_UNLOCK_PASSWORD environment variable."
+                : $"Feed '{feed!.Name}' is locked. The unlock password is incorrect."
         );
-        return false;
     }
 
     private async Task<(ProductManifest? Manifest, string? FeedId)> FindManifestInFeedsAsync(
@@ -838,7 +899,8 @@ internal sealed class CliRunner
         string? version
     )
     {
-        foreach (FeedInfo feed in _feedRegistry.GetFeeds())
+        _feedFailures.Clear();
+        foreach (FeedInfo feed in CliFeedSelector.Select(_feedRegistry, _feedToken))
         {
             try
             {
@@ -850,11 +912,23 @@ internal sealed class CliRunner
                 if (manifest is not null)
                     return (manifest, feed.Id);
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _feedFailures.Add($"Feed '{feed.Name}': {ex.Message}");
+                Console.Error.WriteLine($"Warning: feed '{feed.Name}' failed: {ex.Message}");
+            }
         }
 
         return (null, null);
     }
+
+    private int NotFoundOrFeedError(string notFoundMessage) =>
+        _feedFailures.Count > 0
+            ? Error(
+                $"{notFoundMessage} Not all feeds could be queried: {string.Join("; ", _feedFailures)}",
+                CliExitCodes.FeedError
+            )
+            : Error(notFoundMessage, CliExitCodes.NotFound);
 
     private async Task<int> ValidatePluginConfigAsync(
         ProductManifest manifest,
@@ -881,7 +955,7 @@ internal sealed class CliRunner
         Console.Error.WriteLine("Missing required plugin configuration:");
         foreach (string m in missing)
             Console.Error.WriteLine(m);
-        return 1;
+        return CliExitCodes.MissingConfiguration;
     }
 
     private void SetupPluginConfigCallbacks(Dictionary<string, string> configValues)
@@ -901,27 +975,29 @@ internal sealed class CliRunner
         if (configFilePath is not null)
         {
             if (!File.Exists(configFilePath))
+                throw new CliException(
+                    CliExitCodes.Usage,
+                    $"Config file not found: {configFilePath}"
+                );
+
+            try
             {
-                Console.Error.WriteLine($"Config file not found: {configFilePath}");
+                string json = File.ReadAllText(configFilePath);
+                Dictionary<string, string>? fileValues = JsonSerializer.Deserialize<
+                    Dictionary<string, string>
+                >(json);
+                if (fileValues is not null)
+                {
+                    foreach ((string key, string value) in fileValues)
+                        values[key] = value;
+                }
             }
-            else
+            catch (JsonException ex)
             {
-                try
-                {
-                    string json = File.ReadAllText(configFilePath);
-                    Dictionary<string, string>? fileValues = JsonSerializer.Deserialize<
-                        Dictionary<string, string>
-                    >(json);
-                    if (fileValues is not null)
-                    {
-                        foreach ((string key, string value) in fileValues)
-                            values[key] = value;
-                    }
-                }
-                catch (JsonException ex)
-                {
-                    Console.Error.WriteLine($"Failed to parse config file: {ex.Message}");
-                }
+                throw new CliException(
+                    CliExitCodes.Usage,
+                    $"Failed to parse config file: {ex.Message}"
+                );
             }
         }
 
@@ -934,7 +1010,10 @@ internal sealed class CliRunner
                 if (eqIndex > 0)
                     values[pair[..eqIndex]] = pair[(eqIndex + 1)..];
                 else
-                    Console.Error.WriteLine($"Invalid config format '{pair}'. Expected key=value.");
+                    throw new CliException(
+                        CliExitCodes.Usage,
+                        $"Invalid config format '{pair}'. Expected key=value."
+                    );
                 i++;
             }
         }
@@ -983,10 +1062,10 @@ internal sealed class CliRunner
         }
     }
 
-    private static int Error(string message)
+    private static int Error(string message, int exitCode = CliExitCodes.Failure)
     {
         Console.Error.WriteLine(message);
-        return 1;
+        return exitCode;
     }
 
     private static void PrintHelp()
@@ -1009,12 +1088,28 @@ internal sealed class CliRunner
         Console.WriteLine("  remove-feed <id|name|url> Remove a registered feed");
         Console.WriteLine("  list                     List all available products");
         Console.WriteLine("  versions <productId>     List available versions for a product");
+        Console.WriteLine("  installed                List installed products");
+        Console.WriteLine(
+            "  outdated                 List installed products with a newer version in their own feed"
+        );
         Console.WriteLine("  help [command]           Show help for a command");
         Console.WriteLine();
         Console.WriteLine("Global Options:");
         Console.WriteLine(
             "  --instance <id>          Target a specific instance (default: \"default\")"
         );
+        Console.WriteLine(
+            "  --id <uniqueId>          Target an instance by its unique id (uninstall, update, re-execute)"
+        );
+        Console.WriteLine("  --feed <id|name>         Restrict the command to one feed");
+        Console.WriteLine(
+            "  --json                   Machine-readable JSON on stdout (list, versions, installed, outdated)"
+        );
+        Console.WriteLine();
+        Console.WriteLine("Log output is written to stderr; stdout carries only command output.");
+        Console.WriteLine();
+        foreach (string line in CliExitCodes.HelpLines)
+            Console.WriteLine(line);
         Console.WriteLine();
         Console.WriteLine(
             "Run 'storkdrop --cli help <command>' for details on a specific command."
@@ -1029,6 +1124,7 @@ internal sealed class CliRunner
                 Console.WriteLine("Usage: storkdrop --cli install <productId> [options]");
                 Console.WriteLine();
                 Console.WriteLine("Options:");
+                Console.WriteLine("  --feed <id|name>        Install from this feed only");
                 Console.WriteLine(
                     "  --version <version>     Install a specific version (default: latest)"
                 );
@@ -1043,6 +1139,10 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --unlock <password>     Feed lock password (required if the feed is locked)"
                 );
+                Console.WriteLine(
+                    "  --unlock-file <path>    Read the feed lock password from a file"
+                );
+                Console.WriteLine("                          (or set STORKDROP_UNLOCK_PASSWORD)");
                 Console.WriteLine();
                 Console.WriteLine("Config file format:");
                 Console.WriteLine("  {");
@@ -1055,16 +1155,29 @@ internal sealed class CliRunner
                 Console.WriteLine("Usage: storkdrop --cli uninstall <productId> [options]");
                 Console.WriteLine();
                 Console.WriteLine("Options:");
+                Console.WriteLine(
+                    "  --id <uniqueId>         Instance unique id (alternative to --instance)"
+                );
                 Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 Console.WriteLine(
                     "  --unlock <password>     Feed lock password (required if the feed is locked)"
                 );
+                Console.WriteLine(
+                    "  --unlock-file <path>    Read the feed lock password from a file"
+                );
+                Console.WriteLine("                          (or set STORKDROP_UNLOCK_PASSWORD)");
                 break;
 
             case "update":
                 Console.WriteLine("Usage: storkdrop --cli update <productId> [options]");
                 Console.WriteLine();
                 Console.WriteLine("Options:");
+                Console.WriteLine(
+                    "  --id <uniqueId>         Instance unique id (alternative to --instance)"
+                );
+                Console.WriteLine(
+                    "  --feed <id|name>        Look for the update in this feed only"
+                );
                 Console.WriteLine(
                     "  --version <version>     Update to a specific version (default: latest)"
                 );
@@ -1082,6 +1195,10 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --unlock <password>     Feed lock password (required if the feed is locked)"
                 );
+                Console.WriteLine(
+                    "  --unlock-file <path>    Read the feed lock password from a file"
+                );
+                Console.WriteLine("                          (or set STORKDROP_UNLOCK_PASSWORD)");
                 Console.WriteLine();
                 Console.WriteLine(
                     "Without --config the plugin config saved by the last install is reused."
@@ -1096,6 +1213,9 @@ internal sealed class CliRunner
                 );
                 Console.WriteLine();
                 Console.WriteLine("Options:");
+                Console.WriteLine(
+                    "  --id <uniqueId>         Instance unique id (alternative to --instance)"
+                );
                 Console.WriteLine("  --instance <id>         Instance name (default: \"default\")");
                 Console.WriteLine("  --config-file <path>    JSON file with plugin config values");
                 Console.WriteLine(
@@ -1109,6 +1229,10 @@ internal sealed class CliRunner
                 Console.WriteLine(
                     "  --unlock <password>     Feed lock password (required if the feed is locked)"
                 );
+                Console.WriteLine(
+                    "  --unlock-file <path>    Read the feed lock password from a file"
+                );
+                Console.WriteLine("                          (or set STORKDROP_UNLOCK_PASSWORD)");
                 break;
 
             case "apply":
@@ -1129,6 +1253,7 @@ internal sealed class CliRunner
                     "                          (default: %TEMP%/storkdrop-apply-result.json)"
                 );
                 Console.WriteLine("  --continue-on-error     Keep going after a failed product");
+                Console.WriteLine("  --feed <id|name>        Resolve products from this feed only");
                 Console.WriteLine();
                 Console.WriteLine("Manifest format:");
                 Console.WriteLine(
@@ -1154,7 +1279,23 @@ internal sealed class CliRunner
                 Console.WriteLine("  --repo <repository>     Nexus repository");
                 Console.WriteLine("  --user <username>       Feed username");
                 Console.WriteLine("  --password <password>   Feed password (stored encrypted)");
+                Console.WriteLine("  --password-file <path>  Read the feed password from a file");
+                Console.WriteLine("                          (or set STORKDROP_FEED_PASSWORD)");
                 Console.WriteLine("  --provider <nexus|s3|local>  Feed backend (default: nexus)");
+                Console.WriteLine();
+                Console.WriteLine("S3 options (--provider s3):");
+                Console.WriteLine("  --bucket <name>         Bucket name (required)");
+                Console.WriteLine("  --region <region>       AWS region");
+                Console.WriteLine(
+                    "  --service-url <url>     Custom endpoint (MinIO, other S3-compatible services)"
+                );
+                Console.WriteLine("  --path-style            Use path-style addressing");
+                Console.WriteLine("  --access-key <id>       Access key id");
+                Console.WriteLine("  --secret-key <key>      Secret key (stored encrypted)");
+                Console.WriteLine("  --secret-key-file <path>  Read the secret key from a file");
+                Console.WriteLine("                          (or set STORKDROP_S3_SECRET_KEY)");
+                Console.WriteLine("  --prefix <prefix>       Key prefix inside the bucket");
+                Console.WriteLine("  --channels <a,b,c>      Comma-separated channel list");
                 Console.WriteLine();
                 Console.WriteLine(
                     "Local feed (developer sideloading): --provider local --url <folder>"
@@ -1169,15 +1310,42 @@ internal sealed class CliRunner
                 break;
 
             case "list":
-                Console.WriteLine("Usage: storkdrop --cli list");
+                Console.WriteLine("Usage: storkdrop --cli list [--feed <id|name>] [--json]");
                 Console.WriteLine();
                 Console.WriteLine("Lists all available products from all configured feeds.");
+                Console.WriteLine("Exits with code 4 if a feed could not be queried.");
                 break;
 
             case "versions":
-                Console.WriteLine("Usage: storkdrop --cli versions <productId>");
+                Console.WriteLine(
+                    "Usage: storkdrop --cli versions <productId> [--feed <id|name>] [--json]"
+                );
                 Console.WriteLine();
                 Console.WriteLine("Lists all available versions for a product across all feeds.");
+                Console.WriteLine("Exits with code 4 if a feed could not be queried.");
+                break;
+
+            case "installed":
+                Console.WriteLine("Usage: storkdrop --cli installed [--feed <id|name>] [--json]");
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Lists installed products with instance, version, feed and badge."
+                );
+                Console.WriteLine(
+                    "--feed restricts the list to products installed from that feed."
+                );
+                break;
+
+            case "outdated":
+                Console.WriteLine("Usage: storkdrop --cli outdated [--feed <id|name>] [--json]");
+                Console.WriteLine();
+                Console.WriteLine(
+                    "Lists installed products for which the feed they were installed from offers a"
+                );
+                Console.WriteLine("newer version. Read-only: nothing is downloaded or installed.");
+                Console.WriteLine(
+                    "Exits with code 4 if the feed of an installed product could not be queried."
+                );
                 break;
 
             default:

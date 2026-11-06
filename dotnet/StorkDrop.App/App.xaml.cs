@@ -735,7 +735,7 @@ public partial class App : Application
         ElevationConfigFile.CleanupStale();
         try
         {
-            _host = AppHostBuilder.Build();
+            _host = AppHostBuilder.Build(logToStandardError: true);
             Services = _host.Services;
             _host.Start();
 

@@ -44,7 +44,7 @@ public static class AppHostBuilder
     /// Builds the application host with dependency injection, Serilog logging, and plugin discovery.
     /// </summary>
     /// <returns>The configured <see cref="IHost"/> instance.</returns>
-    public static IHost Build()
+    public static IHost Build(bool logToStandardError = false)
     {
         string logPath = StorkPaths.LogFile;
 
@@ -52,7 +52,9 @@ public static class AppHostBuilder
             .MinimumLevel.Information()
             .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
             .Enrich.FromLogContext()
-            .WriteTo.Console()
+            .WriteTo.Console(
+                standardErrorFromLevel: logToStandardError ? LogEventLevel.Verbose : null
+            )
             .WriteTo.File(
                 logPath,
                 rollingInterval: RollingInterval.Day,

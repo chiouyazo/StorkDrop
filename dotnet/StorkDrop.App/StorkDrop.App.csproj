@@ -11,6 +11,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="StorkDrop.Demo" />
+    <InternalsVisibleTo Include="StorkDrop.Tests" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
