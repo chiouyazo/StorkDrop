@@ -29,6 +29,7 @@ public sealed class InstallationEngine : IInstallationEngine
     private readonly PackageDownloader _downloader;
     private readonly Func<string, long?> _availableBytes;
     private const int MaxLockedFilesPrompts = 5;
+    private const string FilesInUseStep = "FilesInUse";
 
     private readonly AsyncLocal<OperationState?> _operation = new AsyncLocal<OperationState?>();
 
@@ -972,6 +973,23 @@ public sealed class InstallationEngine : IInstallationEngine
                 );
             if (removePreviousFiles && existingProduct is not null)
             {
+                if (
+                    !await ResolveLockedFilesBeforeRemovalAsync(
+                        existingProduct,
+                        progress,
+                        cancellationToken
+                    )
+                )
+                {
+                    return new InstallResult
+                    {
+                        Success = false,
+                        ErrorMessage =
+                            $"Update of {existingProduct.Title} cancelled: files in use were not released.",
+                        FailedStep = FilesInUseStep,
+                    };
+                }
+
                 await RemoveOldTrackedFilesAsync(
                     existingProduct,
                     manifest,
@@ -2689,69 +2707,11 @@ public sealed class InstallationEngine : IInstallationEngine
 
         using OperationScope operationScope = BeginOperation(progress);
 
-        List<string>? lockCheckManifest = await LoadFileManifest(
+        List<string>? trackedFiles = await LoadFileManifest(
             installed.ProductId,
             installed.InstanceUniqueId ?? string.Empty,
             cancellationToken
         );
-        List<string> trackedPaths =
-            lockCheckManifest is { Count: > 0 } && Directory.Exists(installed.InstalledPath)
-                ? lockCheckManifest
-                    .Select(relativePath => Path.Combine(installed.InstalledPath, relativePath))
-                    .Where(File.Exists)
-                    .ToList()
-                : [];
-        _logger.LogInformation(
-            "Checking {Count} tracked files for locks before updating {ProductId}",
-            trackedPaths.Count,
-            installed.ProductId
-        );
-        IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
-            trackedPaths,
-            cancellationToken
-        );
-        if (lockedFiles.Count > 0)
-        {
-            if (OnLockedFilesDetected is not null)
-            {
-                if (
-                    !ResolveLockedFilesBeforeUpdate(
-                        lockedFiles,
-                        trackedPaths,
-                        installed,
-                        cancellationToken
-                    )
-                )
-                {
-                    throw new OperationCanceledException(
-                        $"Update of {installed.Title} cancelled: files in use were not released."
-                    );
-                }
-            }
-            else
-            {
-                foreach (LockedFileInfo lockedFile in lockedFiles)
-                {
-                    string processNames = string.Join(
-                        ", ",
-                        lockedFile.Processes.Select(p => p.ProcessName)
-                    );
-                    _logger.LogWarning(
-                        "Locked file during update of {ProductId}: {File} (used by {Processes})",
-                        installed.ProductId,
-                        lockedFile.FileName,
-                        processNames
-                    );
-                }
-                progress.Report(
-                    new InstallProgress(
-                        InstallStage.Installing,
-                        0,
-                        $"Warning: {lockedFiles.Count} file(s) in use. They will be replaced on restart."
-                    )
-                );
-            }
-        }
 
         string? backupPath = null;
         string? metadataBackupPath = null;
@@ -2759,7 +2719,7 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             IReadOnlyList<string> backupFiles = CollectBackupFiles(
                 installed.InstalledPath,
-                lockCheckManifest,
+                trackedFiles,
                 newManifest
             );
             long backupStartTicks = Environment.TickCount64;
@@ -2866,6 +2826,9 @@ public sealed class InstallationEngine : IInstallationEngine
             );
             if (!result.Success)
             {
+                if (result.FailedStep == FilesInUseStep)
+                    throw new OperationCanceledException(result.ErrorMessage);
+
                 throw new InvalidOperationException(result.ErrorMessage ?? "Installation failed.");
             }
 
@@ -2902,7 +2865,8 @@ public sealed class InstallationEngine : IInstallationEngine
         {
             _logger.LogError(ex, "Update failed for {ProductId}", installed.ProductId);
 
-            bool cancelled = cancellationToken.IsCancellationRequested;
+            bool cancelled =
+                cancellationToken.IsCancellationRequested || ex is OperationCanceledException;
             if (!cancelled && !ShouldRollBackAfterFailure(installed, newManifest, ex))
             {
                 _logger.LogWarning(
@@ -3002,10 +2966,74 @@ public sealed class InstallationEngine : IInstallationEngine
             }
 
             await RestoreMetadataAsync(installed, metadataBackupPath);
+            if (ex is OperationCanceledException)
+                throw;
+
             if (cancelled)
                 throw new OperationCanceledException(cancellationToken);
             throw;
         }
+    }
+
+    private async Task<bool> ResolveLockedFilesBeforeRemovalAsync(
+        InstalledProduct installed,
+        IProgress<InstallProgress> progress,
+        CancellationToken cancellationToken
+    )
+    {
+        List<string>? trackedFiles = await LoadFileManifest(
+            installed.ProductId,
+            installed.InstanceUniqueId ?? string.Empty,
+            cancellationToken
+        );
+        List<string> trackedPaths =
+            trackedFiles is { Count: > 0 } && Directory.Exists(installed.InstalledPath)
+                ? trackedFiles
+                    .Select(relativePath => Path.Combine(installed.InstalledPath, relativePath))
+                    .Where(File.Exists)
+                    .ToList()
+                : [];
+        _logger.LogInformation(
+            "Checking {Count} tracked files for locks before removing the old files of {ProductId}",
+            trackedPaths.Count,
+            installed.ProductId
+        );
+        IReadOnlyList<LockedFileInfo> lockedFiles = _fileLockDetector.GetLockedFiles(
+            trackedPaths,
+            cancellationToken
+        );
+        if (lockedFiles.Count == 0)
+            return true;
+
+        if (OnLockedFilesDetected is not null)
+            return ResolveLockedFilesBeforeUpdate(
+                lockedFiles,
+                trackedPaths,
+                installed,
+                cancellationToken
+            );
+
+        foreach (LockedFileInfo lockedFile in lockedFiles)
+        {
+            string processNames = string.Join(
+                ", ",
+                lockedFile.Processes.Select(p => p.ProcessName)
+            );
+            _logger.LogWarning(
+                "Locked file during update of {ProductId}: {File} (used by {Processes})",
+                installed.ProductId,
+                lockedFile.FileName,
+                processNames
+            );
+        }
+        progress.Report(
+            new InstallProgress(
+                InstallStage.Installing,
+                0,
+                $"Warning: {lockedFiles.Count} file(s) in use. They will be replaced on restart."
+            )
+        );
+        return true;
     }
 
     private bool ResolveLockedFilesBeforeUpdate(
